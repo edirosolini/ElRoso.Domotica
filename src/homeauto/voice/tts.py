@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import threading
 import subprocess
 import wave
 from pathlib import Path
@@ -87,6 +88,10 @@ class VoiceSynth:
         self.runner = runner
         self.min_seconds = min_seconds
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # An announcement to several devices asks for the same phrase from
+        # several threads at once. Without this they raced on the same partial
+        # file: the first to finish renamed it and the rest blew up.
+        self._lock = threading.Lock()
 
     def say(self, text: str) -> Path:
         text = text.strip()
@@ -97,14 +102,20 @@ class VoiceSynth:
         if cached.is_file():
             return cached
 
-        # Build aside and move into place, so a failed run never poisons the cache.
-        pending = cached.with_suffix(".partial")
-        try:
-            self.runner(text, pending)
-            _pad_to_minimum(pending, self.min_seconds)
-            pending.replace(cached)
-        finally:
-            pending.unlink(missing_ok=True)
+        with self._lock:
+            # Someone else may have synthesized it while we waited for the lock.
+            if cached.is_file():
+                return cached
+
+            # Build aside and move into place, so a failed run never poisons the
+            # cache. The name carries the thread id so two runs never collide.
+            pending = cached.with_suffix(f".{threading.get_ident():x}.partial")
+            try:
+                self.runner(text, pending)
+                _pad_to_minimum(pending, self.min_seconds)
+                pending.replace(cached)
+            finally:
+                pending.unlink(missing_ok=True)
         return cached
 
     def _key(self, text: str) -> str:

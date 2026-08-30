@@ -41,6 +41,11 @@ class Job:
     def is_daily(self) -> bool:
         return self.repeat == DAILY
 
+    @property
+    def devices(self) -> list[str]:
+        """The column holds a comma-separated list; one device is the common case."""
+        return [part.strip() for part in (self.device or "").split(",") if part.strip()]
+
 
 def _row_to_job(row: sqlite3.Row) -> Job:
     return Job(

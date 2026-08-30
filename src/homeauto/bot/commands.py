@@ -8,6 +8,8 @@ the other side is holding a phone, not a log viewer.
 from __future__ import annotations
 
 import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable
 
@@ -22,11 +24,21 @@ log = logging.getLogger(__name__)
 
 DEVICE_ERRORS = (CastError, TtsError, UnknownDevice)
 TARGET_WORD = "en"
+ALL_WORD = "todos"
+
+# A leading run of aliases: "comedor", "comedor,recamara", "comedor, recamara".
+_TARGET_LIST = re.compile(r"^([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
+
+
+class TargetError(Exception):
+    """The devices asked for do not all exist."""
 
 HELP = """Hola. Manejo los equipos de casa.
 
 /decir <texto> — lo dice ahora
-/decir en tv <texto> — lo dice en ese equipo
+/decir en comedor <texto> — lo dice en ese equipo
+/decir en comedor,recamara <texto> — en varios
+/decir en todos <texto> — en toda la casa
 /timer 10m sacá la pizza — avisa dentro de un rato
 /alarma 7:30 arriba — avisa a esa hora
 /alarma diaria 7:30 arriba — todos los días
@@ -35,7 +47,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
 /equipos — qué equipos tengo y cuál está activo
-/usar <equipo> — cambia el equipo por defecto
+/usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
 
 La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, mañana 8:00.
 Una hora que ya pasó se entiende como la de mañana.
@@ -87,25 +99,72 @@ class Commands:
             f"\nTu chat ID es {chat_id}. Ponelo en ALLOWED_CHAT_IDS y reiniciá el servicio."
         )
 
-    def _default_alias(self, chat_id: int) -> str:
-        chosen = self.preferences.default_device(chat_id) if self.preferences else None
-        if chosen and self.speakers.has(chosen):
-            return chosen
-        return self.config.default_device
+    def _default_aliases(self, chat_id: int) -> list[str]:
+        stored = self.preferences.default_device(chat_id) if self.preferences else None
+        chosen = [a for a in (stored or "").split(",") if a and self.speakers.has(a)]
+        return chosen or [self.config.default_device]
 
-    def _split_target(self, chat_id: int, text: str) -> tuple[str, str]:
-        """Pull a leading «en <equipo>» off the text, if it names a real one.
+    def _parse_aliases(self, spec: str) -> list[str] | None:
+        """The aliases in «en <spec>», or None when it is not a target at all."""
+        if spec.lower() == ALL_WORD:
+            return list(self.speakers.aliases)
 
-        Only strips it when the word after «en» is a known device: otherwise
-        `/decir en casa hace frío` would lose half the sentence.
-        """
+        parts = [part.strip().lower() for part in spec.split(",")]
+        parts = [part for part in parts if part]
+        if not parts:
+            return None
+
+        unknown = [part for part in parts if not self.speakers.has(part)]
+        if not unknown:
+            return list(dict.fromkeys(parts))  # dedup, keeping the order typed
+        if len(parts) > 1:
+            # A comma-separated list is unambiguously a target: say what is wrong
+            # instead of quietly speaking half of it as if it were the message.
+            raise TargetError(
+                f"No conozco: {', '.join(unknown)}. Tengo: {', '.join(self.speakers.aliases)}"
+            )
+        # A single unknown word is just the message: "/decir en casa hace frío".
+        return None
+
+    def _split_target(self, chat_id: int, text: str) -> tuple[list[str], str]:
+        """Pull a leading «en <equipos>» off the text, if it names real ones."""
         text = text.strip()
         head, _, rest = text.partition(" ")
         if head.lower() == TARGET_WORD:
-            alias, _, remainder = rest.strip().partition(" ")
-            if alias and self.speakers.has(alias):
-                return alias.strip().lower(), remainder.strip()
-        return self._default_alias(chat_id), text
+            match = _TARGET_LIST.match(rest.strip())
+            if match:
+                aliases = self._parse_aliases(match.group(1))
+                if aliases:
+                    return aliases, (match.group(2) or "").strip()
+        return self._default_aliases(chat_id), text
+
+    def _broadcast(self, aliases: list[str], action) -> dict[str, str | None]:
+        """Run the action on every device at once.
+
+        In parallel on purpose: one after another, the same phrase starts a
+        couple of seconds apart in each room and the house echoes.
+        """
+        def run(alias: str) -> str | None:
+            try:
+                action(self.speakers.get(alias))
+                return None
+            except DEVICE_ERRORS as exc:
+                log.warning("falló %s: %s", alias, exc)
+                return str(exc)
+
+        with ThreadPoolExecutor(max_workers=len(aliases)) as pool:
+            return dict(zip(aliases, pool.map(run, aliases)))
+
+    @staticmethod
+    def _summary(results: dict[str, str | None], done: str, failed: str) -> str:
+        ok = [alias for alias, problem in results.items() if problem is None]
+        bad = [f"{alias}: {problem}" for alias, problem in results.items() if problem]
+        if not ok:
+            return f"{failed}\n" + "\n".join(bad)
+        text = f"{done} en {', '.join(ok)}"
+        if bad:
+            text += "\n\nNo pude en:\n" + "\n".join(bad)
+        return text
 
     # --- comandos ----------------------------------------------------------
 
@@ -120,54 +179,66 @@ class Commands:
         if denial:
             return denial
 
-        alias, message = self._split_target(chat_id, text)
+        try:
+            aliases, message = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
         if not message:
             return "¿Qué querés que diga? Ej: /decir la cena está lista"
 
-        try:
-            self.speakers.get(alias).say(message)
-        except DEVICE_ERRORS as exc:
-            log.exception("no se pudo decir '%s' en %s", message, alias)
-            return f"No pude decirlo en {alias}: {exc}"
-        return f"Dicho en {alias}: «{message}»" + self._enrollment_hint(chat_id)
+        results = self._broadcast(aliases, lambda speaker: speaker.say(message))
+        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        if all(problem is None for problem in results.values()):
+            summary += f": «{message}»"
+        return summary + self._enrollment_hint(chat_id)
 
     def volume(self, chat_id: int, text: str) -> str:
         denial = self._denial(chat_id)
         if denial:
             return denial
 
-        alias, rest = self._split_target(chat_id, text)
+        try:
+            aliases, rest = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
         try:
             percent = int(rest.strip())
         except ValueError:
             return "El volumen va como número de 0 a 100. Ej: /volumen 40"
 
-        try:
-            self.speakers.get(alias).set_volume(percent)
-        except DEVICE_ERRORS as exc:
-            return f"No pude cambiar el volumen de {alias}: {exc}"
-        return f"Volumen de {alias} en {percent}"
+        results = self._broadcast(aliases, lambda speaker: speaker.set_volume(percent))
+        return self._summary(results, f"Volumen en {percent}", "No pude cambiar el volumen:")
 
     def stop(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)
         if denial:
             return denial
 
-        alias, _ = self._split_target(chat_id, text)
         try:
-            self.speakers.get(alias).stop()
-        except DEVICE_ERRORS as exc:
-            return f"No pude parar {alias}: {exc}"
-        return f"Cortado en {alias}"
+            aliases, _ = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
+        results = self._broadcast(aliases, lambda speaker: speaker.stop())
+        return self._summary(results, "Cortado", "No pude parar:")
 
     def devices(self, chat_id: int) -> str:
         denial = self._denial(chat_id)
         if denial:
             return denial
 
-        active = self._default_alias(chat_id)
-        lines = [f"{alias}{'  ◀ activo' if alias == active else ''}" for alias in self.speakers.aliases]
-        return "Equipos:\n" + "\n".join(lines) + "\n\nCambialo con /usar <equipo>"
+        active = self._default_aliases(chat_id)
+        lines = [
+            f"{alias}{'  ◀ activo' if alias in active else ''}"
+            for alias in self.speakers.aliases
+        ]
+        return (
+            "Equipos:\n" + "\n".join(lines)
+            + "\n\nCambialo con /usar <equipo>, o /usar todos."
+            + "\nTambién podés mandar uno suelto: /decir en comedor,recamara hola"
+        )
 
     # Kept so /donde keeps working; it is the same question.
     where = devices
@@ -177,16 +248,21 @@ class Commands:
         if denial:
             return denial
 
-        alias = text.strip().lower()
-        if not alias:
-            return "Decime cuál. Ej: /usar tv (los ves con /equipos)"
-        if not self.speakers.has(alias):
+        spec = text.strip().lower()
+        if not spec:
+            return "Decime cuál. Ej: /usar comedor (los ves con /equipos)"
+
+        try:
+            aliases = self._parse_aliases(spec)
+        except TargetError as exc:
+            return str(exc)
+        if not aliases:
             known = ", ".join(self.speakers.aliases)
-            return f"No conozco '{alias}'. Tengo: {known}"
+            return f"No conozco '{spec}'. Tengo: {known}"
 
         if self.preferences:
-            self.preferences.set_default_device(chat_id, alias)
-        return f"Listo, ahora uso {alias}"
+            self.preferences.set_default_device(chat_id, ",".join(aliases))
+        return f"Listo, ahora uso {', '.join(aliases)}"
 
     # --- programados -------------------------------------------------------
 
@@ -195,23 +271,34 @@ class Commands:
         if denial:
             return denial
 
-        alias, rest = self._split_target(chat_id, text)
+        try:
+            aliases, rest = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
         now = self.clock()
         try:
             when, message = parse_schedule(rest, now=now)
         except TimeSpecError as exc:
             return str(exc)
 
-        job = self.reminders.add(chat_id, when, message, repeat=repeat, device=alias)
-        return f"{label} #{job.id} en {alias} para {format_when(when, now)}: «{message}»"
+        job = self.reminders.add(chat_id, when, message, repeat=repeat, device=",".join(aliases))
+        return (
+            f"{label} #{job.id} en {', '.join(aliases)} "
+            f"para {format_when(when, now)}: «{message}»"
+        )
 
     def timer(self, chat_id: int, text: str) -> str:
         return self._schedule(chat_id, text, ONCE, "Programado")
 
     def alarm(self, chat_id: int, text: str) -> str:
-        alias, rest = self._split_target(chat_id, text)
+        try:
+            aliases, rest = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
         head, _, tail = rest.strip().partition(" ")
-        prefix = f"{TARGET_WORD} {alias} " if alias != self._default_alias(chat_id) else ""
+        prefix = f"{TARGET_WORD} {','.join(aliases)} "
         if head.lower() in ("diaria", "diario", "daily"):
             return self._schedule(chat_id, prefix + tail, DAILY, "Alarma todos los días")
         return self._schedule(chat_id, prefix + rest, ONCE, "Alarma")
@@ -227,7 +314,7 @@ class Commands:
 
         now = self.clock()
         lines = [
-            f"#{job.id} · {format_when(job.when, now)} · {job.device or self.config.default_device}"
+            f"#{job.id} · {format_when(job.when, now)} · {', '.join(job.devices) or self.config.default_device}"
             f"{' · todos los días' if job.is_daily else ''} — {job.message}"
             for job in jobs
         ]

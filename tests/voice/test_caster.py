@@ -13,6 +13,10 @@ class FakeMediaController:
         self.played = []
         self.stopped = 0
         self.blocked = 0
+        self.status = type("Status", (), {"player_state": "PLAYING", "idle_reason": None})()
+
+    def update_status(self):
+        pass
 
     def play_media(self, url, mime):
         self.played.append((url, mime))
@@ -30,6 +34,10 @@ class FakeDevice:
         self.media_controller = FakeMediaController()
         self.volumes = []
         self.waited = 0
+        self.app_id = None
+
+    def quit_app(self):
+        self.app_id = None
 
     def wait(self, timeout=None):
         self.waited += 1

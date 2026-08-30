@@ -28,12 +28,14 @@ class Announcer:
         self.fallback = fallback
 
     def __call__(self, job: Job) -> None:
-        problem = None
-        try:
-            self.speakers.get(job.device or self.fallback).say(job.message)
-        except DEVICE_ERRORS as exc:
-            problem = str(exc)
-            log.warning("el job %s no sonó: %s", job.id, problem)
+        problems = []
+        for alias in job.devices or [self.fallback]:
+            try:
+                self.speakers.get(alias).say(job.message)
+            except DEVICE_ERRORS as exc:
+                problems.append(f"{alias}: {exc}")
+                log.warning("el job %s no sonó en %s: %s", job.id, alias, exc)
+        problem = "; ".join(problems) if problems else None
 
         try:
             self.notify(job.chat_id, self._text(job, problem))

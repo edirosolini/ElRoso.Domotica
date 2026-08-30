@@ -112,3 +112,36 @@ def test_runner_failure_does_not_leave_a_cached_file(synth):
     piper.fail = False
     s.say("hola")
     assert len(piper.calls) == 2, "el fallo no debe quedar cacheado"
+
+
+def test_the_same_phrase_from_several_threads_at_once(synth):
+    """Un anuncio a varios equipos sintetiza la misma frase desde varios hilos.
+
+    Antes se pisaban el archivo temporal: el primero en terminar lo renombraba y
+    los demás explotaban con FileNotFoundError.
+    """
+    import threading
+
+    piper = FakePiper(seconds=2.0)
+    s = synth(piper)
+    errors = []
+    paths = []
+    start = threading.Barrier(5)
+
+    def worker():
+        start.wait()
+        try:
+            paths.append(s.say("todos a la vez"))
+        except Exception as exc:  # noqa: BLE001 - lo que falle es el hallazgo
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(5)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == [], f"colisión entre hilos: {errors}"
+    assert len(set(paths)) == 1, "todos tienen que terminar con el mismo archivo"
+    assert len(piper.calls) == 1, "sintetizar cinco veces lo mismo es puro desperdicio"
+    assert paths[0].is_file()
