@@ -19,6 +19,7 @@ from homeauto.timespec import TimeSpecError, parse_schedule
 from homeauto.voice.caster import CastError
 from homeauto.voice.registry import UnknownDevice
 from homeauto.voice.tts import TtsError
+from homeauto.weather import WeatherError
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
+/clima — dice el pronóstico en voz alta
 /equipos — qué equipos tengo y cuál está activo
 /usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
 
@@ -73,12 +75,14 @@ class Commands:
         speakers,
         reminders=None,
         preferences=None,
+        weather=None,
         clock: Callable[[], datetime] = datetime.now,
     ):
         self.config = config
         self.speakers = speakers
         self.reminders = reminders
         self.preferences = preferences
+        self.weather_client = weather
         self.clock = clock
 
     # --- permisos y destino ------------------------------------------------
@@ -224,6 +228,26 @@ class Commands:
 
         results = self._broadcast(aliases, lambda speaker: speaker.stop())
         return self._summary(results, "Cortado", "No pude parar:")
+
+    def weather(self, chat_id: int, text: str = "") -> str:
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        try:
+            aliases, _ = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
+        # One query for the whole house: the forecast does not change per room.
+        try:
+            spoken = self.weather_client.spoken()
+        except WeatherError as exc:
+            return str(exc)
+
+        results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
+        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        return f"{spoken}\n\n{summary}"
 
     def turn_off(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)

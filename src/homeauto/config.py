@@ -31,6 +31,23 @@ def _read_pairs(path: Path) -> dict[str, str]:
 
 ALIAS_SHAPE = re.compile(r"^[a-z0-9_-]{1,20}$")
 
+# Buenos Aires: sirve para que el clima funcione sin configurar nada.
+DEFAULT_LAT = -34.6037
+DEFAULT_LON = -58.3816
+
+
+def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
+    raw = raw.strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{key} no es un número: {raw}") from exc
+    if not -limit <= value <= limit:
+        raise ConfigError(f"{key} fuera de rango: {value}")
+    return value
+
 
 def _parse_devices(raw: str) -> dict[str, uuid.UUID]:
     """`alias:uuid, alias:uuid` into an ordered mapping. Order sets the default."""
@@ -80,6 +97,9 @@ class Config:
     devices: dict[str, uuid.UUID]
     default_device: str
     allowed_chat_ids: frozenset[int]
+    weather_lat: float = DEFAULT_LAT
+    weather_lon: float = DEFAULT_LON
+    weather_place: str = ""
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -118,6 +138,9 @@ class Config:
             devices=devices,
             default_device=default,
             allowed_chat_ids=_parse_chat_ids(pairs.get("ALLOWED_CHAT_IDS", "")),
+            weather_lat=_parse_coordinate(pairs.get("WEATHER_LAT", ""), "WEATHER_LAT", DEFAULT_LAT, 90),
+            weather_lon=_parse_coordinate(pairs.get("WEATHER_LON", ""), "WEATHER_LON", DEFAULT_LON, 180),
+            weather_place=pairs.get("WEATHER_PLACE", "").strip(),
         )
 
     @property

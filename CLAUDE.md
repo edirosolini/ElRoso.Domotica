@@ -28,6 +28,8 @@ el paquete es `homeauto`, no `domotica`.
 
 - **Python 3.13** en el contenedor, 3.12 en la notebook. Nada específico de versión.
 - **piper-tts** — síntesis de voz **offline**, voz `es_AR-daniela-high`. No sale a internet.
+- **Open-Meteo** para el clima: sin cuenta, sin API key, sin límite práctico. Es la única
+  dependencia externa además de Telegram.
 - **pychromecast** — control del parlante.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
@@ -36,6 +38,19 @@ el paquete es `homeauto`, no `domotica`.
 
 **CT 300 `nest-bot`** del Proxmox de casa (`192.168.68.60`), en `192.168.68.10`.
 El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (chmod 600).
+
+## Sobre el Asistente de Google
+
+**No se puede tocar.** El Asistente del Nest corre en la nube de Google; desde acá solo se
+le manda audio para reproducir. Si contesta "no entiendo", eso se arregla en la app Google
+Home (dirección del hogar, idioma, Voice Match), no en este código.
+
+Por eso `/clima` **no** usa el Asistente: consulta Open-Meteo y lo dice con la voz del bot.
+Cualquier "inteligencia" que se le quiera agregar al parlante va por este camino — un
+comando propio que consulta y habla — nunca intentando engancharse al Asistente.
+
+Al 2026-08-30 el Nest está en `locale es-419` y zona horaria de Buenos Aires, o sea que su
+configuración regional es correcta y no es la causa de las fallas del Asistente.
 
 ## Gotchas
 

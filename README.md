@@ -16,8 +16,17 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /volumen 40                     0 a 100
 /parar                          corta lo que esté sonando
 /apagar en todos                cierra la app y deja los equipos en reposo
+/clima                          dice el pronóstico en voz alta
 /equipos                        qué equipos hay y cuál está activo
 /usar tv                        cambia el equipo por defecto
+```
+
+**Clima.** `/clima` consulta Open-Meteo —gratis, sin cuenta ni API key— y lo dice con la voz
+del bot. No pasa por el Asistente de Google, así que funciona aunque el Nest conteste "no
+entiendo". Combinado con una alarma diaria da el parte de la mañana:
+
+```
+/alarma diaria 7:00 clima
 ```
 
 **Apagar.** El protocolo Cast **no tiene apagado**. `/apagar` cierra la app que esté
@@ -57,6 +66,9 @@ TELEGRAM_TOKEN=          # token de @BotFather
 ALLOWED_CHAT_IDS=        # vacío = el primero que escriba queda registrado
 CAST_DEVICES=parlante:d17e8311-...,tv:083e8ba4-...   # alias:uuid, por coma
 CAST_DEFAULT=parlante    # cuál se usa si no se dice otro
+WEATHER_LAT=-34.6037     # opcional; por defecto, Buenos Aires
+WEATHER_LON=-58.3816
+WEATHER_PLACE=casa       # opcional, solo para que suene mejor
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

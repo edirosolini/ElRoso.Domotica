@@ -27,6 +27,7 @@ from homeauto.voice.media_server import MediaServer
 from homeauto.voice.registry import SpeakerRegistry
 from homeauto.voice.speaker import Speaker
 from homeauto.voice.tts import PiperRunner, VoiceSynth
+from homeauto.weather import WeatherClient
 
 CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
 PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
@@ -51,10 +52,11 @@ CANCEL_COMMANDS = ("cancelar",)
 DEVICES_COMMANDS = ("equipos",)
 USE_COMMANDS = ("usar",)
 OFF_COMMANDS = ("apagar",)
+WEATHER_COMMANDS = ("clima", "tiempo")
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
-    + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS
+    + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
 )
 
 # What Telegram offers when you type "/". Without registering this the commands
@@ -69,6 +71,7 @@ COMMAND_MENU = (
     ("volumen", "Cambiar el volumen, de 0 a 100"),
     ("parar", "Cortar lo que esté sonando"),
     ("apagar", "Cerrar la app y dejar el equipo en reposo"),
+    ("clima", "Decir el pronóstico en voz alta"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
     ("usar", "Cambiar el equipo por defecto — /usar tv"),
     ("ayuda", "Cómo se usa"),
@@ -209,6 +212,7 @@ def register(app: Application, commands: Commands) -> None:
         (DEVICES_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
         (USE_COMMANDS, commands.use),
         (OFF_COMMANDS, commands.turn_off),
+        (WEATHER_COMMANDS, commands.weather),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -242,6 +246,11 @@ def main() -> None:
         speakers=speakers,
         reminders=reminders,
         preferences=Preferences(db_path),
+        weather=WeatherClient(
+            latitude=config.weather_lat,
+            longitude=config.weather_lon,
+            place=config.weather_place,
+        ),
         clock=datetime.now,
     )
     register(app, commands)
