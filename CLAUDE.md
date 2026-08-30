@@ -31,7 +31,7 @@ el paquete es `homeauto`, no `domotica`.
 ## Dónde corre
 
 **CT 300 `nest-bot`** del Proxmox de casa (`192.168.68.60`), en `192.168.68.10`.
-El servicio vive en `/opt/nestbot`, la config en `/etc/nestbot/nestbot.env` (chmod 600).
+El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (chmod 600).
 
 ## Gotchas
 
@@ -60,7 +60,7 @@ El servicio vive en `/opt/nestbot`, la config en `/etc/nestbot/nestbot.env` (chm
   dispositivo", con un warning suelto de `unregister_all_services skipped as it does blocking
   i/o` como única pista. Todo comando va por `asyncio.to_thread`; hay test que lo verifica.
 - **La config se lee una sola vez, al arrancar.** Cambiar el token o `ALLOWED_CHAT_IDS` en
-  `/etc/nestbot/nestbot.env` no tiene efecto hasta `systemctl restart nestbot`. Sin reiniciar,
+  `/etc/domotica/domotica.env` no tiene efecto hasta `systemctl restart domotica`. Sin reiniciar,
   el servicio sigue con el token viejo y no avisa nada.
 
 ## Convenciones

@@ -6,13 +6,13 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-EnvironmentFile=/etc/nestbot/nestbot.env
-Environment=PYTHONPATH=/opt/nestbot/src
+EnvironmentFile=/etc/domotica/domotica.env
+Environment=PYTHONPATH=/opt/domotica/src
 Environment=OMP_NUM_THREADS=1
-ExecStart=/opt/nestbot/venv/bin/python -m homeauto.main
+ExecStart=/opt/domotica/venv/bin/python -m homeauto.main
 Restart=always
 RestartSec=5
-StateDirectory=nestbot
+StateDirectory=domotica
 
 [Install]
 WantedBy=multi-user.target

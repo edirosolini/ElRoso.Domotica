@@ -35,7 +35,7 @@ Los tests no necesitan hardware ni red: el parlante y Piper están mockeados.
 
 ## Configuración
 
-El servicio lee un archivo de entorno (en el contenedor, `/etc/nestbot/nestbot.env`, chmod 600):
+El servicio lee un archivo de entorno (en el contenedor, `/etc/domotica/domotica.env`, chmod 600):
 
 ```ini
 TELEGRAM_TOKEN=          # token de @BotFather
@@ -46,15 +46,15 @@ CAST_UUID=               # UUID del dispositivo, no su IP
 Después de tocar este archivo hay que **reiniciar**: se lee sólo al arrancar.
 
 ```bash
-systemctl restart nestbot
+systemctl restart domotica
 ```
 
 `ALLOWED_CHAT_IDS` vacío deja el bot **abierto**: cualquiera que lo encuentre puede usarlo.
 Se deja así solo para el alta inicial; una vez que sabés tu chat ID, se completa y se reinicia.
 
-Rutas, sobreescribibles por entorno: `NESTBOT_CONFIG`, `NESTBOT_PYTHON`, `NESTBOT_VOICE`,
-`NESTBOT_CACHE`, `NESTBOT_MEDIA_PORT`. La base de timers vive en `STATE_DIRECTORY`, que
-systemd crea como `/var/lib/nestbot`.
+Rutas, sobreescribibles por entorno: `DOMOTICA_CONFIG`, `DOMOTICA_PYTHON`, `DOMOTICA_VOICE`,
+`DOMOTICA_CACHE`, `DOMOTICA_MEDIA_PORT`. La base de timers vive en `STATE_DIRECTORY`, que
+systemd crea como `/var/lib/domotica`.
 
 ## Despliegue
 

@@ -18,6 +18,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from homeauto.bot.commands import Commands
 from homeauto.config import Config
+from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
 from homeauto.voice.caster import Caster
@@ -25,12 +26,12 @@ from homeauto.voice.media_server import MediaServer
 from homeauto.voice.speaker import Speaker
 from homeauto.voice.tts import PiperRunner, VoiceSynth
 
-CONFIG_PATH = os.environ.get("NESTBOT_CONFIG", "/etc/nestbot/nestbot.env")
-PYTHON_BIN = os.environ.get("NESTBOT_PYTHON", "/opt/nestbot/venv/bin/python")
-VOICE_PATH = os.environ.get("NESTBOT_VOICE", "/opt/nestbot/voices/es_AR-daniela-high.onnx")
-CACHE_DIR = os.environ.get("NESTBOT_CACHE", "/var/lib/nestbot/cache")
-MEDIA_PORT = int(os.environ.get("NESTBOT_MEDIA_PORT", "8765"))
-STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/nestbot"))
+CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
+PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
+VOICE_PATH = os.environ.get("DOMOTICA_VOICE", "/opt/domotica/voices/es_AR-daniela-high.onnx")
+CACHE_DIR = os.environ.get("DOMOTICA_CACHE", "/var/lib/domotica/cache")
+MEDIA_PORT = int(os.environ.get("DOMOTICA_MEDIA_PORT", "8765"))
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/domotica"))
 
 log = logging.getLogger("homeauto")
 
@@ -79,6 +80,29 @@ class JobQueueTimer:
     def unschedule(self, key):
         for job in self.job_queue.get_jobs_by_name(key):
             job.schedule_removal()
+
+
+class ChatNotifier:
+    """Sends a Telegram message from a worker thread.
+
+    Announcements run off the event loop, so the send has to be handed back to
+    it instead of being awaited where there is no loop.
+    """
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.loop = None
+
+    def bind(self, loop) -> None:
+        self.loop = loop
+
+    def __call__(self, chat_id: int, text: str) -> None:
+        if self.loop is None:
+            raise RuntimeError("todavía no hay event loop al que mandarle el aviso")
+        future = asyncio.run_coroutine_threadsafe(
+            self.bot.send_message(chat_id=chat_id, text=text), self.loop
+        )
+        future.result(timeout=30)
 
 
 def build_speaker(config: Config) -> Speaker:
@@ -146,16 +170,18 @@ def main() -> None:
 
     app = Application.builder().token(config.telegram_token).build()
 
+    notifier = ChatNotifier(app.bot)
     reminders = Reminders(
         store=Store(STATE_DIR / "jobs.db"),
         timer=JobQueueTimer(app.job_queue),
-        announce=lambda job: speaker.say(job.message),
+        announce=Announcer(speaker=speaker, notify=notifier),
     )
     commands = Commands(config=config, speaker=speaker, reminders=reminders, clock=datetime.now)
     register(app, commands)
 
     async def on_ready(_app) -> None:
         # Re-arm what was pending; anything already due while we were down fires now.
+        notifier.bind(asyncio.get_running_loop())
         reminders.start()
 
     app.post_init = on_ready

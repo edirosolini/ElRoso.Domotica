@@ -6,7 +6,7 @@ from homeauto.config import Config, ConfigError
 
 
 def write_env(tmp_path, body):
-    path = tmp_path / "nestbot.env"
+    path = tmp_path / "domotica.env"
     path.write_text(body, encoding="utf-8")
     return path
 

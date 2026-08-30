@@ -20,18 +20,18 @@ ssh "root@${PVE}" bash -s <<REMOTE
 set -euo pipefail
 pct push ${CTID} /tmp/domotica.tar.gz /tmp/domotica.tar.gz
 pct exec ${CTID} -- bash -lc '
-  rm -rf /opt/nestbot/src
-  tar -xzf /tmp/domotica.tar.gz -C /opt/nestbot
-  install -m 644 /opt/nestbot/deploy/nestbot.service /etc/systemd/system/nestbot.service
+  rm -rf /opt/domotica/src
+  tar -xzf /tmp/domotica.tar.gz -C /opt/domotica
+  install -m 644 /opt/domotica/deploy/domotica.service /etc/systemd/system/domotica.service
   systemctl daemon-reload
-  systemctl enable nestbot.service
+  systemctl enable domotica.service
   # restart, not "enable --now": --now does nothing if it is already running,
   # so the old process keeps serving the previous code.
-  systemctl restart nestbot.service
+  systemctl restart domotica.service
   rm -f /tmp/domotica.tar.gz
 '
 rm -f /tmp/domotica.tar.gz
 REMOTE
 
 echo "==> estado"
-ssh "root@${PVE}" "pct exec ${CTID} -- systemctl is-active nestbot.service"
+ssh "root@${PVE}" "pct exec ${CTID} -- systemctl is-active domotica.service"
