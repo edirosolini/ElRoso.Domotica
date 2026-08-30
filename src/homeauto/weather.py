@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from homeauto.verbalize import number
+from homeauto.polish import as_is
 
 log = logging.getLogger(__name__)
 
@@ -83,11 +84,13 @@ class WeatherClient:
         longitude: float,
         place: str = "",
         fetch: Callable[[float, float], dict] = fetch_open_meteo,
+        polish: Callable[..., str] = as_is,
     ):
         self.latitude = latitude
         self.longitude = longitude
         self.place = place
         self.fetch = fetch
+        self.polish = polish
 
     def now(self) -> Forecast:
         try:
@@ -128,4 +131,4 @@ class WeatherClient:
         )
         if forecast.rain_chance >= RAIN_WORTH_MENTIONING:
             parts.append(f"Probabilidad de lluvia, {number(forecast.rain_chance)} por ciento.")
-        return " ".join(parts)
+        return self.polish(" ".join(parts), must_keep=[self.place] if self.place else [])

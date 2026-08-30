@@ -71,6 +71,39 @@ mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `mañana 8:00`.
 Una hora que ya pasó se entiende como la de mañana.
 
+## Redacción más natural (opcional)
+
+El texto que arma el bot —agenda, clima y avisos de evento— puede pasar por **Gemma 4** para
+que suene mejor dicho en voz alta. Es gratis: la API de Google sirve Gemma sin plan pago.
+
+Se saca una clave en [Google AI Studio](https://aistudio.google.com/apikey) y se pone en la
+configuración:
+
+```ini
+LLM_API_KEY=              # sin clave, apagado: el texto sale tal cual
+LLM_MODEL=gemma-4-26b-a4b-it
+```
+
+**Sin clave no cambia nada** y no se sale a internet.
+
+Para probar que la clave anda:
+
+```bash
+curl -s -X POST \
+  "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent" \
+  -H "Content-Type: application/json" -H "x-goog-api-key: $LLM_API_KEY" \
+  -d '{"contents":[{"parts":[{"text":"decí hola"}]}]}'
+```
+
+**Lo que el modelo no puede hacer.** Solo reescribe; no informa. La respuesta se descarta —y se
+dice el texto original— si trae dígitos, si cambia un número, una hora o un momento del día, si
+pierde el título de un evento, o si se va de largo. Si la API falla o tarda, también gana el
+original: nadie se queda sin aviso porque el modelo estaba lento.
+
+⚠️ **Esto mejora la redacción, no la voz.** El timbre lo pone Piper y sigue igual.
+
+⚠️ **`/decir` y los timers no pasan por acá.** Lo que escribís vos se dice tal cual.
+
 ## Vigilancia de servicios
 
 Dos señales que cubren agujeros distintos:
@@ -171,6 +204,8 @@ CHECK_INTERVAL_SECONDS=120
 SEQ_URL=http://172.68.0.7      # logs del VPS, por el túnel
 SEQ_API_KEY=                   # clave de solo lectura; sin ella Seq queda apagado
 SEQ_COOLDOWN_MINUTES=15
+LLM_API_KEY=                   # Gemma 4 por la API de Google; sin clave, apagado
+LLM_MODEL=gemma-4-26b-a4b-it
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

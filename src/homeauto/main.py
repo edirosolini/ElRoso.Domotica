@@ -23,6 +23,7 @@ from homeauto.agenda.watcher import EventWatcher
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.config import Config
+from homeauto.polish import GoogleModel, Polisher, as_is
 from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
@@ -223,6 +224,15 @@ def _announce(house: HouseVoice, text: str) -> None:
         house.tell_everyone(f"🔔 {text}")
 
 
+def build_polisher(config: Config):
+    """The rewriter for generated wording, or None when there is no key.
+
+    Only text this service writes goes through it. What a person typed into
+    /decir or a timer is said exactly as they wrote it.
+    """
+    return Polisher(model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model))
+
+
 def build_speakers(config: Config) -> SpeakerRegistry:
     """One Speaker per configured device, sharing synthesis and the media server.
 
@@ -300,6 +310,12 @@ def main() -> None:
     for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     config = Config.from_file(CONFIG_PATH)
+    if config.polish_enabled:
+        polish = build_polisher(config)
+        log.info("pulido de la redacción con %s", config.llm_model)
+    else:
+        polish = as_is
+        log.info("sin LLM_API_KEY: el texto generado va tal cual")
     speakers = build_speakers(config)
     log.info("equipos configurados: %s", ", ".join(speakers.aliases))
 
@@ -321,7 +337,11 @@ def main() -> None:
     agenda = None
     if config.calendar_enabled:
         calendar = CalendarClient(config.calendars, timezone=local_timezone())
-        agenda = AgendaService(calendar=calendar, clock=lambda: datetime.now(local_timezone()))
+        agenda = AgendaService(
+            calendar=calendar,
+            clock=lambda: datetime.now(local_timezone()),
+            polish=polish,
+        )
         log.info("calendarios configurados: %s", ", ".join(config.calendars))
     else:
         log.info("sin calendarios configurados: /agenda queda apagado")
@@ -375,6 +395,7 @@ def main() -> None:
             latitude=config.weather_lat,
             longitude=config.weather_lon,
             place=config.weather_place,
+            polish=polish,
         ),
         quiet=config.quiet_hours,
         clock=datetime.now,
@@ -389,6 +410,7 @@ def main() -> None:
             seen=SeenStore(db_path),
             lead_minutes=config.event_lead_minutes,
             clock=lambda: datetime.now(local_timezone()),
+            polish=polish,
         )
         watcher.say_briefing = lambda service: _announce(house, service.briefing())
 

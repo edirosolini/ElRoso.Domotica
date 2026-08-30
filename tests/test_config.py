@@ -93,3 +93,39 @@ def test_surrounding_quotes_are_stripped(tmp_path):
 def test_missing_file_is_rejected(tmp_path):
     with pytest.raises(ConfigError, match="no existe"):
         Config.from_file(tmp_path / "no-esta.env")
+
+
+# --- pulido de la redacción con un LLM ---
+
+def test_without_a_key_the_polisher_is_off(tmp_path):
+    """Apagado es el estado seguro: sin key, la casa habla igual que siempre."""
+    path = write_env(tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\n")
+
+    assert Config.from_file(path).polish_enabled is False
+
+
+def test_a_key_turns_the_polisher_on(tmp_path):
+    path = write_env(
+        tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nLLM_API_KEY=abc123\n"
+    )
+    cfg = Config.from_file(path)
+
+    assert cfg.polish_enabled is True
+    assert cfg.llm_api_key == "abc123"
+
+
+def test_the_model_has_a_default(tmp_path):
+    path = write_env(
+        tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nLLM_API_KEY=k\n"
+    )
+
+    assert "gemma" in Config.from_file(path).llm_model
+
+
+def test_the_model_can_be_changed(tmp_path):
+    path = write_env(
+        tmp_path,
+        f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nLLM_API_KEY=k\nLLM_MODEL=gemma-4-31b-it\n",
+    )
+
+    assert Config.from_file(path).llm_model == "gemma-4-31b-it"

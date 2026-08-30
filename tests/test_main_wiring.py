@@ -156,3 +156,55 @@ def test_a_broken_checks_file_stops_the_service(wired, tmp_path, monkeypatch):
         main.main()
 
     assert not isinstance(caught.value, Stopped)
+
+
+def test_wiring_without_a_key_leaves_the_polisher_off(wired, tmp_path, monkeypatch):
+    """Sin LLM_API_KEY el texto sale tal cual, y nada intenta salir a internet."""
+    run_main(monkeypatch, config_file(tmp_path, "CALENDAR_URL_PERSONAL=https://ejemplo/a.ics\n"))
+
+    assert main.build_polisher.__name__ == "build_polisher"
+
+
+def test_wiring_with_a_key_builds_the_polisher(wired, tmp_path, monkeypatch):
+    built = []
+    monkeypatch.setattr(main, "build_polisher", lambda config: built.append(config) or "polisher")
+
+    path = config_file(
+        tmp_path,
+        "CALENDAR_URL_PERSONAL=https://ejemplo/a.ics\nLLM_API_KEY=una-clave\n",
+    )
+    run_main(monkeypatch, path)
+
+    assert len(built) == 1
+    assert built[0].llm_api_key == "una-clave"
+
+
+def test_the_polisher_reaches_agenda_weather_and_watcher(tmp_path, monkeypatch):
+    """Los tres textos generados tienen que quedar cableados al mismo pulidor."""
+    app = FakeApp()
+    monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
+    monkeypatch.setattr(main, "build_speakers", lambda config: _FakeRegistry())
+    monkeypatch.setattr(main, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
+
+    sentinel = object()
+    monkeypatch.setattr(main, "build_polisher", lambda config: sentinel)
+
+    seen = {}
+    for name, cls in (("agenda", main.AgendaService), ("weather", main.WeatherClient),
+                      ("watcher", main.EventWatcher)):
+        original = cls.__init__
+
+        def spy(self, *args, __name=name, __original=original, **kwargs):
+            seen[__name] = kwargs.get("polish")
+            return __original(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, "__init__", spy)
+
+    path = config_file(
+        tmp_path,
+        "CALENDAR_URL_PERSONAL=https://ejemplo/a.ics\nLLM_API_KEY=una-clave\n",
+    )
+    run_main(monkeypatch, path)
+
+    assert seen == {"agenda": sentinel, "weather": sentinel, "watcher": sentinel}

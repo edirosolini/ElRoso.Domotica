@@ -18,6 +18,7 @@ Domotica/
 │   ├── quiet.py         # horario de descanso
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00"
 │   ├── verbalize.py     # números y horas a palabras, para el sintetizador
+│   ├── polish.py        # reescribe la redacción con un LLM, sin tocar los datos
 │   ├── weather.py       # clima por Open-Meteo
 │   ├── api.py           # endpoint HTTP para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
@@ -225,6 +226,33 @@ generan texto, porque todos escribían el número con `f"{n}"`.
   calendario; reescribirlo sería peor que leer mal un número.
 
 Hay test que verifica que **ningún dígito** sobrevive en el texto que arma la agenda ni el clima.
+
+### Pulido de la redacción
+
+`polish.py` le pasa el texto **generado** a Gemma 4 por la API de Google para que suene más
+natural antes de sintetizarlo. Es gratis: la Gemini API sirve Gemma sin tier pago.
+
+- 🔴 **El original siempre gana.** Sin clave, sin red, con timeout o con una respuesta
+  sospechosa, se dice el texto que ya había. Esto es decoración sobre un camino que tiene que
+  funcionar: nadie puede quedarse sin aviso porque un modelo estaba lento.
+- 🔴 **Solo se pule lo que generamos nosotros** — agenda, clima y avisos de evento. `/decir`
+  y el mensaje de un timer **van literales**: ahí las palabras son de una persona.
+- **La respuesta se valida antes de usarla.** Se descarta si trae dígitos, si crece o se
+  encoge demasiado, si pierde un término que debía sobrevivir, o si cambia una
+  **palabra-dato**. `verbalize.DATA_WORDS` define ese vocabulario: números, fracciones de hora
+  y momentos del día. Cambiar "de la mañana" por "de la tarde" mueve una cita medio día.
+- **La respuesta se cachea por texto de entrada**, o se rompe el cache de síntesis: `VoiceSynth`
+  cachea por frase y una redacción distinta cada vez significaría sintetizar siempre.
+- La clave viaja en el header `x-goog-api-key`, **nunca en la query string**, que terminaría
+  en cualquier log que registre la URL.
+- Los modelos Gemma **no aceptan system instruction**: el prompt entero va como turno de
+  usuario.
+- ⚠️ Los `model id` (`gemma-4-26b-a4b-it`, `gemma-4-31b-it`) salen de la documentación de
+  Google; no se pudieron verificar contra la API porque valida la clave antes que el modelo.
+  Un id equivocado no rompe nada: cae al texto original y queda en el log.
+- El pulido hace una llamada HTTP bloqueante, pero cuelga de caminos que **ya** corren en
+  `asyncio.to_thread` (los comandos, el watcher y el briefing). No agregar un llamador nuevo
+  que lo invoque desde el event loop.
 
 ## Horario de descanso
 

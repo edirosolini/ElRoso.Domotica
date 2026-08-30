@@ -11,6 +11,9 @@ always produce the same audio or the synthesis cache stops working.
 
 from __future__ import annotations
 
+import re
+from collections import Counter
+
 MASCULINE = "m"
 FEMININE = "f"
 
@@ -104,3 +107,31 @@ def clock(hour: int, minute: int = 0) -> str:
     shown = hour % 12 or 12
     article = "la" if shown == 1 else "las"
     return f"{article} {number(shown, FEMININE)}{_minutes(minute)} {_part_of_day(hour, minute)}"
+
+
+# Every word this module can emit that carries a fact rather than style. A
+# rewriter is allowed to move them around, never to add, drop or swap one:
+# turning "de la mañana" into "de la tarde" moves an appointment by half a day.
+_FEMININE_FORMS = ("una", "veintiuna")
+_APOCOPATED = ("un", "veintiún")
+_PARTS_OF_DAY = ("madrugada", "mañana", "tarde", "noche", "mediodía")
+_FRACTIONS = ("cuarto", "media")
+
+DATA_WORDS = frozenset(
+    _UNITS
+    + tuple(_TENS.values())
+    + tuple(_HUNDREDS.values())
+    + ("cien",)
+    + tuple(word.replace("cientos", "cientas") for word in _HUNDREDS.values())
+    + _FEMININE_FORMS
+    + _APOCOPATED
+    + _PARTS_OF_DAY
+    + _FRACTIONS
+    + ("menos",)
+)
+
+
+def data_words(text: str) -> Counter:
+    """How many times each fact-carrying word appears, ignoring case and punctuation."""
+    found = re.findall(r"[a-záéíóúüñ]+", text.lower())
+    return Counter(word for word in found if word in DATA_WORDS)

@@ -14,6 +14,7 @@ from typing import Callable
 from homeauto.agenda.ical import Event
 from homeauto.agenda.seen import SeenStore
 from homeauto.verbalize import number
+from homeauto.polish import as_is
 
 log = logging.getLogger(__name__)
 
@@ -43,12 +44,14 @@ class EventWatcher:
         seen: SeenStore,
         lead_minutes: int,
         clock: Callable[[], datetime] = datetime.now,
+        polish: Callable[..., str] = as_is,
     ):
         self.calendar = calendar
         self.announce = announce
         self.seen = seen
         self.lead_minutes = lead_minutes
         self.clock = clock
+        self.polish = polish
 
     def check(self) -> list[Event]:
         now = self.clock()
@@ -63,7 +66,9 @@ class EventWatcher:
             if event.start < now or self.seen.was_seen(event.key):
                 continue
             try:
-                self.announce(announcement_for(event, now))
+                self.announce(
+                    self.polish(announcement_for(event, now), must_keep=[event.summary])
+                )
             except Exception:
                 # Not marked: it gets another chance on the next round.
                 log.exception("no pude avisar del evento %s", event.summary)

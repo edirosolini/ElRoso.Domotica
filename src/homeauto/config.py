@@ -59,6 +59,9 @@ MIN_CHECK_INTERVAL = 30
 # Seq: los logs del VPS. Sin URL y clave, apagado.
 DEFAULT_SEQ_COOLDOWN = 15
 
+# Pulido de la redacción con un LLM. Sin clave, apagado: la casa habla igual.
+DEFAULT_LLM_MODEL = "gemma-4-26b-a4b-it"
+
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
     raw = raw.strip()
@@ -243,6 +246,8 @@ class Config:
     seq_url: str = ""
     seq_api_key: str = ""
     seq_cooldown: int = DEFAULT_SEQ_COOLDOWN
+    llm_api_key: str = ""
+    llm_model: str = DEFAULT_LLM_MODEL
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -295,6 +300,8 @@ class Config:
             seq_url=_parse_seq_url(pairs),
             seq_api_key=pairs.get("SEQ_API_KEY", "").strip(),
             seq_cooldown=_parse_seq_cooldown(pairs),
+            llm_api_key=pairs.get("LLM_API_KEY", "").strip(),
+            llm_model=pairs.get("LLM_MODEL", "").strip() or DEFAULT_LLM_MODEL,
         )
 
     @property
@@ -309,6 +316,11 @@ class Config:
     @property
     def calendar_enabled(self) -> bool:
         return bool(self.calendars)
+
+    @property
+    def polish_enabled(self) -> bool:
+        """Sin clave, apagado. La redacción sin pulir se entiende igual."""
+        return bool(self.llm_api_key)
 
     @property
     def seq_enabled(self) -> bool:

@@ -155,3 +155,32 @@ def test_the_lead_time_is_respected(tmp_path):
     watcher.check()
 
     assert len(said) == 1
+
+
+def test_the_warning_wording_is_polished(tmp_path):
+    calls = []
+
+    def polish(text, must_keep=()):
+        calls.append((text, tuple(must_keep)))
+        return "En un rato tenés Dentista"
+
+    said = []
+    watcher = EventWatcher(
+        calendar=FakeCalendar([event(5, "Dentista")]),
+        announce=said.append,
+        seen=SeenStore(tmp_path / "jobs.db"),
+        lead_minutes=10,
+        clock=lambda: NOW,
+        polish=polish,
+    )
+    watcher.check()
+
+    assert said == ["En un rato tenés Dentista"]
+    assert "Dentista" in calls[0][1], "el título tiene que sobrevivir"
+
+
+def test_without_a_polisher_the_warning_is_untouched(tmp_path):
+    watcher, said = build(tmp_path, [event(5, "Dentista")])
+    watcher.check()
+
+    assert "Dentista" in said[0]

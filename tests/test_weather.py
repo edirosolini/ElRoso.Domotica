@@ -113,3 +113,23 @@ def test_no_digit_reaches_the_synthesizer():
     spoken = client().spoken()
 
     assert not any(character.isdigit() for character in spoken)
+
+
+# --- pulido de la redacción ---
+
+def test_the_forecast_wording_is_polished():
+    calls = []
+
+    def polish(text, must_keep=()):
+        calls.append(text)
+        return "hace fresquito, llevate abrigo"
+
+    subject = client()
+    subject.polish = polish
+
+    assert subject.spoken() == "hace fresquito, llevate abrigo"
+    assert "grados" in calls[0]
+
+
+def test_without_a_polisher_the_forecast_is_untouched():
+    assert "grados" in client().spoken()

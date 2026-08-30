@@ -85,3 +85,36 @@ def test_the_full_day_briefing_ignores_the_current_time():
     text = service(calendar).briefing()
 
     assert "Temprano" in text and "Cena" in text
+
+
+# --- pulido de la redacción ---
+
+def with_dentist():
+    return FakeCalendar([event(30, 18, "Dentista")])
+
+
+def test_the_wording_is_polished_when_a_polisher_is_given():
+    calls = []
+
+    def polish(text, must_keep=()):
+        calls.append((text, tuple(must_keep)))
+        return "redacción mejorada"
+
+    subject = AgendaService(calendar=with_dentist(), clock=lambda: NOW, polish=polish)
+
+    assert subject.spoken("hoy") == "redacción mejorada"
+    assert "Dentista" in calls[0][1], "el título del evento no se puede perder"
+
+
+def test_the_briefing_is_polished_too():
+    subject = AgendaService(
+        calendar=with_dentist(),
+        clock=lambda: NOW,
+        polish=lambda text, must_keep=(): "mejor",
+    )
+
+    assert subject.briefing() == "mejor"
+
+
+def test_without_a_polisher_the_text_is_untouched():
+    assert "Dentista" in AgendaService(calendar=with_dentist(), clock=lambda: NOW).spoken("hoy")
