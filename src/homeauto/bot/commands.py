@@ -46,6 +46,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /cancelar <n> — cancela uno
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
+/apagar — cierra la app y deja el equipo en reposo
 /equipos — qué equipos tengo y cuál está activo
 /usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
 
@@ -223,6 +224,22 @@ class Commands:
 
         results = self._broadcast(aliases, lambda speaker: speaker.stop())
         return self._summary(results, "Cortado", "No pude parar:")
+
+    def turn_off(self, chat_id: int, text: str = "") -> str:
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        try:
+            aliases, _ = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
+        results = self._broadcast(aliases, lambda speaker: speaker.turn_off())
+        summary = self._summary(results, "Apagado", "No pude apagar:")
+        if any(problem is None for problem in results.values()):
+            summary += "\n\nEl televisor se apaga solo si lo tenés configurado para hacerlo al perder señal."
+        return summary
 
     def devices(self, chat_id: int) -> str:
         denial = self._denial(chat_id)

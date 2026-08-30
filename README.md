@@ -15,9 +15,15 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /cancelar 3                     cancela por número
 /volumen 40                     0 a 100
 /parar                          corta lo que esté sonando
+/apagar en todos                cierra la app y deja los equipos en reposo
 /equipos                        qué equipos hay y cuál está activo
 /usar tv                        cambia el equipo por defecto
 ```
+
+**Apagar.** El protocolo Cast **no tiene apagado**. `/apagar` cierra la app que esté
+corriendo y deja el equipo en reposo; de ahí en más, un televisor configurado para dormirse
+al perder señal se apaga solo por HDMI-CEC. Un apagado de verdad requeriría ADB, que solo
+existe en los equipos Android TV y hay que habilitarlo a mano.
 
 **Elegir equipo.** Cualquier comando acepta `en <equipo>` adelante y va solo a ese; `/usar`
 cambia el que se usa cuando no decís nada, y queda guardado por chat. Un timer recuerda a

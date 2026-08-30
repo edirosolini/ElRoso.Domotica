@@ -43,6 +43,15 @@ El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (
   el Nest ya saltó de `.13` a `.20` solo. Los UUID están en `CAST_DEVICES`.
 - **Los equipos con pantalla solo aparecen en el descubrimiento si están encendidos.** Un
   Google TV apagado no existe para mDNS. No es un error: es que no está.
+- 🔴 **La app que está corriendo es dueña de la sesión de medios.** Con YouTube abierto en
+  un Chromecast, un `play_media` se lo come YouTube y el anuncio se pierde **en silencio**.
+  Hay que desalojar la app ajena primero. El receptor propio (`CC1AD845`) se respeta:
+  relanzarlo cortaría el audio en curso.
+- 🔴 **Confirmar que empezó a sonar, y que suena lo que se pidió.** Por un instante el
+  dispositivo sigue reportando el clip anterior como `PLAYING`: aceptarlo es informar que la
+  casa fue avisada cuando no salió nada por los parlantes.
+- **No existe apagar por Cast.** Lo máximo es `quit_app()`, que deja el equipo en reposo;
+  el televisor se apaga solo si está configurado para dormirse al perder señal.
 - **Castear a un equipo con pantalla prende el televisor.** Tenerlo en cuenta antes de
   mandar una alarma de las 7 AM al comedor.
 - **Un Speaker por equipo, pero síntesis y servidor HTTP compartidos.** Lo único distinto

@@ -126,3 +126,29 @@ def test_playing_the_clip_we_asked_for_is_accepted():
     device = FakeDevice(states=[("PLAYING", None)])
 
     caster_for(device).play("http://x/hola.wav")
+
+
+def test_turn_off_closes_whatever_app_is_running():
+    device = FakeDevice(app_id=YOUTUBE_APP_ID)
+
+    caster_for(device).turn_off()
+
+    assert device.quits == 1
+    assert device.app_id is None
+
+
+def test_turning_off_an_idle_device_is_harmless():
+    device = FakeDevice(app_id=None)
+
+    caster_for(device).turn_off()
+
+    assert device.quits == 0, "no hay nada que cerrar"
+
+
+def test_turn_off_also_closes_our_own_receiver():
+    """A diferencia del desalojo previo a hablar: acá el pedido es que se calle."""
+    device = FakeDevice(app_id=MEDIA_RECEIVER_APP_ID)
+
+    caster_for(device).turn_off()
+
+    assert device.quits == 1

@@ -151,3 +151,15 @@ class Caster:
 
     def stop(self) -> None:
         self._resolve().media_controller.stop()
+
+    def turn_off(self) -> None:
+        """Close whatever app is running and leave the device idle.
+
+        There is no power-off in the cast protocol. This is as far as it goes:
+        the device stops showing anything, and a TV set to sleep on loss of
+        signal follows on its own through HDMI-CEC.
+        """
+        device = self._resolve()
+        if getattr(device, "app_id", None) is None:
+            return
+        device.quit_app()

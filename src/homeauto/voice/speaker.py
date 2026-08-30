@@ -34,5 +34,8 @@ class Speaker:
     def stop(self) -> None:
         self.caster.stop()
 
+    def turn_off(self) -> None:
+        self.caster.turn_off()
+
     def device_name(self) -> str:
         return self.caster.device_name()

@@ -50,10 +50,11 @@ LIST_COMMANDS = ("lista",)
 CANCEL_COMMANDS = ("cancelar",)
 DEVICES_COMMANDS = ("equipos",)
 USE_COMMANDS = ("usar",)
+OFF_COMMANDS = ("apagar",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
-    + DEVICES_COMMANDS + USE_COMMANDS
+    + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS
 )
 
 # What Telegram offers when you type "/". Without registering this the commands
@@ -67,6 +68,7 @@ COMMAND_MENU = (
     ("cancelar", "Cancelar por número — /cancelar 3"),
     ("volumen", "Cambiar el volumen, de 0 a 100"),
     ("parar", "Cortar lo que esté sonando"),
+    ("apagar", "Cerrar la app y dejar el equipo en reposo"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
     ("usar", "Cambiar el equipo por defecto — /usar tv"),
     ("ayuda", "Cómo se usa"),
@@ -206,6 +208,7 @@ def register(app: Application, commands: Commands) -> None:
         (CANCEL_COMMANDS, commands.cancel),
         (DEVICES_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
         (USE_COMMANDS, commands.use),
+        (OFF_COMMANDS, commands.turn_off),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
