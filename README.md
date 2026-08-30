@@ -43,6 +43,12 @@ ALLOWED_CHAT_IDS=        # vacío = el primero que escriba queda registrado
 CAST_UUID=               # UUID del dispositivo, no su IP
 ```
 
+Después de tocar este archivo hay que **reiniciar**: se lee sólo al arrancar.
+
+```bash
+systemctl restart nestbot
+```
+
 `ALLOWED_CHAT_IDS` vacío deja el bot **abierto**: cualquiera que lo encuentre puede usarlo.
 Se deja así solo para el alta inicial; una vez que sabés tu chat ID, se completa y se reinicia.
 

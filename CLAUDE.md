@@ -54,6 +54,9 @@ El servicio vive en `/opt/nestbot`, la config en `/etc/nestbot/nestbot.env` (chm
 - **onnxruntime** tira `pthread_setaffinity_np failed` dentro del LXC. Es inocuo:
   se silencia con `OMP_NUM_THREADS=1`.
 - **Telegram por long polling**: no expone ningún puerto a internet. No abrir nada en el router.
+- **La config se lee una sola vez, al arrancar.** Cambiar el token o `ALLOWED_CHAT_IDS` en
+  `/etc/nestbot/nestbot.env` no tiene efecto hasta `systemctl restart nestbot`. Sin reiniciar,
+  el servicio sigue con el token viejo y no avisa nada.
 
 ## Convenciones
 
