@@ -1,0 +1,9 @@
+.claude/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.wav
+*.db

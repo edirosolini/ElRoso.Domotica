@@ -1,0 +1,4 @@
+piper-tts
+pychromecast
+python-telegram-bot[job-queue]
+APScheduler
