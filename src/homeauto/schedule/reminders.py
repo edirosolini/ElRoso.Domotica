@@ -36,8 +36,15 @@ class Reminders:
             else:
                 self._arm(job)
 
-    def add(self, chat_id: int, when: datetime, message: str, repeat: str = ONCE) -> Job:
-        job = self.store.add(chat_id, when, message, repeat)
+    def add(
+        self,
+        chat_id: int,
+        when: datetime,
+        message: str,
+        repeat: str = ONCE,
+        device: str | None = None,
+    ) -> Job:
+        job = self.store.add(chat_id, when, message, repeat, device)
         self._arm(job)
         return job
 

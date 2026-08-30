@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     chat_id  INTEGER NOT NULL,
     fires_at TEXT    NOT NULL,
     message  TEXT    NOT NULL,
-    repeat   TEXT    NOT NULL DEFAULT 'once'
+    repeat   TEXT    NOT NULL DEFAULT 'once',
+    device   TEXT
 );
 CREATE INDEX IF NOT EXISTS jobs_by_time ON jobs (fires_at);
 """
@@ -34,6 +35,7 @@ class Job:
     when: datetime
     message: str
     repeat: str = ONCE
+    device: str | None = None
 
     @property
     def is_daily(self) -> bool:
@@ -47,6 +49,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         when=datetime.fromisoformat(row["fires_at"]),
         message=row["message"],
         repeat=row["repeat"],
+        device=row["device"],
     )
 
 
@@ -56,21 +59,43 @@ class Store:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            self._add_missing_columns(conn)
+
+    @staticmethod
+    def _add_missing_columns(conn: sqlite3.Connection) -> None:
+        """Databases created before a column existed are already out there."""
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
+        if "device" not in existing:
+            conn.execute("ALTER TABLE jobs ADD COLUMN device TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def add(self, chat_id: int, when: datetime, message: str, repeat: str = ONCE) -> Job:
+    def add(
+        self,
+        chat_id: int,
+        when: datetime,
+        message: str,
+        repeat: str = ONCE,
+        device: str | None = None,
+    ) -> Job:
         if repeat not in REPEATS:
             raise ValueError(f"repeat inválido: {repeat}")
         with self._connect() as conn:
             cursor = conn.execute(
-                "INSERT INTO jobs (chat_id, fires_at, message, repeat) VALUES (?, ?, ?, ?)",
-                (chat_id, when.isoformat(), message, repeat),
+                "INSERT INTO jobs (chat_id, fires_at, message, repeat, device) VALUES (?, ?, ?, ?, ?)",
+                (chat_id, when.isoformat(), message, repeat, device),
             )
-            return Job(id=cursor.lastrowid, chat_id=chat_id, when=when, message=message, repeat=repeat)
+            return Job(
+                id=cursor.lastrowid,
+                chat_id=chat_id,
+                when=when,
+                message=message,
+                repeat=repeat,
+                device=device,
+            )
 
     def pending(self, chat_id: int | None = None) -> list[Job]:
         query = "SELECT * FROM jobs"

@@ -12,7 +12,11 @@ Domotica/
 ├── src/homeauto/
 │   ├── config.py        # carga y validación del archivo de entorno
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00"
-│   └── voice/           # dispositivo: parlante Google Nest
+│   ├── bot/             # comandos, sin nada de Telegram adentro
+│   ├── schedule/        # timers, alarmas, preferencias por chat
+│   ├── voice/           # equipos cast: tts, cast, registro
+│   └── main.py          # cableado y ciclo de vida del proceso
+├── deploy/              # unit de systemd y script de despliegue
 ├── tests/
 └── requirements*.txt
 ```
@@ -36,7 +40,15 @@ El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (
 ## Gotchas
 
 - 🔴 **Los dispositivos Google se resuelven por UUID, nunca por IP.** Son DHCP y se mueven:
-  el Nest ya saltó de `.13` a `.20` solo. El UUID está en la config.
+  el Nest ya saltó de `.13` a `.20` solo. Los UUID están en `CAST_DEVICES`.
+- **Los equipos con pantalla solo aparecen en el descubrimiento si están encendidos.** Un
+  Google TV apagado no existe para mDNS. No es un error: es que no está.
+- **Castear a un equipo con pantalla prende el televisor.** Tenerlo en cuenta antes de
+  mandar una alarma de las 7 AM al comedor.
+- **Un Speaker por equipo, pero síntesis y servidor HTTP compartidos.** Lo único distinto
+  entre equipos es el Caster; duplicar lo demás sería sintetizar dos veces la misma frase.
+  Los Speaker se construyen recién al usarse: al arrancar, casi todos los equipos están
+  apagados.
 - 🔴 **IPv6 roto en los contenedores.** Solo tienen link-local `fe80::`, sin IPv6 global.
   Como el DNS devuelve el AAAA y glibc prefiere IPv6, cualquier cliente HTTP se cuelga
   20 s contra hosts doble stack (`api.telegram.org`). Se arregla con

@@ -12,22 +12,25 @@ from typing import Callable
 
 from homeauto.schedule.store import Job
 from homeauto.voice.caster import CastError
+from homeauto.voice.registry import UnknownDevice
 from homeauto.voice.tts import TtsError
 
 log = logging.getLogger(__name__)
 
-DEVICE_ERRORS = (CastError, TtsError)
+DEVICE_ERRORS = (CastError, TtsError, UnknownDevice)
 
 
 class Announcer:
-    def __init__(self, speaker, notify: Callable[[int, str], None]):
-        self.speaker = speaker
+    def __init__(self, speakers, notify: Callable[[int, str], None], fallback: str):
+        self.speakers = speakers
         self.notify = notify
+        # A job scheduled before the devices existed carries no target.
+        self.fallback = fallback
 
     def __call__(self, job: Job) -> None:
         problem = None
         try:
-            self.speaker.say(job.message)
+            self.speakers.get(job.device or self.fallback).say(job.message)
         except DEVICE_ERRORS as exc:
             problem = str(exc)
             log.warning("el job %s no sonó: %s", job.id, problem)

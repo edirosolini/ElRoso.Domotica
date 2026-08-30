@@ -1,14 +1,13 @@
-import uuid
 from datetime import datetime, timedelta
 
 import pytest
 
 from homeauto.bot.commands import Commands
-from homeauto.config import Config
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
 
-UUID = uuid.UUID("d17e8311-d82e-5116-8f58-6292603bbc1b")
+from tests.conftest import FakeSpeaker, StubRegistry, make_config
+
 OWNER = 42
 STRANGER = 99
 NOW = datetime(2026, 8, 29, 21, 0)
@@ -25,18 +24,16 @@ class FakeTimer:
         self.armed.pop(key, None)
 
 
-class FakeSpeaker:
-    def say(self, text): pass
-    def set_volume(self, percent): pass
-    def stop(self): pass
-    def device_name(self): return "Nest"
-
-
 @pytest.fixture
 def cmd(tmp_path):
     reminders = Reminders(store=Store(tmp_path / "jobs.db"), timer=FakeTimer(), announce=lambda job: None)
-    config = Config(telegram_token="123:ABC", cast_uuid=UUID, allowed_chat_ids=frozenset({OWNER}))
-    return Commands(config=config, speaker=FakeSpeaker(), reminders=reminders, clock=lambda: NOW)
+    config = make_config(allowed={OWNER})
+    return Commands(
+        config=config,
+        speakers=StubRegistry(parlante=FakeSpeaker()),
+        reminders=reminders,
+        clock=lambda: NOW,
+    )
 
 
 def test_timer_schedules_and_confirms(cmd):

@@ -10,21 +10,18 @@ from homeauto.voice.tts import TtsError
 JOB = Job(id=7, chat_id=42, when=datetime(2026, 8, 30, 7, 30), message="arriba")
 
 
-class FakeSpeaker:
-    def __init__(self, fail=None):
-        self.said = []
-        self.fail = fail
-
-    def say(self, text):
-        if self.fail:
-            raise self.fail
-        self.said.append(text)
+from tests.conftest import FakeSpeaker, StubRegistry
 
 
 def build(fail=None):
-    speaker = FakeSpeaker(fail)
+    speaker = FakeSpeaker("parlante", fail)
     sent = []
-    return Announcer(speaker=speaker, notify=lambda chat_id, text: sent.append((chat_id, text))), speaker, sent
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=speaker),
+        notify=lambda chat_id, text: sent.append((chat_id, text)),
+        fallback="parlante",
+    )
+    return announcer, speaker, sent
 
 
 def test_says_it_out_loud():
@@ -68,12 +65,12 @@ def test_the_chat_is_told_that_it_did_not_sound():
 
 
 def test_a_broken_chat_does_not_stop_the_voice():
-    speaker = FakeSpeaker()
+    speaker = FakeSpeaker("parlante")
 
     def notify(chat_id, text):
         raise RuntimeError("telegram caído")
 
-    Announcer(speaker=speaker, notify=notify)(JOB)
+    Announcer(speakers=StubRegistry(parlante=speaker), notify=notify, fallback="parlante")(JOB)
 
     assert speaker.said == ["arriba"], "el parlante ya habló: un fallo de Telegram no lo deshace"
 
@@ -86,3 +83,45 @@ def test_daily_jobs_are_marked_as_such():
 
     _, text = sent[0]
     assert "todos los días" in text.lower()
+
+
+def test_it_speaks_on_the_device_the_job_asked_for():
+    parlante, tv = FakeSpeaker("parlante"), FakeSpeaker("tv")
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=parlante, tv=tv),
+        notify=lambda chat_id, text: sent.append((chat_id, text)),
+        fallback="parlante",
+    )
+
+    announcer(Job(id=1, chat_id=42, when=JOB.when, message="que bajen", device="tv"))
+
+    assert tv.said == ["que bajen"] and parlante.said == []
+
+
+def test_a_job_without_a_device_falls_back():
+    parlante, tv = FakeSpeaker("parlante"), FakeSpeaker("tv")
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=parlante, tv=tv),
+        notify=lambda chat_id, text: None,
+        fallback="parlante",
+    )
+
+    announcer(Job(id=1, chat_id=42, when=JOB.when, message="viejo", device=None))
+
+    assert parlante.said == ["viejo"]
+
+
+def test_a_device_that_no_longer_exists_still_reaches_the_chat():
+    """Un job viejo puede apuntar a un alias que se sacó de la config."""
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=FakeSpeaker("parlante")),
+        notify=lambda chat_id, text: sent.append((chat_id, text)),
+        fallback="parlante",
+    )
+
+    announcer(Job(id=1, chat_id=42, when=JOB.when, message="hola", device="cocina"))
+
+    assert len(sent) == 1
+    assert "cocina" in sent[0][1]

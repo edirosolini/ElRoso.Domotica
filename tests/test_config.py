@@ -59,15 +59,21 @@ def test_missing_token_is_rejected(tmp_path):
         Config.from_file(path)
 
 
-def test_missing_uuid_is_rejected(tmp_path):
+def test_missing_device_is_rejected(tmp_path):
     path = write_env(tmp_path, "TELEGRAM_TOKEN=123:ABC\n")
-    with pytest.raises(ConfigError, match="CAST_UUID"):
+    with pytest.raises(ConfigError, match="CAST_DEVICES"):
         Config.from_file(path)
 
 
 def test_malformed_uuid_is_rejected(tmp_path):
     path = write_env(tmp_path, "TELEGRAM_TOKEN=123:ABC\nCAST_UUID=no-es-un-uuid\n")
     with pytest.raises(ConfigError, match="CAST_UUID"):
+        Config.from_file(path)
+
+
+def test_missing_token_is_reported_before_the_devices(tmp_path):
+    path = write_env(tmp_path, f"TELEGRAM_TOKEN=\nCAST_UUID={VALID_UUID}\n")
+    with pytest.raises(ConfigError, match="TELEGRAM_TOKEN"):
         Config.from_file(path)
 
 

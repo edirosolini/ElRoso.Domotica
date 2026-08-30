@@ -19,10 +19,12 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from homeauto.bot.commands import Commands
 from homeauto.config import Config
 from homeauto.schedule.announcer import Announcer
+from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
+from homeauto.voice.registry import SpeakerRegistry
 from homeauto.voice.speaker import Speaker
 from homeauto.voice.tts import PiperRunner, VoiceSynth
 
@@ -46,9 +48,12 @@ TIMER_COMMANDS = ("timer", "recordar")
 ALARM_COMMANDS = ("alarma",)
 LIST_COMMANDS = ("lista",)
 CANCEL_COMMANDS = ("cancelar",)
+DEVICES_COMMANDS = ("equipos",)
+USE_COMMANDS = ("usar",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
+    + DEVICES_COMMANDS + USE_COMMANDS
 )
 
 # What Telegram offers when you type "/". Without registering this the commands
@@ -62,7 +67,8 @@ COMMAND_MENU = (
     ("cancelar", "Cancelar por número — /cancelar 3"),
     ("volumen", "Cambiar el volumen, de 0 a 100"),
     ("parar", "Cortar lo que esté sonando"),
-    ("donde", "Qué dispositivo estoy usando"),
+    ("equipos", "Qué equipos tengo y cuál está activo"),
+    ("usar", "Cambiar el equipo por defecto — /usar tv"),
     ("ayuda", "Cómo se usa"),
 )
 
@@ -147,13 +153,20 @@ def build_post_init(notifier, reminders):
     return post_init
 
 
-def build_speaker(config: Config) -> Speaker:
+def build_speakers(config: Config) -> SpeakerRegistry:
+    """One Speaker per configured device, sharing synthesis and the media server.
+
+    Only the Caster differs: synthesizing the same phrase twice or running two
+    HTTP servers would be waste.
+    """
     cache_dir = Path(CACHE_DIR)
-    return Speaker(
-        synth=VoiceSynth(cache_dir=cache_dir, runner=PiperRunner(PYTHON_BIN, VOICE_PATH)),
-        caster=Caster(config.cast_uuid),
-        media_server=MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT),
-    )
+    synth = VoiceSynth(cache_dir=cache_dir, runner=PiperRunner(PYTHON_BIN, VOICE_PATH))
+    media_server = MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT)
+
+    def build(device_uuid) -> Speaker:
+        return Speaker(synth=synth, caster=Caster(device_uuid), media_server=media_server)
+
+    return SpeakerRegistry(config.devices, build=build)
 
 
 def _argument_text(update: Update) -> str:
@@ -185,12 +198,14 @@ def register(app: Application, commands: Commands) -> None:
         (START_COMMANDS, lambda chat_id, _text: commands.start(chat_id)),
         (SAY_COMMANDS, commands.say),
         (VOLUME_COMMANDS, commands.volume),
-        (STOP_COMMANDS, lambda chat_id, _text: commands.stop(chat_id)),
-        (WHERE_COMMANDS, lambda chat_id, _text: commands.where(chat_id)),
+        (STOP_COMMANDS, commands.stop),
+        (WHERE_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
         (TIMER_COMMANDS, commands.timer),
         (ALARM_COMMANDS, commands.alarm),
         (LIST_COMMANDS, lambda chat_id, _text: commands.list(chat_id)),
         (CANCEL_COMMANDS, commands.cancel),
+        (DEVICES_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
+        (USE_COMMANDS, commands.use),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -207,18 +222,25 @@ def main() -> None:
     for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     config = Config.from_file(CONFIG_PATH)
-    speaker = build_speaker(config)
-    log.info("configuración leída, arrancando polling")
+    speakers = build_speakers(config)
+    log.info("equipos configurados: %s", ", ".join(speakers.aliases))
 
     app = Application.builder().token(config.telegram_token).build()
 
     notifier = ChatNotifier(app.bot)
+    db_path = STATE_DIR / "jobs.db"
     reminders = Reminders(
-        store=Store(STATE_DIR / "jobs.db"),
+        store=Store(db_path),
         timer=JobQueueTimer(app.job_queue),
-        announce=Announcer(speaker=speaker, notify=notifier),
+        announce=Announcer(speakers=speakers, notify=notifier, fallback=config.default_device),
     )
-    commands = Commands(config=config, speaker=speaker, reminders=reminders, clock=datetime.now)
+    commands = Commands(
+        config=config,
+        speakers=speakers,
+        reminders=reminders,
+        preferences=Preferences(db_path),
+        clock=datetime.now,
+    )
     register(app, commands)
 
     app.post_init = build_post_init(notifier, reminders)

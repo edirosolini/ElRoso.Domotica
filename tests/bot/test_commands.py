@@ -1,48 +1,19 @@
-import uuid
-
 import pytest
 
 from homeauto.bot.commands import Commands
-from homeauto.config import Config
 from homeauto.voice.caster import CastError
 from homeauto.voice.tts import TtsError
 
-UUID = uuid.UUID("d17e8311-d82e-5116-8f58-6292603bbc1b")
+from tests.conftest import FakeSpeaker, StubRegistry, make_config
+
 OWNER = 42
 STRANGER = 99
 
 
-def make_config(allowed):
-    return Config(telegram_token="123:ABC", cast_uuid=UUID, allowed_chat_ids=frozenset(allowed))
-
-
-class FakeSpeaker:
-    def __init__(self, fail=None):
-        self.said = []
-        self.volumes = []
-        self.stopped = 0
-        self.fail = fail
-
-    def say(self, text):
-        if self.fail:
-            raise self.fail
-        self.said.append(text)
-
-    def set_volume(self, percent):
-        if self.fail:
-            raise self.fail
-        self.volumes.append(percent)
-
-    def stop(self):
-        self.stopped += 1
-
-    def device_name(self):
-        return "Nest"
-
-
 def build(allowed=(OWNER,), speaker=None):
     speaker = speaker or FakeSpeaker()
-    return Commands(config=make_config(allowed), speaker=speaker), speaker
+    commands = Commands(config=make_config(allowed), speakers=StubRegistry(parlante=speaker))
+    return commands, speaker
 
 
 def test_say_speaks_the_text():
@@ -133,10 +104,10 @@ def test_stop_stops():
     assert reply
 
 
-def test_where_names_the_device():
+def test_where_lists_the_devices():
     cmd, _ = build()
 
-    assert "Nest" in cmd.where(OWNER)
+    assert "parlante" in cmd.where(OWNER)
 
 
 def test_start_greets_and_lists_the_commands():

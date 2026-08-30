@@ -7,6 +7,7 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 
 ```
 /decir buenas noches            habla ahora
+/decir en tv que bajen a comer  lo dice en ese equipo
 /timer 10m sacá la pizza        avisa dentro de 10 minutos
 /alarma 7:30 arriba             avisa a esa hora, una vez
 /alarma diaria 7:30 arriba      avisa todos los días
@@ -14,8 +15,16 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /cancelar 3                     cancela por número
 /volumen 40                     0 a 100
 /parar                          corta lo que esté sonando
-/donde                          qué dispositivo está usando
+/equipos                        qué equipos hay y cuál está activo
+/usar tv                        cambia el equipo por defecto
 ```
+
+**Elegir equipo.** Cualquier comando acepta `en <equipo>` adelante y va solo a ese; `/usar`
+cambia el que se usa cuando no decís nada, y queda guardado por chat. Un timer recuerda a
+qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
+
+`en` solo se interpreta como destino si la palabra siguiente es un equipo conocido:
+`/decir en casa hace frío` dice la frase entera, no se come nada.
 
 Los timers y las alarmas se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
@@ -40,8 +49,14 @@ El servicio lee un archivo de entorno (en el contenedor, `/etc/domotica/domotica
 ```ini
 TELEGRAM_TOKEN=          # token de @BotFather
 ALLOWED_CHAT_IDS=        # vacío = el primero que escriba queda registrado
-CAST_UUID=               # UUID del dispositivo, no su IP
+CAST_DEVICES=parlante:d17e8311-...,tv:083e8ba4-...   # alias:uuid, por coma
+CAST_DEFAULT=parlante    # cuál se usa si no se dice otro
 ```
+
+Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un
+equipo nuevo, prendelo y mirá `/equipos`, o corré el descubrimiento desde el contenedor.
+La clave vieja `CAST_UUID` con un solo UUID se sigue aceptando y equivale a un equipo
+llamado `parlante`.
 
 Después de tocar este archivo hay que **reiniciar**: se lee sólo al arrancar.
 

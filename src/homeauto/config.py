@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,36 @@ def _read_pairs(path: Path) -> dict[str, str]:
     return pairs
 
 
+ALIAS_SHAPE = re.compile(r"^[a-z0-9_-]{1,20}$")
+
+
+def _parse_devices(raw: str) -> dict[str, uuid.UUID]:
+    """`alias:uuid, alias:uuid` into an ordered mapping. Order sets the default."""
+    devices: dict[str, uuid.UUID] = {}
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        alias, separator, raw_uuid = chunk.partition(":")
+        if not separator:
+            raise ConfigError(f"CAST_DEVICES: '{chunk}' no tiene forma alias:uuid")
+
+        alias = alias.strip().lower()
+        if not ALIAS_SHAPE.fullmatch(alias):
+            raise ConfigError(
+                f"CAST_DEVICES: '{alias}' no sirve como alias "
+                "(letras, números, guiones, sin espacios)"
+            )
+        if alias in devices:
+            raise ConfigError(f"CAST_DEVICES: alias repetido '{alias}'")
+
+        try:
+            devices[alias] = uuid.UUID(raw_uuid.strip())
+        except ValueError as exc:
+            raise ConfigError(f"CAST_DEVICES: el uuid de '{alias}' no es válido") from exc
+    return devices
+
+
 def _parse_chat_ids(raw: str) -> frozenset[int]:
     ids = set()
     for chunk in raw.split(","):
@@ -46,7 +77,8 @@ class Config:
     """Runtime configuration read from the environment file."""
 
     telegram_token: str
-    cast_uuid: uuid.UUID
+    devices: dict[str, uuid.UUID]
+    default_device: str
     allowed_chat_ids: frozenset[int]
 
     @classmethod
@@ -61,19 +93,43 @@ class Config:
         if not token:
             raise ConfigError("TELEGRAM_TOKEN está vacío o ausente")
 
-        raw_uuid = pairs.get("CAST_UUID", "").strip()
-        if not raw_uuid:
-            raise ConfigError("CAST_UUID está vacío o ausente")
-        try:
-            cast_uuid = uuid.UUID(raw_uuid)
-        except ValueError as exc:
-            raise ConfigError(f"CAST_UUID no es un UUID válido: {raw_uuid}") from exc
+        raw_devices = pairs.get("CAST_DEVICES", "").strip()
+        if raw_devices:
+            devices = _parse_devices(raw_devices)
+        else:
+            # Older deployments carried a single CAST_UUID; keep them working.
+            legacy = pairs.get("CAST_UUID", "").strip()
+            if not legacy:
+                raise ConfigError("Falta CAST_DEVICES (alias:uuid, separados por coma)")
+            try:
+                devices = {"parlante": uuid.UUID(legacy)}
+            except ValueError as exc:
+                raise ConfigError(f"CAST_UUID no es un UUID válido: {legacy}") from exc
+
+        if not devices:
+            raise ConfigError("CAST_DEVICES no tiene ningún dispositivo")
+
+        default = pairs.get("CAST_DEFAULT", "").strip().lower() or next(iter(devices))
+        if default not in devices:
+            raise ConfigError(f"CAST_DEFAULT apunta a '{default}', que no está en CAST_DEVICES")
 
         return cls(
             telegram_token=token,
-            cast_uuid=cast_uuid,
+            devices=devices,
+            default_device=default,
             allowed_chat_ids=_parse_chat_ids(pairs.get("ALLOWED_CHAT_IDS", "")),
         )
+
+    @property
+    def cast_uuid(self) -> uuid.UUID:
+        """The default device, for everything that only ever needs one."""
+        return self.devices[self.default_device]
+
+    def has_device(self, alias: str) -> bool:
+        return alias.strip().lower() in self.devices
+
+    def uuid_for(self, alias: str) -> uuid.UUID:
+        return self.devices[alias.strip().lower()]
 
     @property
     def is_open_enrollment(self) -> bool:
