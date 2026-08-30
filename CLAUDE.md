@@ -52,6 +52,20 @@ comando propio que consulta y habla — nunca intentando engancharse al Asistent
 Al 2026-08-30 el Nest está en `locale es-419` y zona horaria de Buenos Aires, o sea que su
 configuración regional es correcta y no es la causa de las fallas del Asistente.
 
+## API
+
+`homeauto/api.py` expone un endpoint HTTP **solo para la LAN**, con token compartido, para que
+otros sistemas anuncien cosas. La lógica (`ApiService`) está separada del transporte HTTP y se
+prueba sin red.
+
+- **Sin `API_TOKEN` la API no arranca.** Apagada es el estado seguro; un endpoint que hace
+  hablar la casa no puede quedar abierto por olvido.
+- El token se compara con `hmac.compare_digest`, no con `==`.
+- **`urgent` es la única forma de saltear el horario de descanso.** Producción caída a las
+  3 AM lo amerita; un backup terminado, no.
+- El CLI `domotica-say` lee el token del archivo de configuración: pasarlo por línea de
+  comandos lo dejaría en el historial del shell.
+
 ## Horario de descanso
 
 De 23:00 a 07:00 (`QUIET_FROM`/`QUIET_TO`) **nada se dice en voz alta**: el aviso va solo a

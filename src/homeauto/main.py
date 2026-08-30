@@ -16,6 +16,7 @@ from pathlib import Path
 from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.config import Config
 from homeauto.schedule.announcer import Announcer
@@ -138,7 +139,7 @@ class ChatNotifier:
         future.result(timeout=30)
 
 
-def build_post_init(notifier, reminders):
+def build_post_init(notifier, reminders, api=None):
     """What has to happen once the loop is running, before serving anyone.
 
     🔴 `reminders.start()` must run off the loop. Catching up a missed job
@@ -149,6 +150,10 @@ def build_post_init(notifier, reminders):
 
     async def post_init(app) -> None:
         notifier.bind(asyncio.get_running_loop())
+        # The API needs the notifier bound: outside working hours it answers
+        # through Telegram instead of the speakers.
+        if api is not None:
+            api.start()
         await asyncio.to_thread(reminders.start)
         await app.bot.set_my_commands(
             [BotCommand(name, description) for name, description in COMMAND_MENU]
@@ -261,7 +266,23 @@ def main() -> None:
     )
     register(app, commands)
 
-    app.post_init = build_post_init(notifier, reminders)
+    api = None
+    if config.api_enabled:
+        api = ApiServer(
+            ApiService(
+                token=config.api_token,
+                speakers=speakers,
+                default_devices=[config.default_device],
+                notify=notifier,
+                chat_ids=config.allowed_chat_ids,
+                quiet=config.quiet_hours,
+            ),
+            port=config.api_port,
+        )
+    else:
+        log.info("API deshabilitada: no hay API_TOKEN en la configuración")
+
+    app.post_init = build_post_init(notifier, reminders, api)
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

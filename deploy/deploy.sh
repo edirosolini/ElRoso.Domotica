@@ -23,6 +23,7 @@ pct exec ${CTID} -- bash -lc '
   rm -rf /opt/domotica/src
   tar -xzf /tmp/domotica.tar.gz -C /opt/domotica
   install -m 644 /opt/domotica/deploy/domotica.service /etc/systemd/system/domotica.service
+  install -m 755 /opt/domotica/deploy/domotica-say /usr/local/bin/domotica-say
   systemctl daemon-reload
   systemctl enable domotica.service
   # restart, not "enable --now": --now does nothing if it is already running,

@@ -52,6 +52,41 @@ mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `mañana 8:00`.
 Una hora que ya pasó se entiende como la de mañana.
 
+## API para otros sistemas
+
+Cualquier script puede hacer hablar la casa. El bot usa long polling y no expone nada, pero
+esta API sí escucha: **solo en la LAN, con token**. No abrirla a internet.
+
+Desde el contenedor:
+
+```bash
+domotica-say "el backup terminó"
+domotica-say --urgent "se cayó producción"
+domotica-say -d comedor -d recamara "la cena está lista"
+```
+
+Desde cualquier máquina de la red:
+
+```bash
+curl -X POST http://192.168.68.10:8099/say \
+  -H "X-Token: $TOKEN" -H "Content-Type: application/json" \
+  -d '{"text":"el túnel de producción se cayó","urgent":true}'
+
+curl http://192.168.68.10:8099/health     # no pide token
+```
+
+| Campo | Qué hace |
+| --- | --- |
+| `text` | Obligatorio, hasta 500 caracteres |
+| `devices` | Lista de alias; por defecto, el equipo principal |
+| `urgent` | `true` ignora el horario de descanso |
+
+**Sin `urgent`, dentro del horario de descanso el aviso va solo a Telegram** y la respuesta
+lo dice (`"spoken": false`). Nada se pierde, pero nadie se despierta.
+
+El token se genera solo la primera vez y vive en `/etc/domotica/domotica.env`. Si no hay
+token, la API no arranca — apagada es el estado seguro.
+
 ## Desarrollo
 
 ```bash

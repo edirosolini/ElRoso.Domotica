@@ -41,6 +41,10 @@ DEFAULT_LON = -58.3816
 DEFAULT_QUIET_FROM = "23:00"
 DEFAULT_QUIET_TO = "07:00"
 
+# Un token corto se adivina; si es débil, mejor no arrancar.
+MIN_TOKEN_LENGTH = 16
+DEFAULT_API_PORT = 8099
+
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
     raw = raw.strip()
@@ -82,6 +86,26 @@ def _parse_devices(raw: str) -> dict[str, uuid.UUID]:
     return devices
 
 
+def _parse_api_token(pairs: dict[str, str]) -> str:
+    token = pairs.get("API_TOKEN", "").strip()
+    if token and len(token) < MIN_TOKEN_LENGTH:
+        raise ConfigError(f"API_TOKEN es muy corto (mínimo {MIN_TOKEN_LENGTH} caracteres)")
+    return token
+
+
+def _parse_api_port(pairs: dict[str, str]) -> int:
+    raw = pairs.get("API_PORT", "").strip()
+    if not raw:
+        return DEFAULT_API_PORT
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"API_PORT no es un número: {raw}") from exc
+    if not 1 <= port <= 65535:
+        raise ConfigError(f"API_PORT fuera de rango: {port}")
+    return port
+
+
 def _parse_quiet(pairs: dict[str, str]) -> QuietHours:
     start = pairs.get("QUIET_FROM", "").strip() or DEFAULT_QUIET_FROM
     end = pairs.get("QUIET_TO", "").strip() or DEFAULT_QUIET_TO
@@ -116,6 +140,8 @@ class Config:
     weather_lon: float = DEFAULT_LON
     weather_place: str = ""
     quiet_hours: QuietHours = QuietHours.parse(DEFAULT_QUIET_FROM, DEFAULT_QUIET_TO)
+    api_token: str = ""
+    api_port: int = DEFAULT_API_PORT
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -158,12 +184,18 @@ class Config:
             weather_lon=_parse_coordinate(pairs.get("WEATHER_LON", ""), "WEATHER_LON", DEFAULT_LON, 180),
             weather_place=pairs.get("WEATHER_PLACE", "").strip(),
             quiet_hours=_parse_quiet(pairs),
+            api_token=_parse_api_token(pairs),
+            api_port=_parse_api_port(pairs),
         )
 
     @property
     def cast_uuid(self) -> uuid.UUID:
         """The default device, for everything that only ever needs one."""
         return self.devices[self.default_device]
+
+    @property
+    def api_enabled(self) -> bool:
+        return bool(self.api_token)
 
     def has_device(self, alias: str) -> bool:
         return alias.strip().lower() in self.devices

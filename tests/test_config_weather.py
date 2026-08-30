@@ -65,3 +65,34 @@ def test_quiet_hours_can_be_turned_off(tmp_path):
 def test_a_broken_quiet_hour_is_rejected(tmp_path):
     with pytest.raises(ConfigError, match="QUIET"):
         Config.from_file(write_env(tmp_path, BASE + "QUIET_FROM=medianoche\n"))
+
+
+def test_the_api_is_off_unless_a_token_is_set(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE))
+
+    assert cfg.api_token == ""
+    assert cfg.api_enabled is False
+
+
+def test_a_token_turns_the_api_on(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "API_TOKEN=un-token-bien-largo-1234\n"))
+
+    assert cfg.api_enabled is True
+    assert cfg.api_port == 8099
+
+
+def test_the_api_port_can_be_moved(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "API_TOKEN=un-token-bien-largo-1234\nAPI_PORT=9000\n"))
+
+    assert cfg.api_port == 9000
+
+
+def test_a_short_token_is_rejected(tmp_path):
+    """Un token corto se adivina: mejor fallar al arrancar que quedar abierto."""
+    with pytest.raises(ConfigError, match="API_TOKEN"):
+        Config.from_file(write_env(tmp_path, BASE + "API_TOKEN=1234\n"))
+
+
+def test_a_bad_port_is_rejected(tmp_path):
+    with pytest.raises(ConfigError, match="API_PORT"):
+        Config.from_file(write_env(tmp_path, BASE + "API_TOKEN=un-token-bien-largo-1234\nAPI_PORT=cero\n"))

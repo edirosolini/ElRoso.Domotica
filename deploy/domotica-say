@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Hacer hablar la casa desde cualquier script.
+
+    domotica-say "el backup terminó"
+    domotica-say --urgent "se cayó producción"
+    domotica-say --device comedor --device recamara "la cena está lista"
+
+Lee el token de /etc/domotica/domotica.env, así que no hay que pasarlo por
+línea de comandos: quedaría en el historial del shell.
+"""
+import argparse
+import json
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+CONFIG = Path("/etc/domotica/domotica.env")
+
+
+def read_config():
+    values = {}
+    try:
+        for line in CONFIG.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip().strip("\"'")
+    except OSError as exc:
+        sys.exit(f"no pude leer {CONFIG}: {exc}")
+    return values
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Anunciar algo por los parlantes de casa.")
+    parser.add_argument("text", help="qué decir")
+    parser.add_argument("--device", "-d", action="append", default=[], help="equipo (repetible)")
+    parser.add_argument("--urgent", "-u", action="store_true", help="ignorar el horario de descanso")
+    parser.add_argument("--host", default="127.0.0.1")
+    args = parser.parse_args()
+
+    config = read_config()
+    token = config.get("API_TOKEN", "")
+    if not token:
+        sys.exit("no hay API_TOKEN configurado: la API está apagada")
+
+    payload = {"text": args.text, "urgent": args.urgent}
+    if args.device:
+        payload["devices"] = args.device
+
+    request = urllib.request.Request(
+        f"http://{args.host}:{config.get('API_PORT', '8099')}/say",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Token": token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            body = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        sys.exit(f"error {exc.code}: {exc.read().decode('utf-8', 'replace')}")
+    except OSError as exc:
+        sys.exit(f"no pude contactar el servicio: {exc}")
+
+    if body.get("spoken"):
+        print("dicho en " + ", ".join(body.get("devices", [])))
+    else:
+        print("horario de descanso: avisado solo por Telegram")
+    for problem in body.get("problems") or []:
+        print(f"  aviso: {problem}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
