@@ -241,6 +241,14 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
   encoge demasiado, si pierde un término que debía sobrevivir, o si cambia una
   **palabra-dato**. `verbalize.DATA_WORDS` define ese vocabulario: números, fracciones de hora
   y momentos del día. Cambiar "de la mañana" por "de la tarde" mueve una cita medio día.
+- 🔴 **`un` y `una` quedan fuera de ese vocabulario a propósito.** También son el artículo
+  indefinido, que un reescritor usa todo el tiempo: "con **una** máxima de veinte" se leía
+  como dos números inventados y descartaba una reescritura correcta. No se pierde protección,
+  porque un conteo que cambia de verdad hace entrar o salir otra palabra-número
+  ("una cosa" → "dos cosas"), y eso se sigue viendo.
+- ⚠️ `menos` sigue adentro y es el otro ambiguo: "más o menos" puede provocar un descarte.
+  Es inocuo —se dice el texto original— y sacarlo dejaría pasar que a "menos tres grados" le
+  coman el signo.
 - **La respuesta se cachea por texto de entrada**, o se rompe el cache de síntesis: `VoiceSynth`
   cachea por frase y una redacción distinta cada vez significaría sintetizar siempre.
 - La clave viaja en el header `x-goog-api-key`, **nunca en la query string**, que terminaría

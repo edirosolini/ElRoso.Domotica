@@ -270,3 +270,20 @@ def test_a_gemma_model_is_asked_without_the_thinking_switch():
     GoogleModel(api_key="k", model="gemma-4-26b-a4b-it", post=post)("prompt")
 
     assert "generationConfig" not in calls[0]["json"]
+
+
+def test_the_indefinite_article_is_not_read_as_a_number():
+    """🔴 "con una máxima de veinte" hacía descartar una reescritura correcta:
+    "una" estaba en el vocabulario de datos como femenino de uno."""
+    original = "Ahora en casa hay quince grados, parcialmente nublado. Máxima de veinte, mínima de nueve."
+    mejor = "En casa hace quince grados y está parcialmente nublado, con una máxima de veinte y una mínima de nueve."
+
+    assert polisher(mejor).polish(original, must_keep=["casa"]) == mejor
+
+
+def test_a_changed_count_is_still_caught_without_the_article():
+    """Sacar "una" no abre la puerta: el número que entra o sale se sigue viendo."""
+    original = "Hoy tenés una cosa. A las nueve de la mañana, Dentista."
+    inventado = "Hoy tenés dos cosas. A las nueve de la mañana, Dentista."
+
+    assert polisher(inventado).polish(original) == original

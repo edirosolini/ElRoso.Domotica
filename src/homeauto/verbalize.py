@@ -112,8 +112,13 @@ def clock(hour: int, minute: int = 0) -> str:
 # Every word this module can emit that carries a fact rather than style. A
 # rewriter is allowed to move them around, never to add, drop or swap one:
 # turning "de la mañana" into "de la tarde" moves an appointment by half a day.
-_FEMININE_FORMS = ("una", "veintiuna")
-_APOCOPATED = ("un", "veintiún")
+# 🔴 "un" and "una" are deliberately absent. They are also the indefinite
+# article, and a rewriter uses it constantly — "con una máxima de veinte" got
+# read as two invented numbers and threw away a correct rewrite. Leaving them
+# out costs nothing: a count that actually changes brings a different number
+# word in or out ("una cosa" -> "dos cosas"), and that is still caught.
+_FEMININE_FORMS = ("veintiuna",)
+_APOCOPATED = ("veintiún",)
 _PARTS_OF_DAY = ("madrugada", "mañana", "tarde", "noche", "mediodía")
 _FRACTIONS = ("cuarto", "media")
 
