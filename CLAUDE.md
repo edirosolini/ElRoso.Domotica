@@ -11,12 +11,17 @@ está pensado para sumar dispositivos (luces) sin rediseñar nada.
 Domotica/
 ├── src/homeauto/
 │   ├── config.py        # carga y validación del archivo de entorno
+│   ├── quiet.py         # horario de descanso
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00"
+│   ├── weather.py       # clima por Open-Meteo
+│   ├── api.py           # endpoint HTTP para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
-│   ├── voice/           # equipos cast: tts, cast, registro
+│   ├── agenda/          # Google Calendar: lectura, avisos, resumen
+│   ├── voice/           # equipos cast: tts, cast, registro, difusión
+│   ├── watch/           # vigilancia de servicios externos y de Seq
 │   └── main.py          # cableado y ciclo de vida del proceso
-├── deploy/              # unit de systemd y script de despliegue
+├── deploy/              # unit de systemd, script de despliegue y CLI
 ├── tests/
 └── requirements*.txt
 ```
@@ -28,8 +33,10 @@ el paquete es `homeauto`, no `domotica`.
 
 - **Python 3.13** en el contenedor, 3.12 en la notebook. Nada específico de versión.
 - **piper-tts** — síntesis de voz **offline**, voz `es_AR-daniela-high`. No sale a internet.
-- **Open-Meteo** para el clima: sin cuenta, sin API key, sin límite práctico. Es la única
-  dependencia externa además de Telegram.
+- **Open-Meteo** para el clima: sin cuenta, sin API key.
+- **icalendar** y **recurring-ical-events** para leer Google Calendar.
+- Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal) y **Seq**
+  (este último por el túnel WireGuard, no por internet).
 - **pychromecast** — control del parlante.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
@@ -115,6 +122,13 @@ La decisión de incluir los comandos manuales es deliberada: la regla existe par
 a nadie, y quien escribe a las 3 AM está despierto pero el resto de la casa no. Si alguna vez
 hace falta una excepción por mensaje, cuidado con la palabra clave elegida: `en <equipo>` ya
 enseñó que un prefijo que también puede ser texto real se come parte del mensaje.
+
+## Comandos y alias
+
+`ALL_COMMANDS` tiene 21 nombres y `COMMAND_MENU` solo 14: la diferencia son **alias**
+(`ayuda`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`). Funcionan, pero no van
+al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie. Hay test que impide
+que la ayuda ofrezca un comando que no existe.
 
 ## Cableado
 
