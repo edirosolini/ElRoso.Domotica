@@ -98,45 +98,36 @@ def _argument_text(update: Update) -> str:
 
 
 def register(app: Application, commands: Commands) -> None:
-    async def reply(update: Update, answer: str) -> None:
-        await update.message.reply_text(answer)
+    """Wire every command, running the work off the event loop.
 
-    async def on_start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.start(update.effective_chat.id))
+    🔴 The command work must not run on the loop. Discovery uses zeroconf, which
+    does blocking I/O: called from inside a running asyncio loop it finds
+    nothing and every command answers "no encontré el dispositivo". Piper would
+    also freeze the bot for the length of the synthesis.
+    """
 
-    async def on_say(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.say(update.effective_chat.id, _argument_text(update)))
+    def handler(run_command):
+        async def callback(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+            chat_id = update.effective_chat.id
+            text = _argument_text(update)
+            answer = await asyncio.to_thread(run_command, chat_id, text)
+            await update.message.reply_text(answer)
 
-    async def on_volume(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.volume(update.effective_chat.id, _argument_text(update)))
+        return callback
 
-    async def on_stop(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.stop(update.effective_chat.id))
-
-    async def on_where(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.where(update.effective_chat.id))
-
-    app.add_handler(CommandHandler(list(START_COMMANDS), on_start))
-    app.add_handler(CommandHandler(list(SAY_COMMANDS), on_say))
-    app.add_handler(CommandHandler(list(VOLUME_COMMANDS), on_volume))
-    app.add_handler(CommandHandler(list(STOP_COMMANDS), on_stop))
-    async def on_timer(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.timer(update.effective_chat.id, _argument_text(update)))
-
-    async def on_alarm(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.alarm(update.effective_chat.id, _argument_text(update)))
-
-    async def on_list(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.list(update.effective_chat.id))
-
-    async def on_cancel(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        await reply(update, commands.cancel(update.effective_chat.id, _argument_text(update)))
-
-    app.add_handler(CommandHandler(list(WHERE_COMMANDS), on_where))
-    app.add_handler(CommandHandler(list(TIMER_COMMANDS), on_timer))
-    app.add_handler(CommandHandler(list(ALARM_COMMANDS), on_alarm))
-    app.add_handler(CommandHandler(list(LIST_COMMANDS), on_list))
-    app.add_handler(CommandHandler(list(CANCEL_COMMANDS), on_cancel))
+    routes = (
+        (START_COMMANDS, lambda chat_id, _text: commands.start(chat_id)),
+        (SAY_COMMANDS, commands.say),
+        (VOLUME_COMMANDS, commands.volume),
+        (STOP_COMMANDS, lambda chat_id, _text: commands.stop(chat_id)),
+        (WHERE_COMMANDS, lambda chat_id, _text: commands.where(chat_id)),
+        (TIMER_COMMANDS, commands.timer),
+        (ALARM_COMMANDS, commands.alarm),
+        (LIST_COMMANDS, lambda chat_id, _text: commands.list(chat_id)),
+        (CANCEL_COMMANDS, commands.cancel),
+    )
+    for names, run_command in routes:
+        app.add_handler(CommandHandler(list(names), handler(run_command)))
 
 
 def main() -> None:
