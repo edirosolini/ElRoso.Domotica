@@ -22,8 +22,8 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 
 **Apagar.** El protocolo Cast **no tiene apagado**. `/apagar` cierra la app que esté
 corriendo y deja el equipo en reposo; de ahí en más, un televisor configurado para dormirse
-al perder señal se apaga solo por HDMI-CEC. Un apagado de verdad requeriría ADB, que solo
-existe en los equipos Android TV y hay que habilitarlo a mano.
+al perder señal se apaga solo por HDMI-CEC. Un apagado de verdad requeriría ADB, que hay
+que habilitar a mano en cada equipo Android TV.
 
 **Elegir equipo.** Cualquier comando acepta `en <equipo>` adelante y va solo a ese; `/usar`
 cambia el que se usa cuando no decís nada, y queda guardado por chat. Un timer recuerda a

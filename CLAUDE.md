@@ -51,7 +51,11 @@ El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (
   dispositivo sigue reportando el clip anterior como `PLAYING`: aceptarlo es informar que la
   casa fue avisada cuando no salió nada por los parlantes.
 - **No existe apagar por Cast.** Lo máximo es `quit_app()`, que deja el equipo en reposo;
-  el televisor se apaga solo si está configurado para dormirse al perder señal.
+  el televisor se apaga solo si está configurado para dormirse al perder señal. El apagado
+  real pide ADB, y los dos equipos de la casa son Google TV, así que los dos podrían.
+- 🔴 **El `model_name` de mDNS no dice si el equipo es Android TV.** Un **Chromecast con
+  Google TV** se anuncia como `Chromecast`, igual que uno viejo sin sistema operativo. No
+  deducir capacidades de ese string: preguntarle al equipo o al dueño.
 - **Castear a un equipo con pantalla prende el televisor.** Tenerlo en cuenta antes de
   mandar una alarma de las 7 AM al comedor.
 - **Un Speaker por equipo, pero síntesis y servidor HTTP compartidos.** Lo único distinto
