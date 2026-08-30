@@ -54,6 +54,11 @@ El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (
 - **onnxruntime** tira `pthread_setaffinity_np failed` dentro del LXC. Es inocuo:
   se silencia con `OMP_NUM_THREADS=1`.
 - **Telegram por long polling**: no expone ningún puerto a internet. No abrir nada en el router.
+- 🔴 **APScheduler lee un datetime naive como UTC.** Todo el proyecto trabaja en hora local
+  (el CT está en `America/Argentina/Buenos_Aires`). Un naive `23:14` se agendaba a las 23:14
+  UTC — tres horas en el pasado — y el timer disparaba al instante. `JobQueueTimer` le pega
+  `astimezone()` antes de agendar. En los logs se veía como `Run time of job was missed by
+  2:59:00`, que parece un problema de carga y no de husos.
 - 🔴 **Nada bloqueante en el event loop.** Los handlers de Telegram son async, pero el
   descubrimiento (zeroconf) y la síntesis (Piper) son bloqueantes. Llamados desde dentro del
   loop, zeroconf **no descubre nada** y todos los comandos responden "no encontré el

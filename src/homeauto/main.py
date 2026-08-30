@@ -13,7 +13,7 @@ import socket
 from datetime import datetime
 from pathlib import Path
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from homeauto.bot.commands import Commands
@@ -51,6 +51,21 @@ ALL_COMMANDS = (
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
 )
 
+# What Telegram offers when you type "/". Without registering this the commands
+# work but are invisible: you have to know them by heart. Only the primary name
+# of each one goes here; the aliases would just clutter the menu.
+COMMAND_MENU = (
+    ("decir", "Decirlo en voz alta ahora"),
+    ("timer", "Avisar dentro de un rato — /timer 10m sacá la pizza"),
+    ("alarma", "Avisar a una hora — /alarma 7:30 arriba"),
+    ("lista", "Ver lo que está programado"),
+    ("cancelar", "Cancelar por número — /cancelar 3"),
+    ("volumen", "Cambiar el volumen, de 0 a 100"),
+    ("parar", "Cortar lo que esté sonando"),
+    ("donde", "Qué dispositivo estoy usando"),
+    ("ayuda", "Cómo se usa"),
+)
+
 
 def local_ip() -> str:
     """The address this host uses to reach the LAN, so the speaker can call back."""
@@ -74,6 +89,13 @@ class JobQueueTimer:
 
         async def run(_context):
             await asyncio.to_thread(action)
+
+        # 🔴 APScheduler reads a naive datetime as UTC. We work in local time, so
+        # a naive 23:14 got scheduled at 23:14 UTC — three hours in the past here —
+        # and the timer fired instantly. astimezone() on a naive value reads it as
+        # local and attaches the offset, leaving the wall clock time untouched.
+        if when.tzinfo is None:
+            when = when.astimezone()
 
         self.job_queue.run_once(run, when=when, name=key)
 
@@ -103,6 +125,26 @@ class ChatNotifier:
             self.bot.send_message(chat_id=chat_id, text=text), self.loop
         )
         future.result(timeout=30)
+
+
+def build_post_init(notifier, reminders):
+    """What has to happen once the loop is running, before serving anyone.
+
+    🔴 `reminders.start()` must run off the loop. Catching up a missed job
+    announces it, and announcing blocks: discovery finds nothing on the loop,
+    and the chat notification deadlocks waiting for the very loop that is
+    sitting there waiting for it.
+    """
+
+    async def post_init(app) -> None:
+        notifier.bind(asyncio.get_running_loop())
+        await asyncio.to_thread(reminders.start)
+        await app.bot.set_my_commands(
+            [BotCommand(name, description) for name, description in COMMAND_MENU]
+        )
+        log.info("menú de comandos registrado en Telegram")
+
+    return post_init
 
 
 def build_speaker(config: Config) -> Speaker:
@@ -179,12 +221,7 @@ def main() -> None:
     commands = Commands(config=config, speaker=speaker, reminders=reminders, clock=datetime.now)
     register(app, commands)
 
-    async def on_ready(_app) -> None:
-        # Re-arm what was pending; anything already due while we were down fires now.
-        notifier.bind(asyncio.get_running_loop())
-        reminders.start()
-
-    app.post_init = on_ready
+    app.post_init = build_post_init(notifier, reminders)
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
