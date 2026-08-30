@@ -1,0 +1,18 @@
+[Unit]
+Description=Domotica - bot de Telegram que habla por el parlante
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/nestbot/nestbot.env
+Environment=PYTHONPATH=/opt/nestbot/src
+Environment=OMP_NUM_THREADS=1
+ExecStart=/opt/nestbot/venv/bin/python -m homeauto.main
+Restart=always
+RestartSec=5
+StateDirectory=nestbot
+
+[Install]
+WantedBy=multi-user.target
