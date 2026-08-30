@@ -16,6 +16,8 @@ from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Iterable
 
+from homeauto.voice.broadcast import HouseVoice
+
 log = logging.getLogger(__name__)
 
 MAX_BODY = 8 * 1024
@@ -45,11 +47,14 @@ class ApiService:
     ):
         self.token = token
         self.speakers = speakers
-        self.default_devices = list(default_devices)
-        self.notify = notify
-        self.chat_ids = list(chat_ids)
-        self.quiet = quiet
-        self.clock = clock
+        self.voice = HouseVoice(
+            speakers=speakers,
+            default_devices=default_devices,
+            notify=notify,
+            chat_ids=chat_ids,
+            quiet=quiet,
+            clock=clock,
+        )
 
     def _authenticate(self, token: str) -> None:
         # compare_digest so a wrong token cannot be guessed one character at a time.
@@ -57,7 +62,7 @@ class ApiService:
             raise Unauthorized("token inválido")
 
     def _targets(self, payload: dict) -> list[str]:
-        asked = payload.get("devices") or self.default_devices
+        asked = payload.get("devices") or self.voice.default_devices
         if isinstance(asked, str):
             asked = [asked]
 
@@ -78,35 +83,14 @@ class ApiService:
         if len(text) > MAX_TEXT:
             raise ApiError(f"'text' es demasiado largo (máximo {MAX_TEXT})")
 
-        devices = self._targets(payload)
-        urgent = bool(payload.get("urgent"))
-        resting = self.quiet is not None and self.quiet.is_quiet(self.clock())
-
-        # Urgent wins over the quiet window: production falling over at 3 AM is
-        # exactly what somebody should be woken up for.
-        if resting and not urgent:
-            log.info("aviso en horario de descanso: solo va al chat")
-            self._notify_everyone(f"🔔 {text}\n\n(horario de descanso: no se dijo en voz alta)")
-            return {"spoken": False, "notified": True, "devices": devices}
-
-        problems = []
-        for alias in devices:
-            try:
-                self.speakers.get(alias).say(text)
-            except Exception as exc:  # noqa: BLE001 - se reporta al llamador
-                log.warning("la API no pudo hablar en %s: %s", alias, exc)
-                problems.append(f"{alias}: {exc}")
-
-        if len(problems) == len(devices):
-            raise ApiError("; ".join(problems))
-        return {"spoken": True, "devices": devices, "problems": problems}
-
-    def _notify_everyone(self, text: str) -> None:
-        for chat_id in self.chat_ids:
-            try:
-                self.notify(chat_id, text)
-            except Exception:
-                log.exception("no se pudo avisar al chat %s", chat_id)
+        result = self.voice.announce(
+            text,
+            devices=self._targets(payload),
+            urgent=bool(payload.get("urgent")),
+        )
+        if not result["spoken"] and not result["notified"]:
+            raise ApiError("; ".join(result["problems"]))
+        return result
 
 
 class _Handler(BaseHTTPRequestHandler):

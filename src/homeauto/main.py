@@ -10,12 +10,16 @@ import asyncio
 import logging
 import os
 import socket
-from datetime import datetime
+from datetime import datetime, time as clock_time
 from pathlib import Path
 
 from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+from homeauto.agenda.ical import CalendarClient
+from homeauto.agenda.seen import SeenStore
+from homeauto.agenda.service import AgendaService
+from homeauto.agenda.watcher import EventWatcher
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.config import Config
@@ -25,6 +29,7 @@ from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
+from homeauto.voice.broadcast import HouseVoice
 from homeauto.voice.registry import SpeakerRegistry
 from homeauto.voice.speaker import Speaker
 from homeauto.voice.tts import PiperRunner, VoiceSynth
@@ -54,10 +59,12 @@ DEVICES_COMMANDS = ("equipos",)
 USE_COMMANDS = ("usar",)
 OFF_COMMANDS = ("apagar",)
 WEATHER_COMMANDS = ("clima", "tiempo")
+AGENDA_COMMANDS = ("agenda",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
+    + AGENDA_COMMANDS
 )
 
 # What Telegram offers when you type "/". Without registering this the commands
@@ -73,6 +80,7 @@ COMMAND_MENU = (
     ("parar", "Cortar lo que esté sonando"),
     ("apagar", "Cerrar la app y dejar el equipo en reposo"),
     ("clima", "Decir el pronóstico en voz alta"),
+    ("agenda", "Qué queda hoy — /agenda mañana para el día siguiente"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
     ("usar", "Cambiar el equipo por defecto — /usar tv"),
     ("ayuda", "Cómo se usa"),
@@ -139,6 +147,36 @@ class ChatNotifier:
         future.result(timeout=30)
 
 
+def local_timezone():
+    """The real zone, not a fixed offset: DST changes matter for a daily job."""
+    from tzlocal import get_localzone
+
+    return get_localzone()
+
+
+def schedule_calendar_jobs(app, config, agenda, watcher) -> None:
+    """The repeating jobs behind the agenda.
+
+    🔴 The times carry their timezone. APScheduler reads a naive time as UTC,
+    and a briefing meant for 08:00 would land at 05:00.
+    """
+    zone = local_timezone()
+
+    async def look_ahead(_context):
+        await asyncio.to_thread(watcher.check)
+
+    app.job_queue.run_repeating(look_ahead, interval=60, first=30, name="calendar-watch")
+
+    if config.briefing_at is not None:
+        moment = clock_time(config.briefing_at.hour, config.briefing_at.minute, tzinfo=zone)
+
+        async def briefing(_context):
+            await asyncio.to_thread(watcher.say_briefing, agenda)
+
+        app.job_queue.run_daily(briefing, time=moment, name="calendar-briefing")
+        log.info("resumen diario a las %s", moment.strftime("%H:%M"))
+
+
 def build_post_init(notifier, reminders, api=None):
     """What has to happen once the loop is running, before serving anyone.
 
@@ -161,6 +199,13 @@ def build_post_init(notifier, reminders, api=None):
         log.info("menú de comandos registrado en Telegram")
 
     return post_init
+
+
+def _announce(house: HouseVoice, text: str) -> None:
+    """Say it out loud when allowed, and always leave it written in the chat."""
+    result = house.announce(text)
+    if result["spoken"]:
+        house.tell_everyone(f"🔔 {text}")
 
 
 def build_speakers(config: Config) -> SpeakerRegistry:
@@ -218,6 +263,7 @@ def register(app: Application, commands: Commands) -> None:
         (USE_COMMANDS, commands.use),
         (OFF_COMMANDS, commands.turn_off),
         (WEATHER_COMMANDS, commands.weather),
+        (AGENDA_COMMANDS, commands.agenda_command),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -251,9 +297,19 @@ def main() -> None:
             quiet=config.quiet_hours,
         ),
     )
+    calendar = None
+    agenda = None
+    if config.calendar_enabled:
+        calendar = CalendarClient(config.calendars, timezone=local_timezone())
+        agenda = AgendaService(calendar=calendar, clock=lambda: datetime.now(local_timezone()))
+        log.info("calendarios configurados: %s", ", ".join(config.calendars))
+    else:
+        log.info("sin calendarios configurados: /agenda queda apagado")
+
     commands = Commands(
         config=config,
         speakers=speakers,
+        agenda=agenda,
         reminders=reminders,
         preferences=Preferences(db_path),
         weather=WeatherClient(
@@ -265,6 +321,25 @@ def main() -> None:
         clock=datetime.now,
     )
     register(app, commands)
+
+    house = HouseVoice(
+        speakers=speakers,
+        default_devices=[config.default_device],
+        notify=notifier,
+        chat_ids=config.allowed_chat_ids,
+        quiet=config.quiet_hours,
+    )
+
+    watcher = None
+    if calendar is not None:
+        watcher = EventWatcher(
+            calendar=calendar,
+            announce=lambda text: _announce(house, text),
+            seen=SeenStore(db_path),
+            lead_minutes=config.event_lead_minutes,
+            clock=lambda: datetime.now(local_timezone()),
+        )
+        watcher.say_briefing = lambda service: _announce(house, service.briefing())
 
     api = None
     if config.api_enabled:
@@ -283,6 +358,8 @@ def main() -> None:
         log.info("API deshabilitada: no hay API_TOKEN en la configuración")
 
     app.post_init = build_post_init(notifier, reminders, api)
+    if watcher is not None:
+        schedule_calendar_jobs(app, config, agenda, watcher)
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

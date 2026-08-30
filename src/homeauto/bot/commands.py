@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable
 
+from homeauto.agenda.ical import CalendarError
 from homeauto.config import Config
 from homeauto.schedule.store import DAILY, ONCE
 from homeauto.timespec import TimeSpecError, parse_schedule
@@ -49,6 +50,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
 /clima — dice el pronóstico en voz alta
+/agenda — qué te queda hoy · /agenda mañana
 /equipos — qué equipos tengo y cuál está activo
 /usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
 
@@ -76,6 +78,7 @@ class Commands:
         reminders=None,
         preferences=None,
         weather=None,
+        agenda=None,
         quiet=None,
         clock: Callable[[], datetime] = datetime.now,
     ):
@@ -84,6 +87,7 @@ class Commands:
         self.reminders = reminders
         self.preferences = preferences
         self.weather_client = weather
+        self.agenda = agenda
         self.quiet = quiet
         self.clock = clock
 
@@ -255,6 +259,37 @@ class Commands:
         try:
             spoken = self.weather_client.spoken()
         except WeatherError as exc:
+            return str(exc)
+
+        resting = self._resting()
+        if resting:
+            return f"{spoken}\n\n{resting}"
+
+        results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
+        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        return f"{spoken}\n\n{summary}"
+
+    def agenda_command(self, chat_id: int, text: str = "") -> str:
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        if self.agenda is None:
+            return (
+                "No tengo ningún calendario configurado. "
+                "Cargá la dirección privada en formato iCal en CALENDAR_URL_<nombre>."
+            )
+
+        try:
+            aliases, when = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
+        try:
+            spoken = self.agenda.spoken(when)
+        except CalendarError as exc:
+            return f"No pude leer el calendario: {exc}"
+        except ValueError as exc:
             return str(exc)
 
         resting = self._resting()

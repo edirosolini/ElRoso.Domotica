@@ -17,6 +17,8 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /parar                          corta lo que esté sonando
 /apagar en todos                cierra la app y deja los equipos en reposo
 /clima                          dice el pronóstico en voz alta
+/agenda                         qué te queda hoy
+/agenda mañana                  el día siguiente completo
 /equipos                        qué equipos hay y cuál está activo
 /usar tv                        cambia el equipo por defecto
 ```
@@ -25,6 +27,22 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 Telegram, pero los parlantes se quedan callados. Vale para las alarmas y también para un
 `/decir` manual — la regla protege a los que duermen, no a quien está escribiendo. Se cambia
 con `QUIET_FROM` y `QUIET_TO`; poniendo las dos iguales se desactiva.
+
+**Agenda.** Lee Google Calendar por su **dirección privada en formato iCal**, no por la API:
+es solo lectura, así que no hace falta proyecto en Google Cloud, ni OAuth, ni tokens que se
+vencen. Además del `/agenda` a pedido hace dos cosas solo:
+
+- **Resumen del día** a la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga).
+- **Aviso antes de cada evento**, `EVENT_LEAD_MINUTES` minutos antes (por defecto 10).
+
+Cada aviso se manda una sola vez: queda registrado en SQLite, así que un reinicio no
+repite lo ya dicho ni grita eventos que ya empezaron.
+
+⚠️ **La URL privada es una credencial**: quien la tenga lee tu agenda entera. Va en el archivo
+de configuración con permisos 600, nunca en el repo.
+
+⚠️ **Google cachea esa URL.** Un evento recién creado puede tardar en aparecer. No es un
+problema del bot y no se puede acelerar; si hace falta que sea inmediato, hay que ir por OAuth.
 
 **Clima.** `/clima` consulta Open-Meteo —gratis, sin cuenta ni API key— y lo dice con la voz
 del bot. No pasa por el Asistente de Google, así que funciona aunque el Nest conteste "no
@@ -111,6 +129,12 @@ WEATHER_LON=-58.3816
 WEATHER_PLACE=casa       # opcional, solo para que suene mejor
 QUIET_FROM=23:00         # horario de descanso: solo avisa por Telegram
 QUIET_TO=07:00           # las dos iguales lo desactivan
+API_TOKEN=               # sin token, la API no arranca
+API_PORT=8099
+CALENDAR_URL_PERSONAL=   # dirección privada en formato iCal
+CALENDAR_URL_TRABAJO=    # una clave por calendario; el sufijo es el alias
+BRIEFING_AT=08:00        # resumen del día; "off" lo apaga
+EVENT_LEAD_MINUTES=10    # cuántos minutos antes avisar
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

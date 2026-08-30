@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import time as clock_time
 
 from homeauto.quiet import QuietHours
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -44,6 +45,11 @@ DEFAULT_QUIET_TO = "07:00"
 # Un token corto se adivina; si es débil, mejor no arrancar.
 MIN_TOKEN_LENGTH = 16
 DEFAULT_API_PORT = 8099
+
+# El resumen del día y el aviso previo a cada evento.
+DEFAULT_BRIEFING_AT = "08:00"
+DEFAULT_EVENT_LEAD = 10
+CALENDAR_PREFIX = "CALENDAR_URL_"
 
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
@@ -84,6 +90,51 @@ def _parse_devices(raw: str) -> dict[str, uuid.UUID]:
         except ValueError as exc:
             raise ConfigError(f"CAST_DEVICES: el uuid de '{alias}' no es válido") from exc
     return devices
+
+
+def _parse_calendars(pairs: dict[str, str]) -> dict[str, str]:
+    """One key per calendar.
+
+    A comma-separated `alias:url` list would be ambiguous: the URLs carry
+    colons and slashes of their own, and that is where silly bugs live.
+    """
+    calendars: dict[str, str] = {}
+    for key, value in pairs.items():
+        url = value.strip()
+        if key == "CALENDAR_URL" and url:
+            calendars["agenda"] = url
+        elif key.startswith(CALENDAR_PREFIX) and url:
+            calendars[key[len(CALENDAR_PREFIX):].strip().lower()] = url
+
+    for alias, url in calendars.items():
+        if not url.startswith(("http://", "https://")):
+            key = "CALENDAR_URL" if alias == "agenda" else f"{CALENDAR_PREFIX}{alias.upper()}"
+            raise ConfigError(f"{key} tiene que ser una URL http(s)")
+    return calendars
+
+
+def _parse_briefing(pairs: dict[str, str]) -> clock_time | None:
+    raw = pairs.get("BRIEFING_AT", "").strip() or DEFAULT_BRIEFING_AT
+    if raw.lower() in ("off", "no", "0"):
+        return None
+    try:
+        hour, _, minute = raw.partition(":")
+        return clock_time(int(hour), int(minute or 0))
+    except ValueError as exc:
+        raise ConfigError(f"BRIEFING_AT no es una hora válida: {raw}") from exc
+
+
+def _parse_lead(pairs: dict[str, str]) -> int:
+    raw = pairs.get("EVENT_LEAD_MINUTES", "").strip()
+    if not raw:
+        return DEFAULT_EVENT_LEAD
+    try:
+        minutes = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"EVENT_LEAD_MINUTES no es un número: {raw}") from exc
+    if not 1 <= minutes <= 180:
+        raise ConfigError(f"EVENT_LEAD_MINUTES fuera de rango: {minutes}")
+    return minutes
 
 
 def _parse_api_token(pairs: dict[str, str]) -> str:
@@ -142,6 +193,9 @@ class Config:
     quiet_hours: QuietHours = QuietHours.parse(DEFAULT_QUIET_FROM, DEFAULT_QUIET_TO)
     api_token: str = ""
     api_port: int = DEFAULT_API_PORT
+    calendars: dict[str, str] = field(default_factory=dict)
+    briefing_at: clock_time | None = None
+    event_lead_minutes: int = DEFAULT_EVENT_LEAD
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -186,6 +240,9 @@ class Config:
             quiet_hours=_parse_quiet(pairs),
             api_token=_parse_api_token(pairs),
             api_port=_parse_api_port(pairs),
+            calendars=_parse_calendars(pairs),
+            briefing_at=_parse_briefing(pairs),
+            event_lead_minutes=_parse_lead(pairs),
         )
 
     @property
@@ -196,6 +253,10 @@ class Config:
     @property
     def api_enabled(self) -> bool:
         return bool(self.api_token)
+
+    @property
+    def calendar_enabled(self) -> bool:
+        return bool(self.calendars)
 
     def has_device(self, alias: str) -> bool:
         return alias.strip().lower() in self.devices

@@ -49,7 +49,7 @@ class ThreadSpyCommands:
         return "ok"
 
     start = say = volume = stop = where = timer = alarm = list = cancel = _record
-    devices = use = turn_off = weather = _record
+    devices = use = turn_off = weather = agenda_command = _record
 
 
 @pytest.mark.asyncio

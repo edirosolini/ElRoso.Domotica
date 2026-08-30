@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "==> empaquetando"
 TAR=$(mktemp /tmp/domotica-XXXX.tar.gz)
-tar -czf "$TAR" -C "$ROOT" src deploy
+tar -czf "$TAR" -C "$ROOT" src deploy requirements.txt
 
 echo "==> copiando al proxmox"
 scp -q "$TAR" "root@${PVE}:/tmp/domotica.tar.gz"
@@ -22,6 +22,9 @@ pct push ${CTID} /tmp/domotica.tar.gz /tmp/domotica.tar.gz
 pct exec ${CTID} -- bash -lc '
   rm -rf /opt/domotica/src
   tar -xzf /tmp/domotica.tar.gz -C /opt/domotica
+  # Las dependencias cambian con las features; instalarlas acá evita
+  # desplegar código que el contenedor no puede importar.
+  /opt/domotica/venv/bin/pip -q install -r /opt/domotica/requirements.txt
   install -m 644 /opt/domotica/deploy/domotica.service /etc/systemd/system/domotica.service
   install -m 755 /opt/domotica/deploy/domotica-say /usr/local/bin/domotica-say
   systemctl daemon-reload

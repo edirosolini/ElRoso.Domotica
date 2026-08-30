@@ -96,3 +96,61 @@ def test_a_short_token_is_rejected(tmp_path):
 def test_a_bad_port_is_rejected(tmp_path):
     with pytest.raises(ConfigError, match="API_PORT"):
         Config.from_file(write_env(tmp_path, BASE + "API_TOKEN=un-token-bien-largo-1234\nAPI_PORT=cero\n"))
+
+
+def test_no_calendars_by_default(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE))
+
+    assert cfg.calendars == {}
+    assert cfg.calendar_enabled is False
+
+
+def test_one_calendar_per_key(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + (
+        "CALENDAR_URL_PERSONAL=https://calendar.google.com/calendar/ical/abc/basic.ics\n"
+        "CALENDAR_URL_TRABAJO=https://calendar.google.com/calendar/ical/xyz/basic.ics\n"
+    )))
+
+    assert set(cfg.calendars) == {"personal", "trabajo"}
+    assert cfg.calendars["personal"].endswith("abc/basic.ics")
+    assert cfg.calendar_enabled is True
+
+
+def test_a_single_unnamed_calendar_is_accepted(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "CALENDAR_URL=https://example.com/a.ics\n"))
+
+    assert list(cfg.calendars) == ["agenda"]
+
+
+def test_a_url_that_is_not_http_is_rejected(tmp_path):
+    with pytest.raises(ConfigError, match="CALENDAR_URL_CASA"):
+        Config.from_file(write_env(tmp_path, BASE + "CALENDAR_URL_CASA=file:///etc/passwd\n"))
+
+
+def test_an_empty_calendar_url_is_ignored(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "CALENDAR_URL_PERSONAL=\n"))
+
+    assert cfg.calendars == {}
+
+
+def test_the_briefing_hour_has_a_default(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE))
+
+    assert cfg.briefing_at is not None
+
+
+def test_the_briefing_can_be_moved_or_turned_off(tmp_path):
+    assert Config.from_file(write_env(tmp_path, BASE + "BRIEFING_AT=06:45\n")).briefing_at.strftime("%H:%M") == "06:45"
+    assert Config.from_file(write_env(tmp_path, BASE + "BRIEFING_AT=off\n")).briefing_at is None
+
+
+def test_the_event_warning_lead_time_has_a_default(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE))
+
+    assert cfg.event_lead_minutes > 0
+
+
+def test_the_lead_time_can_be_changed(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "EVENT_LEAD_MINUTES=20\n"))
+
+    assert cfg.event_lead_minutes == 20
