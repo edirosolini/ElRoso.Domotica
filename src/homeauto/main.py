@@ -6,9 +6,11 @@ what is here is assembly and process lifecycle, verified by running it.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import socket
+from datetime import datetime
 from pathlib import Path
 
 from telegram import Update
@@ -16,6 +18,8 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from homeauto.bot.commands import Commands
 from homeauto.config import Config
+from homeauto.schedule.reminders import Reminders
+from homeauto.schedule.store import Store
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
 from homeauto.voice.speaker import Speaker
@@ -26,6 +30,7 @@ PYTHON_BIN = os.environ.get("NESTBOT_PYTHON", "/opt/nestbot/venv/bin/python")
 VOICE_PATH = os.environ.get("NESTBOT_VOICE", "/opt/nestbot/voices/es_AR-daniela-high.onnx")
 CACHE_DIR = os.environ.get("NESTBOT_CACHE", "/var/lib/nestbot/cache")
 MEDIA_PORT = int(os.environ.get("NESTBOT_MEDIA_PORT", "8765"))
+STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/nestbot"))
 
 log = logging.getLogger("homeauto")
 
@@ -36,7 +41,14 @@ SAY_COMMANDS = ("decir",)
 VOLUME_COMMANDS = ("volumen", "volume")
 STOP_COMMANDS = ("parar", "stop")
 WHERE_COMMANDS = ("donde",)
-ALL_COMMANDS = START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
+TIMER_COMMANDS = ("timer", "recordar")
+ALARM_COMMANDS = ("alarma",)
+LIST_COMMANDS = ("lista",)
+CANCEL_COMMANDS = ("cancelar",)
+ALL_COMMANDS = (
+    START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
+    + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
+)
 
 
 def local_ip() -> str:
@@ -46,17 +58,36 @@ def local_ip() -> str:
         return probe.getsockname()[0]
 
 
-def build_commands() -> Commands:
-    config = Config.from_file(CONFIG_PATH)
-    cache_dir = Path(CACHE_DIR)
+class JobQueueTimer:
+    """Adapts python-telegram-bot's job queue to what Reminders expects.
 
-    synth = VoiceSynth(cache_dir=cache_dir, runner=PiperRunner(PYTHON_BIN, VOICE_PATH))
-    speaker = Speaker(
-        synth=synth,
+    The announcement blocks (it synthesizes and waits for the speaker), so it
+    runs in a worker thread instead of stalling the bot's event loop.
+    """
+
+    def __init__(self, job_queue):
+        self.job_queue = job_queue
+
+    def schedule(self, key, when, action):
+        self.unschedule(key)
+
+        async def run(_context):
+            await asyncio.to_thread(action)
+
+        self.job_queue.run_once(run, when=when, name=key)
+
+    def unschedule(self, key):
+        for job in self.job_queue.get_jobs_by_name(key):
+            job.schedule_removal()
+
+
+def build_speaker(config: Config) -> Speaker:
+    cache_dir = Path(CACHE_DIR)
+    return Speaker(
+        synth=VoiceSynth(cache_dir=cache_dir, runner=PiperRunner(PYTHON_BIN, VOICE_PATH)),
         caster=Caster(config.cast_uuid),
         media_server=MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT),
     )
-    return Commands(config=config, speaker=speaker)
 
 
 def _argument_text(update: Update) -> str:
@@ -89,7 +120,23 @@ def register(app: Application, commands: Commands) -> None:
     app.add_handler(CommandHandler(list(SAY_COMMANDS), on_say))
     app.add_handler(CommandHandler(list(VOLUME_COMMANDS), on_volume))
     app.add_handler(CommandHandler(list(STOP_COMMANDS), on_stop))
+    async def on_timer(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        await reply(update, commands.timer(update.effective_chat.id, _argument_text(update)))
+
+    async def on_alarm(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        await reply(update, commands.alarm(update.effective_chat.id, _argument_text(update)))
+
+    async def on_list(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        await reply(update, commands.list(update.effective_chat.id))
+
+    async def on_cancel(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        await reply(update, commands.cancel(update.effective_chat.id, _argument_text(update)))
+
     app.add_handler(CommandHandler(list(WHERE_COMMANDS), on_where))
+    app.add_handler(CommandHandler(list(TIMER_COMMANDS), on_timer))
+    app.add_handler(CommandHandler(list(ALARM_COMMANDS), on_alarm))
+    app.add_handler(CommandHandler(list(LIST_COMMANDS), on_list))
+    app.add_handler(CommandHandler(list(CANCEL_COMMANDS), on_cancel))
 
 
 def main() -> None:
@@ -102,11 +149,25 @@ def main() -> None:
     # text, forever. Keep this at WARNING.
     for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
-    commands = build_commands()
+    config = Config.from_file(CONFIG_PATH)
+    speaker = build_speaker(config)
     log.info("configuración leída, arrancando polling")
 
-    app = Application.builder().token(commands.config.telegram_token).build()
+    app = Application.builder().token(config.telegram_token).build()
+
+    reminders = Reminders(
+        store=Store(STATE_DIR / "jobs.db"),
+        timer=JobQueueTimer(app.job_queue),
+        announce=lambda job: speaker.say(job.message),
+    )
+    commands = Commands(config=config, speaker=speaker, reminders=reminders, clock=datetime.now)
     register(app, commands)
+
+    async def on_ready(_app) -> None:
+        # Re-arm what was pending; anything already due while we were down fires now.
+        reminders.start()
+
+    app.post_init = on_ready
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

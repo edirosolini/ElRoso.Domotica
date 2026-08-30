@@ -18,13 +18,31 @@ class CastError(Exception):
     """The device could not be reached, or was asked for something invalid."""
 
 
-def discover_devices(timeout: int = DISCOVERY_TIMEOUT) -> list:
-    """Real mDNS discovery. Imported lazily so tests never touch the network."""
-    import pychromecast
+class _Discovery:
+    """Real mDNS discovery. Imported lazily so tests never touch the network.
 
-    casts, browser = pychromecast.get_chromecasts(timeout=timeout)
-    browser.stop_discovery()
-    return casts
+    🔴 The zeroconf browser is deliberately kept alive. pychromecast needs it to
+    open the connection to the device: calling `stop_discovery()` before
+    `wait()` leaves the device discoverable but unconnectable, and `wait()` then
+    times out after 20 s with no useful error.
+    """
+
+    def __init__(self):
+        self._browser = None
+
+    def __call__(self, timeout: int = DISCOVERY_TIMEOUT) -> list:
+        import pychromecast
+
+        if self._browser is not None:
+            self._browser.stop_discovery()
+            self._browser = None
+
+        casts, browser = pychromecast.get_chromecasts(timeout=timeout)
+        self._browser = browser
+        return casts
+
+
+discover_devices = _Discovery()
 
 
 class Caster:

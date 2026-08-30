@@ -6,14 +6,19 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 ## Comandos
 
 ```
-/decir buenas noches          habla ahora
-/timer 10m sacá la pizza      avisa dentro de 10 minutos
-/alarma 7:30 arriba           avisa a esa hora
-/volumen 40                   0 a 100
-/lista                        lo que está programado
-/cancelar 3                   cancela por número
-/parar                        corta lo que esté sonando
+/decir buenas noches            habla ahora
+/timer 10m sacá la pizza        avisa dentro de 10 minutos
+/alarma 7:30 arriba             avisa a esa hora, una vez
+/alarma diaria 7:30 arriba      avisa todos los días
+/lista                          lo que está programado
+/cancelar 3                     cancela por número
+/volumen 40                     0 a 100
+/parar                          corta lo que esté sonando
+/donde                          qué dispositivo está usando
 ```
+
+Los timers y las alarmas se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
+mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 
 Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `mañana 8:00`.
 Una hora que ya pasó se entiende como la de mañana.
@@ -41,6 +46,16 @@ CAST_UUID=               # UUID del dispositivo, no su IP
 `ALLOWED_CHAT_IDS` vacío deja el bot **abierto**: cualquiera que lo encuentre puede usarlo.
 Se deja así solo para el alta inicial; una vez que sabés tu chat ID, se completa y se reinicia.
 
+Rutas, sobreescribibles por entorno: `NESTBOT_CONFIG`, `NESTBOT_PYTHON`, `NESTBOT_VOICE`,
+`NESTBOT_CACHE`, `NESTBOT_MEDIA_PORT`. La base de timers vive en `STATE_DIRECTORY`, que
+systemd crea como `/var/lib/nestbot`.
+
 ## Despliegue
 
-Corre en el CT 300 del Proxmox de casa. Ver `CLAUDE.md` para direcciones y trampas conocidas.
+```bash
+deploy/deploy.sh              # usa 192.168.68.60 y el CT 300
+deploy/deploy.sh <pve> <ctid>
+```
+
+Empaqueta, copia al contenedor, instala el unit y **reinicia** el servicio. Ver `CLAUDE.md`
+para direcciones y trampas conocidas.

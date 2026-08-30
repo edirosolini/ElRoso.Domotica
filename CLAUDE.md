@@ -43,6 +43,10 @@ El servicio vive en `/opt/nestbot`, la config en `/etc/nestbot/nestbot.env` (chm
   `precedence ::ffff:0:0/96  100` en `/etc/gai.conf`. **Aplicarlo en todo CT nuevo.**
 - **El que castea sirve el audio por HTTP desde sí mismo**, y el parlante tiene que poder
   alcanzar ese puerto. No es "mandarle un archivo": es publicarlo y pasarle la URL.
+- 🔴 **No parar el browser de zeroconf antes de conectar.** `pychromecast` lo necesita vivo
+  para abrir la conexión: si se llama `stop_discovery()` antes de `wait()`, el dispositivo
+  aparece en el descubrimiento pero la conexión muere con un timeout de 20 s sin explicación.
+  Por eso `_Discovery` guarda el browser.
 - **`catt` no sirve** para archivos locales — falla siempre con "Playback of local file has
   failed". Se descartó a favor de `pychromecast` directo, que anda.
 - **Audios de menos de ~1 s** terminan sin pasar nunca por estado `PLAYING`. Hay que padear
