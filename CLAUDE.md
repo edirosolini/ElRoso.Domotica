@@ -71,6 +71,27 @@ aparecer; si algún día hace falta que sea inmediato, ahí sí hay que migrar a
 - **Nunca se anuncian eventos que ya empezaron.** Tras un reinicio eso sería ruido.
 - Un calendario roto no tapa a los otros: se registra en `last_problems` y sigue.
 
+## Vigilancia
+
+`homeauto/watch/` mira servicios externos. El diseño lo definió el dueño de la infra y es
+mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo que no contesta.
+
+- 🔴 **Seq no puede avisar de que el VPS se cayó**: muere con él. Por eso el túnel se vigila
+  aparte, con un TCP simple. Son dos señales que cubren agujeros distintos.
+- **Se consulta desde casa, no al revés.** Seq tiene alertas por webhook, pero saldrían del
+  VPS hacia la casa y ese sentido del túnel no está verificado. El de ida sí.
+- **El monitor solo habla cuando algo cambia**, y aguanta dos rondas antes de declarar una
+  caída. Un monitor que llora en cada timeout enseña a ignorarlo, que es peor que no tenerlo.
+- **La recuperación nunca es urgente.** Nadie se despierta por una buena noticia.
+- Un campo desconocido en `checks.json` **hace fallar el arranque**. Un typo silencioso en
+  `urgent` significaría que nunca te despierta.
+- ⚠️ Los nombres de campo que devuelve la API de Seq se verificaron contra la instancia real
+  recién al cargar la clave; el parser acepta variantes igual, por las dudas.
+
+La topología, que no es obvia: el CT de domótica manda `172.68.0.0/23` al router `.1`, que
+tiene una ruta estática al CT 202, que hace MASQUERADE sobre `wg0`. El túnel del VPS es
+**WireGuard**, no OpenVPN como los otros.
+
 ## API
 
 `homeauto/api.py` expone un endpoint HTTP **solo para la LAN**, con token compartido, para que
@@ -94,6 +115,16 @@ La decisión de incluir los comandos manuales es deliberada: la regla existe par
 a nadie, y quien escribe a las 3 AM está despierto pero el resto de la casa no. Si alguna vez
 hace falta una excepción por mensaje, cuidado con la palabra clave elegida: `en <equipo>` ya
 enseñó que un prefijo que también puede ser texto real se come parte del mensaje.
+
+## Cableado
+
+`main()` arma todo y es la parte sin tests unitarios, así que **dos bugs llegaron al
+contenedor por ahí**: una función renombrada y una variable usada antes de existir. Ahora
+`tests/test_main_wiring.py` ejecuta el cableado completo con dobles. Si se agrega una pieza
+nueva al arranque, va también un caso ahí.
+
+Las dependencias se construyen antes que quienes las usan; el archivo se lee de arriba hacia
+abajo en ese orden a propósito.
 
 ## Gotchas
 

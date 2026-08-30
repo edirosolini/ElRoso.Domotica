@@ -19,6 +19,7 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /clima                          dice el pronóstico en voz alta
 /agenda                         qué te queda hoy
 /agenda mañana                  el día siguiente completo
+/estado                         cómo están los servicios vigilados
 /equipos                        qué equipos hay y cuál está activo
 /usar tv                        cambia el equipo por defecto
 ```
@@ -69,6 +70,36 @@ mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 
 Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `mañana 8:00`.
 Una hora que ya pasó se entiende como la de mañana.
+
+## Vigilancia de servicios
+
+Dos señales que cubren agujeros distintos:
+
+**El túnel.** Un chequeo TCP contra el servidor del VPS a través de WireGuard. Si no responde,
+o se cayó el túnel o se cayó el VPS: en cualquier caso hay que ir a mirar. Los servicios a
+vigilar viven en `/etc/domotica/checks.json`:
+
+```json
+[
+  {"name": "vpn-vps", "host": "172.68.0.7", "port": 5341, "urgent": true},
+  {"name": "landing", "url": "https://elroso.ar"}
+]
+```
+
+Campos: `name`, y `url` **o** `host`+`port`. Opcionales: `expect` (código HTTP esperado),
+`urgent`, `timeout`, `attempts`. Un campo desconocido hace fallar el arranque a propósito —
+un typo en `urgent` significaría que nunca te despierta.
+
+**Los logs.** Consulta Seq y avisa si hay errores nuevos. Seq dice *por qué* se rompió algo,
+no solo que no responde; pero muere junto con el VPS, y por eso el túnel se vigila aparte.
+
+Dos reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
+
+- Un fallo suelto no es una caída: hacen falta dos rondas seguidas para avisar.
+- Se avisa **al cambiar de estado**, no mientras dure. La recuperación también se avisa, y
+  nunca como urgente: no hay que despertar a nadie por una buena noticia.
+- Los errores de Seq tienen enfriamiento (`SEQ_COOLDOWN_MINUTES`): un servicio roto logra
+  cientos de errores por minuto y no puede convertirse en cientos de avisos.
 
 ## API para otros sistemas
 
@@ -135,6 +166,11 @@ CALENDAR_URL_PERSONAL=   # dirección privada en formato iCal
 CALENDAR_URL_TRABAJO=    # una clave por calendario; el sufijo es el alias
 BRIEFING_AT=08:00        # resumen del día; "off" lo apaga
 EVENT_LEAD_MINUTES=10    # cuántos minutos antes avisar
+CHECKS_FILE=/etc/domotica/checks.json
+CHECK_INTERVAL_SECONDS=120
+SEQ_URL=http://172.68.0.7      # logs del VPS, por el túnel
+SEQ_API_KEY=                   # clave de solo lectura; sin ella Seq queda apagado
+SEQ_COOLDOWN_MINUTES=15
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

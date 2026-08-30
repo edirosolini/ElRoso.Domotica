@@ -33,6 +33,12 @@ from homeauto.voice.broadcast import HouseVoice
 from homeauto.voice.registry import SpeakerRegistry
 from homeauto.voice.speaker import Speaker
 from homeauto.voice.tts import PiperRunner, VoiceSynth
+from homeauto.watch.loading import ChecksError, load_checks
+from homeauto.watch.marks import Marks
+from homeauto.watch.monitor import Monitor
+from homeauto.watch.seq import SeqClient
+from homeauto.watch.seq_watcher import SeqWatcher
+from homeauto.watch.status import StatusStore
 from homeauto.weather import WeatherClient
 
 CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
@@ -60,11 +66,12 @@ USE_COMMANDS = ("usar",)
 OFF_COMMANDS = ("apagar",)
 WEATHER_COMMANDS = ("clima", "tiempo")
 AGENDA_COMMANDS = ("agenda",)
+STATUS_COMMANDS = ("estado",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
-    + AGENDA_COMMANDS
+    + AGENDA_COMMANDS + STATUS_COMMANDS
 )
 
 # What Telegram offers when you type "/". Without registering this the commands
@@ -81,6 +88,7 @@ COMMAND_MENU = (
     ("apagar", "Cerrar la app y dejar el equipo en reposo"),
     ("clima", "Decir el pronóstico en voz alta"),
     ("agenda", "Qué queda hoy — /agenda mañana para el día siguiente"),
+    ("estado", "Cómo están los servicios que vigilo"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
     ("usar", "Cambiar el equipo por defecto — /usar tv"),
     ("ayuda", "Cómo se usa"),
@@ -201,6 +209,13 @@ def build_post_init(notifier, reminders, api=None):
     return post_init
 
 
+def _alert(house: HouseVoice, text: str, urgent: bool) -> None:
+    """Say it if allowed, and always leave it written in the chat."""
+    result = house.announce(text, urgent=urgent)
+    if result["spoken"]:
+        house.tell_everyone(f"{'🚨' if urgent else '⚠️'} {text}")
+
+
 def _announce(house: HouseVoice, text: str) -> None:
     """Say it out loud when allowed, and always leave it written in the chat."""
     result = house.announce(text)
@@ -264,6 +279,7 @@ def register(app: Application, commands: Commands) -> None:
         (OFF_COMMANDS, commands.turn_off),
         (WEATHER_COMMANDS, commands.weather),
         (AGENDA_COMMANDS, commands.agenda_command),
+        (STATUS_COMMANDS, commands.status),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -306,10 +322,49 @@ def main() -> None:
     else:
         log.info("sin calendarios configurados: /agenda queda apagado")
 
+    house = HouseVoice(
+        speakers=speakers,
+        default_devices=[config.default_device],
+        notify=notifier,
+        chat_ids=config.allowed_chat_ids,
+        quiet=config.quiet_hours,
+    )
+
+    monitor = None
+    try:
+        checks = load_checks(config.checks_file)
+    except ChecksError as exc:
+        # Bad config is worth failing loudly: a monitor nobody notices is off
+        # is worse than no monitor.
+        log.error("no pude leer %s: %s", config.checks_file, exc)
+        raise
+    if checks:
+        monitor = Monitor(
+            checks=checks,
+            store=StatusStore(db_path),
+            announce=lambda text, urgent: _alert(house, text, urgent=urgent),
+        )
+        log.info("vigilando %s servicios: %s", len(checks), ", ".join(c.name for c in checks))
+    else:
+        log.info("sin servicios que vigilar en %s", config.checks_file)
+
+    seq_watcher = None
+    if config.seq_enabled:
+        seq_watcher = SeqWatcher(
+            client=SeqClient(base_url=config.seq_url, api_key=config.seq_api_key),
+            marks=Marks(db_path),
+            announce=lambda text: _alert(house, text, urgent=False),
+            cooldown_minutes=config.seq_cooldown,
+        )
+        log.info("vigilando los errores de Seq en %s", config.seq_url)
+    else:
+        log.info("Seq apagado: faltan SEQ_URL o SEQ_API_KEY")
+
     commands = Commands(
         config=config,
         speakers=speakers,
         agenda=agenda,
+        monitor=monitor,
         reminders=reminders,
         preferences=Preferences(db_path),
         weather=WeatherClient(
@@ -321,14 +376,6 @@ def main() -> None:
         clock=datetime.now,
     )
     register(app, commands)
-
-    house = HouseVoice(
-        speakers=speakers,
-        default_devices=[config.default_device],
-        notify=notifier,
-        chat_ids=config.allowed_chat_ids,
-        quiet=config.quiet_hours,
-    )
 
     watcher = None
     if calendar is not None:
@@ -360,6 +407,22 @@ def main() -> None:
     app.post_init = build_post_init(notifier, reminders, api)
     if watcher is not None:
         schedule_calendar_jobs(app, config, agenda, watcher)
+
+    if monitor is not None:
+        async def check_services(_context):
+            await asyncio.to_thread(monitor.run_once)
+
+        app.job_queue.run_repeating(
+            check_services, interval=config.check_interval, first=20, name="service-watch"
+        )
+
+    if seq_watcher is not None:
+        async def check_seq(_context):
+            await asyncio.to_thread(seq_watcher.check)
+
+        app.job_queue.run_repeating(
+            check_seq, interval=config.check_interval, first=40, name="seq-watch"
+        )
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

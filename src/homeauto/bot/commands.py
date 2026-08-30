@@ -51,6 +51,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /apagar — cierra la app y deja el equipo en reposo
 /clima — dice el pronóstico en voz alta
 /agenda — qué te queda hoy · /agenda mañana
+/estado — cómo están los servicios que vigilo
 /equipos — qué equipos tengo y cuál está activo
 /usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
 
@@ -79,6 +80,7 @@ class Commands:
         preferences=None,
         weather=None,
         agenda=None,
+        monitor=None,
         quiet=None,
         clock: Callable[[], datetime] = datetime.now,
     ):
@@ -88,6 +90,7 @@ class Commands:
         self.preferences = preferences
         self.weather_client = weather
         self.agenda = agenda
+        self.monitor = monitor
         self.quiet = quiet
         self.clock = clock
 
@@ -299,6 +302,24 @@ class Commands:
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
         summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
         return f"{spoken}\n\n{summary}"
+
+    def status(self, chat_id: int, text: str = "") -> str:
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        if self.monitor is None:
+            return "No tengo servicios configurados para vigilar. Se cargan en checks.json."
+
+        picture = self.monitor.snapshot()
+        if not picture:
+            return "Todavía no hice ninguna ronda de chequeos."
+
+        lines = []
+        for name, state in sorted(picture.items(), key=lambda item: (item[1].up, item[0])):
+            mark = "🟢" if state.up else "🔴"
+            lines.append(f"{mark} {name} — {state.detail}")
+        return "\n".join(lines)
 
     def turn_off(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)

@@ -51,6 +51,14 @@ DEFAULT_BRIEFING_AT = "08:00"
 DEFAULT_EVENT_LEAD = 10
 CALENDAR_PREFIX = "CALENDAR_URL_"
 
+# Vigilancia de servicios externos.
+DEFAULT_CHECKS_FILE = "/etc/domotica/checks.json"
+DEFAULT_CHECK_INTERVAL = 120
+MIN_CHECK_INTERVAL = 30
+
+# Seq: los logs del VPS. Sin URL y clave, apagado.
+DEFAULT_SEQ_COOLDOWN = 15
+
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
     raw = raw.strip()
@@ -137,6 +145,40 @@ def _parse_lead(pairs: dict[str, str]) -> int:
     return minutes
 
 
+def _parse_seq_url(pairs: dict[str, str]) -> str:
+    url = pairs.get("SEQ_URL", "").strip().rstrip("/")
+    if url and not url.startswith(("http://", "https://")):
+        raise ConfigError("SEQ_URL tiene que empezar con http:// o https://")
+    return url
+
+
+def _parse_seq_cooldown(pairs: dict[str, str]) -> int:
+    raw = pairs.get("SEQ_COOLDOWN_MINUTES", "").strip()
+    if not raw:
+        return DEFAULT_SEQ_COOLDOWN
+    try:
+        minutes = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"SEQ_COOLDOWN_MINUTES no es un número: {raw}") from exc
+    if minutes < 1:
+        raise ConfigError("SEQ_COOLDOWN_MINUTES tiene que ser al menos 1")
+    return minutes
+
+
+def _parse_interval(pairs: dict[str, str]) -> int:
+    raw = pairs.get("CHECK_INTERVAL_SECONDS", "").strip()
+    if not raw:
+        return DEFAULT_CHECK_INTERVAL
+    try:
+        seconds = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"CHECK_INTERVAL_SECONDS no es un número: {raw}") from exc
+    if seconds < MIN_CHECK_INTERVAL:
+        # Hammering somebody else's service is a good way to get blocked.
+        raise ConfigError(f"CHECK_INTERVAL_SECONDS mínimo {MIN_CHECK_INTERVAL} segundos")
+    return seconds
+
+
 def _parse_api_token(pairs: dict[str, str]) -> str:
     token = pairs.get("API_TOKEN", "").strip()
     if token and len(token) < MIN_TOKEN_LENGTH:
@@ -196,6 +238,11 @@ class Config:
     calendars: dict[str, str] = field(default_factory=dict)
     briefing_at: clock_time | None = None
     event_lead_minutes: int = DEFAULT_EVENT_LEAD
+    checks_file: Path = Path(DEFAULT_CHECKS_FILE)
+    check_interval: int = DEFAULT_CHECK_INTERVAL
+    seq_url: str = ""
+    seq_api_key: str = ""
+    seq_cooldown: int = DEFAULT_SEQ_COOLDOWN
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -243,6 +290,11 @@ class Config:
             calendars=_parse_calendars(pairs),
             briefing_at=_parse_briefing(pairs),
             event_lead_minutes=_parse_lead(pairs),
+            checks_file=Path(pairs.get("CHECKS_FILE", "").strip() or DEFAULT_CHECKS_FILE),
+            check_interval=_parse_interval(pairs),
+            seq_url=_parse_seq_url(pairs),
+            seq_api_key=pairs.get("SEQ_API_KEY", "").strip(),
+            seq_cooldown=_parse_seq_cooldown(pairs),
         )
 
     @property
@@ -257,6 +309,11 @@ class Config:
     @property
     def calendar_enabled(self) -> bool:
         return bool(self.calendars)
+
+    @property
+    def seq_enabled(self) -> bool:
+        # Both halves or nothing: a URL without a key just logs 401 forever.
+        return bool(self.seq_url and self.seq_api_key)
 
     def has_device(self, alias: str) -> bool:
         return alias.strip().lower() in self.devices
