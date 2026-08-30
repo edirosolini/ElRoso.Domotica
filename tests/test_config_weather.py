@@ -41,3 +41,27 @@ def test_a_coordinate_out_of_range_is_rejected(tmp_path):
         Config.from_file(write_env(tmp_path, BASE + "WEATHER_LAT=120\n"))
     with pytest.raises(ConfigError, match="WEATHER_LON"):
         Config.from_file(write_env(tmp_path, BASE + "WEATHER_LON=-500\n"))
+
+
+def test_quiet_hours_default_to_the_night(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE))
+
+    assert cfg.quiet_hours.label == "23:00–07:00"
+    assert cfg.quiet_hours.enabled is True
+
+
+def test_quiet_hours_can_be_moved(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "QUIET_FROM=22:30\nQUIET_TO=08:00\n"))
+
+    assert cfg.quiet_hours.label == "22:30–08:00"
+
+
+def test_quiet_hours_can_be_turned_off(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "QUIET_FROM=00:00\nQUIET_TO=00:00\n"))
+
+    assert cfg.quiet_hours.enabled is False
+
+
+def test_a_broken_quiet_hour_is_rejected(tmp_path):
+    with pytest.raises(ConfigError, match="QUIET"):
+        Config.from_file(write_env(tmp_path, BASE + "QUIET_FROM=medianoche\n"))

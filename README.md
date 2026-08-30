@@ -21,6 +21,11 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /usar tv                        cambia el equipo por defecto
 ```
 
+**Horario de descanso.** De **23:00 a 07:00** nada suena en voz alta: el aviso llega igual a
+Telegram, pero los parlantes se quedan callados. Vale para las alarmas y también para un
+`/decir` manual — la regla protege a los que duermen, no a quien está escribiendo. Se cambia
+con `QUIET_FROM` y `QUIET_TO`; poniendo las dos iguales se desactiva.
+
 **Clima.** `/clima` consulta Open-Meteo —gratis, sin cuenta ni API key— y lo dice con la voz
 del bot. No pasa por el Asistente de Google, así que funciona aunque el Nest conteste "no
 entiendo". Combinado con una alarma diaria da el parte de la mañana:
@@ -69,6 +74,8 @@ CAST_DEFAULT=parlante    # cuál se usa si no se dice otro
 WEATHER_LAT=-34.6037     # opcional; por defecto, Buenos Aires
 WEATHER_LON=-58.3816
 WEATHER_PLACE=casa       # opcional, solo para que suene mejor
+QUIET_FROM=23:00         # horario de descanso: solo avisa por Telegram
+QUIET_TO=07:00           # las dos iguales lo desactivan
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

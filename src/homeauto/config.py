@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import uuid
+
+from homeauto.quiet import QuietHours
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +36,10 @@ ALIAS_SHAPE = re.compile(r"^[a-z0-9_-]{1,20}$")
 # Buenos Aires: sirve para que el clima funcione sin configurar nada.
 DEFAULT_LAT = -34.6037
 DEFAULT_LON = -58.3816
+
+# La casa duerme: por defecto, de 23 a 7 nada suena en voz alta.
+DEFAULT_QUIET_FROM = "23:00"
+DEFAULT_QUIET_TO = "07:00"
 
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
@@ -76,6 +82,15 @@ def _parse_devices(raw: str) -> dict[str, uuid.UUID]:
     return devices
 
 
+def _parse_quiet(pairs: dict[str, str]) -> QuietHours:
+    start = pairs.get("QUIET_FROM", "").strip() or DEFAULT_QUIET_FROM
+    end = pairs.get("QUIET_TO", "").strip() or DEFAULT_QUIET_TO
+    try:
+        return QuietHours.parse(start, end)
+    except ValueError as exc:
+        raise ConfigError(f"QUIET_FROM/QUIET_TO: {exc}") from exc
+
+
 def _parse_chat_ids(raw: str) -> frozenset[int]:
     ids = set()
     for chunk in raw.split(","):
@@ -100,6 +115,7 @@ class Config:
     weather_lat: float = DEFAULT_LAT
     weather_lon: float = DEFAULT_LON
     weather_place: str = ""
+    quiet_hours: QuietHours = QuietHours.parse(DEFAULT_QUIET_FROM, DEFAULT_QUIET_TO)
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -141,6 +157,7 @@ class Config:
             weather_lat=_parse_coordinate(pairs.get("WEATHER_LAT", ""), "WEATHER_LAT", DEFAULT_LAT, 90),
             weather_lon=_parse_coordinate(pairs.get("WEATHER_LON", ""), "WEATHER_LON", DEFAULT_LON, 180),
             weather_place=pairs.get("WEATHER_PLACE", "").strip(),
+            quiet_hours=_parse_quiet(pairs),
         )
 
     @property

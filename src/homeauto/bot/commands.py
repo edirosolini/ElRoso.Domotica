@@ -76,6 +76,7 @@ class Commands:
         reminders=None,
         preferences=None,
         weather=None,
+        quiet=None,
         clock: Callable[[], datetime] = datetime.now,
     ):
         self.config = config
@@ -83,6 +84,7 @@ class Commands:
         self.reminders = reminders
         self.preferences = preferences
         self.weather_client = weather
+        self.quiet = quiet
         self.clock = clock
 
     # --- permisos y destino ------------------------------------------------
@@ -103,6 +105,12 @@ class Commands:
             f"\n\n⚠️ El bot está abierto: cualquiera que lo encuentre puede usarlo."
             f"\nTu chat ID es {chat_id}. Ponelo en ALLOWED_CHAT_IDS y reiniciá el servicio."
         )
+
+    def _resting(self) -> str | None:
+        """The reply to send instead of speaking, or None when it may sound."""
+        if self.quiet is not None and self.quiet.is_quiet(self.clock()):
+            return f"Horario de descanso ({self.quiet.label}): no lo dije en voz alta."
+        return None
 
     def _default_aliases(self, chat_id: int) -> list[str]:
         stored = self.preferences.default_device(chat_id) if self.preferences else None
@@ -192,6 +200,10 @@ class Commands:
         if not message:
             return "¿Qué querés que diga? Ej: /decir la cena está lista"
 
+        resting = self._resting()
+        if resting:
+            return f"{resting}\n\nDecía: «{message}»"
+
         results = self._broadcast(aliases, lambda speaker: speaker.say(message))
         summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
         if all(problem is None for problem in results.values()):
@@ -244,6 +256,10 @@ class Commands:
             spoken = self.weather_client.spoken()
         except WeatherError as exc:
             return str(exc)
+
+        resting = self._resting()
+        if resting:
+            return f"{spoken}\n\n{resting}"
 
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
         summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")

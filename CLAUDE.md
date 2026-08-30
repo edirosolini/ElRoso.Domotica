@@ -52,6 +52,16 @@ comando propio que consulta y habla — nunca intentando engancharse al Asistent
 Al 2026-08-30 el Nest está en `locale es-419` y zona horaria de Buenos Aires, o sea que su
 configuración regional es correcta y no es la causa de las fallas del Asistente.
 
+## Horario de descanso
+
+De 23:00 a 07:00 (`QUIET_FROM`/`QUIET_TO`) **nada se dice en voz alta**: el aviso va solo a
+Telegram, con el motivo. Aplica a las alarmas y también a `/decir` y `/clima` manuales.
+
+La decisión de incluir los comandos manuales es deliberada: la regla existe para no despertar
+a nadie, y quien escribe a las 3 AM está despierto pero el resto de la casa no. Si alguna vez
+hace falta una excepción por mensaje, cuidado con la palabra clave elegida: `en <equipo>` ya
+enseñó que un prefijo que también puede ser texto real se come parte del mensaje.
+
 ## Gotchas
 
 - 🔴 **Los dispositivos Google se resuelven por UUID, nunca por IP.** Son DHCP y se mueven:

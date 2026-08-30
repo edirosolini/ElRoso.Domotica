@@ -239,7 +239,12 @@ def main() -> None:
     reminders = Reminders(
         store=Store(db_path),
         timer=JobQueueTimer(app.job_queue),
-        announce=Announcer(speakers=speakers, notify=notifier, fallback=config.default_device),
+        announce=Announcer(
+            speakers=speakers,
+            notify=notifier,
+            fallback=config.default_device,
+            quiet=config.quiet_hours,
+        ),
     )
     commands = Commands(
         config=config,
@@ -251,6 +256,7 @@ def main() -> None:
             longitude=config.weather_lon,
             place=config.weather_place,
         ),
+        quiet=config.quiet_hours,
         clock=datetime.now,
     )
     register(app, commands)
