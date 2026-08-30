@@ -187,7 +187,7 @@ def test_the_polisher_reaches_agenda_weather_and_watcher(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
 
-    sentinel = object()
+    sentinel = lambda text, must_keep=(): text
     monkeypatch.setattr(main, "build_polisher", lambda config: sentinel)
 
     seen = {}
@@ -208,3 +208,24 @@ def test_the_polisher_reaches_agenda_weather_and_watcher(tmp_path, monkeypatch):
     run_main(monkeypatch, path)
 
     assert seen == {"agenda": sentinel, "weather": sentinel, "watcher": sentinel}
+
+
+def test_the_wired_polisher_is_actually_callable(wired, tmp_path, monkeypatch):
+    """🔴 build_polisher devolvía el objeto, no algo llamable: /clima y /agenda
+    reventaban con TypeError en el contenedor, no en los tests."""
+    captured = {}
+    original = main.WeatherClient.__init__
+
+    def spy(self, *args, **kwargs):
+        captured["polish"] = kwargs.get("polish")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.WeatherClient, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    polish = captured["polish"]
+    assert callable(polish), "lo cableado tiene que poder llamarse"
+
+    # Y con la firma real que usan agenda, clima y watcher.
+    polish.__self__.model = lambda _prompt: ""
+    assert polish("Hoy tenés dos cosas.", must_keep=["nada"]) == "Hoy tenés dos cosas."

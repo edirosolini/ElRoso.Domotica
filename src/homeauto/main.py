@@ -230,7 +230,11 @@ def build_polisher(config: Config):
     Only text this service writes goes through it. What a person typed into
     /decir or a timer is said exactly as they wrote it.
     """
-    return Polisher(model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model))
+    # The bound method, not the object: everything downstream calls it like the
+    # `as_is` default, and a Polisher is not callable on its own.
+    return Polisher(
+        model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
+    ).polish
 
 
 def build_speakers(config: Config) -> SpeakerRegistry:
