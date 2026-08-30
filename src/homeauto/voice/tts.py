@@ -83,10 +83,15 @@ class VoiceSynth:
         cache_dir: Path | str,
         runner: Runner | Callable[[str, Path], None],
         min_seconds: float = DEFAULT_MIN_SECONDS,
+        voice: str = "",
     ):
         self.cache_dir = Path(cache_dir)
         self.runner = runner
         self.min_seconds = min_seconds
+        # 🔴 The voice belongs in the cache key. Keyed on the text alone, every
+        # phrase already said kept playing in the previous voice after a voice
+        # change, with nothing in the logs to show why.
+        self.voice = voice
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # An announcement to several devices asks for the same phrase from
         # several threads at once. Without this they raced on the same partial
@@ -119,4 +124,5 @@ class VoiceSynth:
         return cached
 
     def _key(self, text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+        seed = f"{self.voice}\x00{text}"
+        return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]

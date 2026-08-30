@@ -10,6 +10,8 @@ import logging
 from dataclasses import dataclass
 from typing import Callable
 
+from homeauto.verbalize import number
+
 log = logging.getLogger(__name__)
 
 API_URL = "https://api.open-meteo.com/v1/forecast"
@@ -114,12 +116,16 @@ class WeatherClient:
         forecast = self.now()
         where = f" en {self.place}" if self.place else ""
 
+        # Everything spelled out: "21 grados" was read as "veintiuno grados".
         parts = [
-            f"Ahora{where} hay {forecast.temperature} grados, {describe_code(forecast.code)}."
+            f"Ahora{where} hay {number(forecast.temperature)} grados, "
+            f"{describe_code(forecast.code)}."
         ]
         if abs(forecast.feels_like - forecast.temperature) >= FEELS_LIKE_GAP:
-            parts.append(f"La sensación es de {forecast.feels_like}.")
-        parts.append(f"Máxima de {forecast.maximum}, mínima de {forecast.minimum}.")
+            parts.append(f"La sensación es de {number(forecast.feels_like)}.")
+        parts.append(
+            f"Máxima de {number(forecast.maximum)}, mínima de {number(forecast.minimum)}."
+        )
         if forecast.rain_chance >= RAIN_WORTH_MENTIONING:
-            parts.append(f"Probabilidad de lluvia, {forecast.rain_chance} por ciento.")
+            parts.append(f"Probabilidad de lluvia, {number(forecast.rain_chance)} por ciento.")
         return " ".join(parts)

@@ -230,7 +230,11 @@ def build_speakers(config: Config) -> SpeakerRegistry:
     HTTP servers would be waste.
     """
     cache_dir = Path(CACHE_DIR)
-    synth = VoiceSynth(cache_dir=cache_dir, runner=PiperRunner(PYTHON_BIN, VOICE_PATH))
+    synth = VoiceSynth(
+        cache_dir=cache_dir,
+        runner=PiperRunner(PYTHON_BIN, VOICE_PATH),
+        voice=VOICE_PATH,
+    )
     media_server = MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT)
 
     def build(device_uuid) -> Speaker:

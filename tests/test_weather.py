@@ -62,7 +62,8 @@ def test_an_unknown_code_does_not_explode():
 def test_the_spoken_text_reads_like_a_person():
     spoken = client().spoken()
 
-    assert "14" in spoken
+    assert "catorce" in spoken
+    assert "14" not in spoken
     assert "grados" in spoken
     assert spoken.endswith(".")
     assert "None" not in spoken
@@ -75,7 +76,7 @@ def test_the_spoken_text_names_the_place():
 def test_it_mentions_rain_when_it_is_likely():
     payload = {**PAYLOAD, "daily": {**PAYLOAD["daily"], "precipitation_probability_max": [80]}}
 
-    assert "80" in client(payload).spoken()
+    assert "ochenta" in client(payload).spoken()
 
 
 def test_it_does_not_nag_about_rain_when_there_is_none():
@@ -105,3 +106,10 @@ def test_a_broken_answer_is_reported():
 def test_missing_daily_block_is_reported():
     with pytest.raises(WeatherError):
         client(payload={"current": PAYLOAD["current"]}).now()
+
+
+def test_no_digit_reaches_the_synthesizer():
+    """Un dígito se lee mal: "21 grados" salía "veintiuno grados"."""
+    spoken = client().spoken()
+
+    assert not any(character.isdigit() for character in spoken)

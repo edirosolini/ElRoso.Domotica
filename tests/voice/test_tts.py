@@ -145,3 +145,22 @@ def test_the_same_phrase_from_several_threads_at_once(synth):
     assert len(set(paths)) == 1, "todos tienen que terminar con el mismo archivo"
     assert len(piper.calls) == 1, "sintetizar cinco veces lo mismo es puro desperdicio"
     assert paths[0].is_file()
+
+
+def test_changing_the_voice_invalidates_the_cache(tmp_path):
+    """🔴 La clave era solo el texto: al cambiar de voz seguía sonando la vieja."""
+    cache = tmp_path / "cache"
+    daniela = VoiceSynth(cache_dir=cache, runner=FakePiper(), min_seconds=1.0, voice="daniela")
+    otra = VoiceSynth(cache_dir=cache, runner=FakePiper(), min_seconds=1.0, voice="otra")
+
+    assert daniela.say("hola") != otra.say("hola")
+
+
+def test_the_same_voice_still_reuses_the_cache(tmp_path):
+    cache = tmp_path / "cache"
+    piper = FakePiper()
+    first = VoiceSynth(cache_dir=cache, runner=piper, min_seconds=1.0, voice="daniela")
+    second = VoiceSynth(cache_dir=cache, runner=piper, min_seconds=1.0, voice="daniela")
+
+    assert first.say("hola") == second.say("hola")
+    assert len(piper.calls) == 1

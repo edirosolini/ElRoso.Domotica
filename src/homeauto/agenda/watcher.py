@@ -13,6 +13,7 @@ from typing import Callable
 
 from homeauto.agenda.ical import Event
 from homeauto.agenda.seen import SeenStore
+from homeauto.verbalize import number
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +22,12 @@ FORGET_AFTER_DAYS = 2
 
 def announcement_for(event: Event, now: datetime) -> str:
     minutes = round((event.start - now).total_seconds() / 60)
-    when = "ahora" if minutes <= 0 else f"en {minutes} minutos" if minutes != 1 else "en 1 minuto"
+    # In words: "en 1 minuto" was read out as "en uno minuto".
+    if minutes <= 0:
+        when = "ahora"
+    else:
+        unit = "minuto" if minutes == 1 else "minutos"
+        when = f"en {number(minutes)} {unit}"
 
     text = f"Atención: {event.summary}, {when}"
     if event.location:

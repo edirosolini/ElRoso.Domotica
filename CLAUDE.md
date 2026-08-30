@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Domótica — El Roso
 
 Automatización de la casa, manejada por **Telegram**. Hoy hace hablar al parlante;
@@ -13,6 +17,7 @@ Domotica/
 │   ├── config.py        # carga y validación del archivo de entorno
 │   ├── quiet.py         # horario de descanso
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00"
+│   ├── verbalize.py     # números y horas a palabras, para el sintetizador
 │   ├── weather.py       # clima por Open-Meteo
 │   ├── api.py           # endpoint HTTP para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
@@ -29,6 +34,58 @@ Domotica/
 Carpeta del proyecto en español (convención de `~/Proyectos/ElRoso`), **código en inglés**:
 el paquete es `homeauto`, no `domotica`.
 
+## Arquitectura
+
+Una sola regla explica el resto del código: **la lógica no conoce su transporte**.
+
+- `bot/commands.py` no importa nada de `telegram`. Cada método recibe `(chat_id, texto)` y
+  devuelve el string de respuesta. Quien lo conecta a Telegram es `main.register()`.
+- `ApiService` no conoce HTTP; `ApiServer` es el `http.server` que lo envuelve.
+- Los colaboradores entran por constructor (`notify`, `clock`, `discover`, `build`, `announce`),
+  así que los tests inyectan dobles sin parchear módulos.
+- `main.py` es el **composition root**: es lo único que arma objetos reales y lo único que
+  toca `telegram`, `systemd` y el sistema de archivos del contenedor.
+
+Consecuencia práctica: si una feature necesita mockear algo con `patch()`, casi siempre está
+en el lado equivocado de esa línea.
+
+### Camino de un anuncio
+
+Todo lo que la casa dice pasa por el mismo lugar, venga de donde venga:
+
+```
+/decir · API HTTP · alarma · evento de agenda · monitor
+                    ↓
+        HouseVoice.announce()      ← horario de descanso + a qué equipos
+                    ↓
+        SpeakerRegistry.get(alias) ← un Speaker por equipo, perezoso
+                    ↓
+        Speaker.say()  =  VoiceSynth (Piper) → MediaServer (HTTP) → Caster (Cast)
+```
+
+`HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat.
+Las alarmas son la excepción: pasan por `Announcer`, que aplica la misma regla de descanso
+pero avisa al chat que las pidió, no a todos.
+
+`Speaker` es la unidad de "decir algo en un equipo": sintetiza, publica el wav por HTTP y le
+pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda un archivo.
+
+### Estado
+
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con cinco tablas
+independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
+
+| Clase | Para qué |
+| --- | --- |
+| `schedule.Store` | timers y alarmas |
+| `schedule.Preferences` | equipo por defecto de cada chat |
+| `agenda.SeenStore` | ocurrencias ya avisadas |
+| `watch.StatusStore` | último estado de cada chequeo |
+| `watch.Marks` | marcas de tiempo de los watchers |
+
+Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
+un despliegue nuevo no necesita migración.
+
 ## Stack
 
 - **Python 3.13** en el contenedor, 3.12 en la notebook. Nada específico de versión.
@@ -40,6 +97,38 @@ el paquete es `homeauto`, no `domotica`.
 - **pychromecast** — control del parlante.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
+
+## Desarrollo
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+
+.venv/bin/python -m pytest                      # toda la suite, con cobertura
+.venv/bin/python -m pytest tests/test_quiet.py  # un archivo
+.venv/bin/python -m pytest tests/voice -k takeover
+.venv/bin/python -m pytest tests/test_quiet.py --no-cov   # sin el reporte de cobertura
+```
+
+`pytest.ini` fija `pythonpath = src .` y `asyncio_mode = auto`: no hay que instalar el paquete
+ni decorar los tests async. La cobertura sale en cada corrida por `addopts`.
+
+No hay linter ni formateador configurados en el repo.
+
+Los tests **no tocan hardware ni red**: `pychromecast`, el subproceso de Piper y las llamadas
+HTTP están mockeados. `tests/conftest.py` tiene lo compartido — `make_config()`, `FakeSpeaker`
+y `StubRegistry`; agregar un campo a `Config` se arregla en un solo lugar.
+
+Despliegue al contenedor (empaqueta, instala dependencias, reinstala el unit y **reinicia**):
+
+```bash
+deploy/deploy.sh              # 192.168.68.60, CT 300
+deploy/deploy.sh <pve> <ctid>
+```
+
+Para correrlo fuera del contenedor hay que apuntar las rutas por entorno:
+`DOMOTICA_CONFIG`, `DOMOTICA_PYTHON`, `DOMOTICA_VOICE`, `DOMOTICA_CACHE`,
+`DOMOTICA_MEDIA_PORT`, `STATE_DIRECTORY`.
 
 ## Dónde corre
 
@@ -113,6 +202,30 @@ prueba sin red.
 - El CLI `domotica-say` lee el token del archivo de configuración: pasarlo por línea de
   comandos lo dejaría en el historial del shell.
 
+## Texto hablado
+
+🔴 **Nada que vaya al sintetizador puede llevar un dígito.** Piper lee el número como
+cardinal masculino suelto: `"tenés 1 cosa"` sonaba **"tenés uno cosa"**, `"a las 21"` sonaba
+"a las veintiuno" y `"21 grados"`, "veintiuno grados". El bug estaba en los cuatro módulos que
+generan texto, porque todos escribían el número con `f"{n}"`.
+
+`verbalize.py` lo resuelve: `number(n, gender)` y `clock(hora, minuto)` devuelven palabras.
+
+- **`number()` devuelve la forma que acompaña a un sustantivo**, que es el único caso que
+  este proyecto tiene: `1` → `"un"` / `"una"`, `21` → `"veintiún"` / `"veintiuna"`. El cardinal
+  suelto ("uno") no se usa nunca. Por eso el género es obligatorio de pensar en cada llamada:
+  "cosa" es femenino, "minuto" y "grado" masculinos.
+- **Las horas se dicen con franja**: `clock(21, 15)` → "las nueve y cuarto de la noche".
+  Se soporta "y cuarto" y "y media"; **"menos cuarto" no**, a propósito — obligaría a correr la
+  hora y con ella la franja, y "las nueve y cuarenta y cinco" ya se entiende.
+- Vive en la **raíz del paquete**, no en `voice/`. Es una utilidad de idioma, no del parlante:
+  `agenda/` y `weather.py` la usan, y `voice/` es el subpaquete de un dispositivo.
+- ⚠️ **El título del evento y el texto de `/decir` van literales.** Solo se verbaliza lo que
+  generamos nosotros. Un anuncio de agenda tiene que decir exactamente lo que dice el
+  calendario; reescribirlo sería peor que leer mal un número.
+
+Hay test que verifica que **ningún dígito** sobrevive en el texto que arma la agenda ni el clima.
+
 ## Horario de descanso
 
 De 23:00 a 07:00 (`QUIET_FROM`/`QUIET_TO`) **nada se dice en voz alta**: el aviso va solo a
@@ -142,6 +255,14 @@ abajo en ese orden a propósito.
 
 ## Gotchas
 
+- 🔴 **La voz es parte de la clave del cache de audio.** `VoiceSynth` cachea por hash;
+  cuando la clave era solo el texto, cambiar `DOMOTICA_VOICE` dejaba sonando la voz vieja en
+  toda frase ya dicha, sin nada en el log que lo explicara. Cambiar de voz ya no pide vaciar
+  `/var/lib/domotica/cache`, pero el cache queda duplicado por voz.
+- 🔴 **httpx loguea la URL completa en INFO, y el token de Telegram va en el path.**
+  A nivel INFO el token queda en el journal, en claro y para siempre. `main()` baja
+  `httpx`, `httpcore` y `telegram.ext.Updater` a WARNING; `tests/bot/test_logging_hygiene.py`
+  lo sostiene.
 - 🔴 **Los dispositivos Google se resuelven por UUID, nunca por IP.** Son DHCP y se mueven:
   el Nest ya saltó de `.13` a `.20` solo. Los UUID están en `CAST_DEVICES`.
 - **Los equipos con pantalla solo aparecen en el descubrimiento si están encendidos.** Un

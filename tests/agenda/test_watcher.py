@@ -44,7 +44,25 @@ def test_it_warns_about_an_event_about_to_start(tmp_path):
 
     assert len(said) == 1
     assert "Reunión con el equipo" in said[0]
-    assert "5 minutos" in said[0]
+    assert "cinco minutos" in said[0]
+    assert "5 minutos" not in said[0]
+
+
+def test_a_single_minute_agrees_in_gender():
+    """"en 1 minuto" salía como "en uno minuto"."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from homeauto.agenda.watcher import announcement_for
+
+    tz = ZoneInfo("America/Argentina/Buenos_Aires")
+    now = datetime(2026, 8, 30, 9, 0, tzinfo=tz)
+    start = now + timedelta(minutes=1)
+    event = Event(
+        uid="u", summary="Dentista", start=start, end=start + timedelta(hours=1),
+        all_day=False, calendar="personal",
+    )
+
+    assert "en un minuto" in announcement_for(event, now)
 
 
 def test_it_does_not_warn_twice(tmp_path):

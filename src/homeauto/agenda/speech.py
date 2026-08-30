@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from homeauto.agenda.ical import Event
+from homeauto.verbalize import FEMININE, clock, number
 
 
 def _clock(event: Event) -> str:
-    # On the hour, saying the minutes adds nothing: "a las 10", not "a las 10:00".
-    if event.start.minute == 0:
-        return f"a las {event.start.hour}"
-    return f"a las {event.start.strftime('%H:%M')}"
+    # 🔴 In words, never as digits: the synthesizer reads "21:15" as a number.
+    return f"a {clock(event.start.hour, event.start.minute)}"
 
 
 def _one(event: Event) -> str:
@@ -29,5 +28,7 @@ def describe(events: list[Event], label: str) -> str:
     ordered = sorted(events, key=lambda event: (not event.all_day, event.start))
 
     count = len(ordered)
-    heading = f"{label.capitalize()} tenés 1 cosa." if count == 1 else f"{label.capitalize()} tenés {count} cosas."
+    # "cosa" is feminine: a bare digit here came out as "tenés uno cosa".
+    things = "cosa" if count == 1 else "cosas"
+    heading = f"{label.capitalize()} tenés {number(count, FEMININE)} {things}."
     return " ".join([heading] + [_one(event) for event in ordered])
