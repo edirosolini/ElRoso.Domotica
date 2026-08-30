@@ -73,16 +73,28 @@ Una hora que ya pasó se entiende como la de mañana.
 
 ## Redacción más natural (opcional)
 
-El texto que arma el bot —agenda, clima y avisos de evento— puede pasar por **Gemma 4** para
-que suene mejor dicho en voz alta. Es gratis: la API de Google sirve Gemma sin plan pago.
+El texto que arma el bot —agenda, clima y avisos de evento— puede pasar por un modelo de
+Google para que suene mejor dicho en voz alta. Entra en el free tier de sobra: el uso real son
+decenas de llamadas por día.
+
+```
+antes:  Atención: Dentista, en diez minutos, en Consultorio.
+ahora:  Tenés turno con el dentista en diez minutos en el consultorio.
+```
 
 Se saca una clave en [Google AI Studio](https://aistudio.google.com/apikey) y se pone en la
 configuración:
 
 ```ini
 LLM_API_KEY=              # sin clave, apagado: el texto sale tal cual
-LLM_MODEL=gemma-4-26b-a4b-it
+LLM_MODEL=gemini-3.1-flash-lite
 ```
+
+⚠️ **No poner un modelo que razone.** Gemma 4 parece la opción natural por ser abierta, pero
+razona antes de cada respuesta y no se puede apagar: tarda **entre 40 y 79 segundos** en
+reescribir una frase, medido contra la API. `gemini-3.1-flash-lite` hace lo mismo en menos de
+dos segundos. Si el modelo tarda, no se rompe nada —se dice el texto original— pero no pule
+nunca.
 
 **Sin clave no cambia nada** y no se sale a internet.
 
@@ -90,7 +102,7 @@ Para probar que la clave anda:
 
 ```bash
 curl -s -X POST \
-  "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent" \
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent" \
   -H "Content-Type: application/json" -H "x-goog-api-key: $LLM_API_KEY" \
   -d '{"contents":[{"parts":[{"text":"decí hola"}]}]}'
 ```
@@ -204,8 +216,8 @@ CHECK_INTERVAL_SECONDS=120
 SEQ_URL=http://172.68.0.7      # logs del VPS, por el túnel
 SEQ_API_KEY=                   # clave de solo lectura; sin ella Seq queda apagado
 SEQ_COOLDOWN_MINUTES=15
-LLM_API_KEY=                   # Gemma 4 por la API de Google; sin clave, apagado
-LLM_MODEL=gemma-4-26b-a4b-it
+LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado
+LLM_MODEL=gemini-3.1-flash-lite
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

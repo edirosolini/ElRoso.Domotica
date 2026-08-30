@@ -60,7 +60,8 @@ MIN_CHECK_INTERVAL = 30
 DEFAULT_SEQ_COOLDOWN = 15
 
 # Pulido de la redacción con un LLM. Sin clave, apagado: la casa habla igual.
-DEFAULT_LLM_MODEL = "gemma-4-26b-a4b-it"
+# Gemma 4 razona sin poder desactivarlo y tarda decenas de segundos: no va acá.
+DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
 
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:

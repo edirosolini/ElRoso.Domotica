@@ -115,11 +115,13 @@ def test_a_key_turns_the_polisher_on(tmp_path):
 
 
 def test_the_model_has_a_default(tmp_path):
+    """Un modelo que razona antes de contestar tarda demasiado para un aviso."""
     path = write_env(
         tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nLLM_API_KEY=k\n"
     )
 
-    assert "gemma" in Config.from_file(path).llm_model
+    assert Config.from_file(path).llm_model
+    assert "gemma" not in Config.from_file(path).llm_model
 
 
 def test_the_model_can_be_changed(tmp_path):

@@ -105,14 +105,21 @@ class Polisher:
         if data_words(answer) != data_words(text):
             return "cambió un número o un momento del día"
 
-        missing = [term for term in must_keep if term and term not in answer]
+        # Case-insensitive: the model lowercases titles, and that loses no fact.
+        lowered = answer.lower()
+        missing = [term for term in must_keep if term and term.lower() not in lowered]
         if missing:
             return f"perdió {', '.join(missing)}"
         return ""
 
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-DEFAULT_MODEL = "gemma-4-26b-a4b-it"
+# 🔴 Not Gemma. Gemma 4 reasons before every answer and will not stop: the API
+# rejects both thinkingBudget and thinkingLevel for it. Measured against the
+# real endpoint it took 40 to 79 seconds to reword one sentence, spending
+# thousands of thinking tokens to emit twenty. Flash-Lite with thinking off
+# answers the same thing in under two seconds.
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
 # Nobody waits for prose. Past this the original is better than a late rewrite.
 TIMEOUT = 6
 
@@ -137,20 +144,35 @@ class GoogleModel:
         model: str = DEFAULT_MODEL,
         post: Callable[..., object] = _post,
         timeout: float = TIMEOUT,
+        thinking: bool = False,
     ):
         self.api_key = api_key
         self.model = model
         self.post = post
         self.timeout = timeout
+        # Rewording a sentence needs no deliberation, and the wait is the whole
+        # cost. Models that refuse to have it turned off take this back to True
+        # so the request stays valid — they are just too slow to be the default.
+        self.thinking = thinking
+
+    def _always_thinks(self) -> bool:
+        return self.model.startswith("gemma")
 
     def __call__(self, prompt: str) -> str:
+        body = {"contents": [{"parts": [{"text": prompt}]}]}
+        # Gemma answers 400 to the switch instead of ignoring it, which would
+        # make every single rewrite fail quietly. Asked without it, it works —
+        # just slowly, because it always reasons first.
+        if not self.thinking and not self._always_thinks():
+            body["generationConfig"] = {"thinkingConfig": {"thinkingBudget": 0}}
+
         try:
             response = self.post(
                 API_URL.format(model=self.model),
                 # 🔴 In a header, never in the query string: the key would end
                 # up in every log that records the URL.
                 headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
+                json=body,
                 timeout=self.timeout,
             )
             response.raise_for_status()
@@ -167,4 +189,8 @@ class GoogleModel:
         except (KeyError, IndexError, TypeError) as exc:
             raise PolishError(f"respuesta inesperada del modelo: {exc}") from exc
 
-        return "".join(part.get("text", "") for part in parts).strip()
+        # 🔴 A thinking model returns its reasoning as another part. Joining
+        # them fed hundreds of words of deliberation to the speaker.
+        return "".join(
+            part.get("text", "") for part in parts if not part.get("thought")
+        ).strip()

@@ -129,7 +129,7 @@ def test_the_google_client_returns_the_answer():
 
     assert model("un prompt") == "mejor redactado"
     url, kwargs = calls[0]
-    assert "gemma" in url
+    assert "generativelanguage.googleapis.com" in url
     assert kwargs["json"]["contents"][0]["parts"][0]["text"] == "un prompt"
 
 
@@ -205,3 +205,68 @@ def test_a_polisher_backed_by_google_falls_back_on_failure():
     subject = Polisher(model=GoogleModel(api_key="k", post=post))
 
     assert subject.polish(ORIGINAL) == ORIGINAL
+
+
+# --- lo que enseñó la primera prueba contra la API real ---
+
+def test_the_reasoning_of_a_thinking_model_is_dropped():
+    """🔴 Gemma 4 devuelve su razonamiento en otra part; concatenarlo arruinaba todo."""
+    def post(url, **kwargs):
+        return FakeResponse({"candidates": [{"content": {"parts": [
+            {"text": "El usuario quiere que lo reescriba. Veamos...", "thought": True},
+            {"text": "la respuesta de verdad"},
+        ]}}]})
+
+    assert GoogleModel(api_key="k", post=post)("prompt") == "la respuesta de verdad"
+
+
+def test_thinking_is_turned_off_by_default():
+    """Razonar para reescribir una frase costaba 40 segundos y no se puede esperar."""
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    GoogleModel(api_key="k", post=post)("prompt")
+
+    assert calls[0]["json"]["generationConfig"]["thinkingConfig"]["thinkingBudget"] == 0
+
+
+def test_thinking_can_be_left_on_for_models_that_demand_it():
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    GoogleModel(api_key="k", post=post, thinking=True)("prompt")
+
+    assert "generationConfig" not in calls[0]["json"]
+
+
+def test_the_default_model_is_a_fast_one():
+    """Gemma 4 razona siempre y tarda decenas de segundos: no sirve de default."""
+    from homeauto.polish import DEFAULT_MODEL
+
+    assert "gemma" not in DEFAULT_MODEL
+
+
+def test_a_term_that_only_changed_case_still_counts_as_kept():
+    """El modelo baja a minúscula los títulos; eso no es perder el dato."""
+    reworded = "Hoy tenés dos cosas. A las nueve y media de la mañana, dentista."
+
+    assert polisher(reworded).polish(ORIGINAL, must_keep=["Dentista"]) == reworded
+
+
+def test_a_gemma_model_is_asked_without_the_thinking_switch():
+    """Gemma contesta 400 si se lo mandan, y el pulido nunca funcionaría."""
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    GoogleModel(api_key="k", model="gemma-4-26b-a4b-it", post=post)("prompt")
+
+    assert "generationConfig" not in calls[0]["json"]

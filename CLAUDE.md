@@ -229,8 +229,8 @@ Hay test que verifica que **ningún dígito** sobrevive en el texto que arma la 
 
 ### Pulido de la redacción
 
-`polish.py` le pasa el texto **generado** a Gemma 4 por la API de Google para que suene más
-natural antes de sintetizarlo. Es gratis: la Gemini API sirve Gemma sin tier pago.
+`polish.py` le pasa el texto **generado** a la API de Google para que suene más natural antes
+de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de llamadas por día.
 
 - 🔴 **El original siempre gana.** Sin clave, sin red, con timeout o con una respuesta
   sospechosa, se dice el texto que ya había. Esto es decoración sobre un camino que tiene que
@@ -247,9 +247,21 @@ natural antes de sintetizarlo. Es gratis: la Gemini API sirve Gemma sin tier pag
   en cualquier log que registre la URL.
 - Los modelos Gemma **no aceptan system instruction**: el prompt entero va como turno de
   usuario.
-- ⚠️ Los `model id` (`gemma-4-26b-a4b-it`, `gemma-4-31b-it`) salen de la documentación de
-  Google; no se pudieron verificar contra la API porque valida la clave antes que el modelo.
-  Un id equivocado no rompe nada: cae al texto original y queda en el log.
+- 🔴 **Gemma 4 no sirve acá, aunque sea el modelo obvio.** Razona antes de cada respuesta y
+  **no se puede apagar**: la API rechaza `thinkingBudget` y `thinkingLevel` con un 400.
+  Medido contra el endpoint real, tardó **entre 40 y 79 segundos** en reescribir una frase,
+  gastando miles de tokens de razonamiento para emitir veinte. El default es
+  `gemini-3.1-flash-lite` con el razonamiento apagado, que contesta lo mismo en **menos de
+  dos segundos**. Si igual se configura un Gemma, se lo llama **sin** el switch: mandárselo
+  haría fallar cada reescritura en silencio.
+- 🔴 **Un modelo que razona devuelve el razonamiento en otra `part`, marcada `thought`.**
+  Concatenar las partes le mandaba al parlante cientos de palabras de deliberación. Se filtran.
+- **La comparación de `must_keep` ignora mayúsculas**: el modelo baja los títulos a minúscula
+  y eso no pierde ningún dato.
+- ⚠️ La validación protege los **datos duros** (números, horas, momentos del día, títulos), no
+  impide una reinterpretación leve: a "Atención: Dentista, en diez minutos" le contestó
+  "Tenés turno con el dentista en diez minutos", que agrega la palabra "turno". Es la licencia
+  que se le pide; si algún día molesta, se endurece el prompt.
 - El pulido hace una llamada HTTP bloqueante, pero cuelga de caminos que **ya** corren en
   `asyncio.to_thread` (los comandos, el watcher y el briefing). No agregar un llamador nuevo
   que lo invoque desde el event loop.
