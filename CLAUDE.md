@@ -133,7 +133,7 @@ Para correrlo fuera del contenedor hay que apuntar las rutas por entorno:
 
 ## Dónde corre
 
-**CT 300 `nest-bot`** del Proxmox de casa (`192.168.68.60`), en `192.168.68.10`.
+**CT 300 `domotica`** del Proxmox de casa (`192.168.68.60`), en `192.168.68.10`.
 El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (chmod 600).
 
 ## Sobre el Asistente de Google
