@@ -22,15 +22,22 @@ class FakeMediaController:
     en el que el caster daba por bueno un audio que nunca sonó.
     """
 
-    def __init__(self, loads=True):
+    def __init__(self, loads=True, finishes_after=2):
         self.played = []
         self.stopped = 0
         self.blocked = 0
         self.loads = loads
+        self.finishes_after = finishes_after
+        self.polls = 0
         self.status = FakeStatus()
 
     def update_status(self):
-        pass
+        """Un clip real termina. Un doble que se queda en PLAYING para siempre
+        hace esperar al test lo mismo que esperaría a un equipo colgado."""
+        self.polls += 1
+        if self.status.content_id and self.polls > self.finishes_after:
+            self.status.player_state = "IDLE"
+            self.status.idle_reason = "FINISHED"
 
     def play_media(self, url, mime):
         self.played.append((url, mime))
@@ -208,11 +215,11 @@ def test_a_clip_that_ended_before_the_first_poll_still_counts():
 # --- volumen mínimo para lo urgente ----------------------------------------
 
 
-def test_an_urgent_announcement_raises_a_low_volume():
+def test_an_announcement_raises_a_low_volume():
     device = FakeDevice(volume=0.30)
     caster = Caster(DEVICE_UUID, discover=discovery_of(device), discovery_timeout=0)
 
-    caster.play("http://192.168.68.10:8765/a.wav", timeout=0.3, min_volume=60)
+    caster.play("http://192.168.68.10:8765/a.wav", timeout=0.3, min_volume=60, expected_seconds=0)
 
     assert device.volumes == [0.6, 0.30], "sube, y deja el volumen como estaba"
 
@@ -221,7 +228,7 @@ def test_a_volume_already_high_enough_is_left_alone():
     device = FakeDevice(volume=0.80)
     caster = Caster(DEVICE_UUID, discover=discovery_of(device), discovery_timeout=0)
 
-    caster.play("http://192.168.68.10:8765/a.wav", timeout=0.3, min_volume=60)
+    caster.play("http://192.168.68.10:8765/a.wav", timeout=0.3, min_volume=60, expected_seconds=0)
 
     assert device.volumes == []
 
@@ -231,7 +238,7 @@ def test_the_volume_comes_back_even_if_the_audio_fails():
     caster = Caster(DEVICE_UUID, discover=discovery_of(device), discovery_timeout=0)
 
     with pytest.raises(CastError):
-        caster.play("http://192.168.68.10:8765/a.wav", timeout=0.3, min_volume=60)
+        caster.play("http://192.168.68.10:8765/a.wav", timeout=0.3, min_volume=60, expected_seconds=0)
 
     assert device.volumes[-1] == 0.30, "un audio que falla no puede dejar la casa a todo volumen"
 
@@ -243,3 +250,41 @@ def test_without_a_floor_the_volume_is_never_touched():
     caster.play("http://192.168.68.10:8765/a.wav", timeout=0.3)
 
     assert device.volumes == []
+
+
+def test_the_volume_waits_for_a_long_clip_to_end():
+    """🔴 El resumen de la mañana dura más que el timeout de arranque.
+
+    Devolver el volumen a mitad de frase es justo lo que el piso venía a
+    evitar, así que esperar el final tiene su propio límite.
+    """
+    device = FakeDevice(volume=0.30)
+    polls = []
+
+    def update_status():
+        polls.append(1)
+        if len(polls) >= 4:  # el clip recién termina en el cuarto sondeo
+            device.media_controller.status.player_state = "IDLE"
+            device.media_controller.status.idle_reason = "FINISHED"
+
+    device.media_controller.update_status = update_status
+    caster = Caster(DEVICE_UUID, discover=discovery_of(device), discovery_timeout=0)
+
+    caster.play(
+        "http://192.168.68.10:8765/largo.wav", timeout=5, min_volume=60, expected_seconds=1
+    )
+
+    assert len(polls) >= 4, "no esperó a que terminara"
+    assert device.volumes == [0.6, 0.30]
+
+
+def test_the_wait_for_the_end_follows_the_length_of_the_audio():
+    """Un clip largo espera más; uno corto no cuelga el hilo dos minutos."""
+    caster = Caster(DEVICE_UUID, discover=discovery_of(FakeDevice()))
+
+    assert caster._finish_deadline(2) == 2 + 5
+    assert caster._finish_deadline(40) == 40 + 5
+    # Sin duración legible queda el tope, no un número inventado.
+    assert caster._finish_deadline(None) == 120
+    # Y el tope manda incluso si el wav dice cualquier cosa.
+    assert caster._finish_deadline(9999) == 120

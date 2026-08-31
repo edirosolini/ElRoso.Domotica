@@ -13,10 +13,6 @@ from typing import Callable, Iterable
 
 log = logging.getLogger(__name__)
 
-# An urgent warning is worth turning the volume up for. The house gets its own
-# level back as soon as the announcement ends.
-URGENT_MIN_VOLUME = 60
-
 
 class HouseVoice:
     def __init__(
@@ -64,9 +60,7 @@ class HouseVoice:
         problems = []
         for alias in targets:
             try:
-                self.speakers.get(alias).say(
-                    text, min_volume=URGENT_MIN_VOLUME if urgent else None
-                )
+                self.speakers.get(alias).say(text)
             except Exception as exc:  # noqa: BLE001 - se reporta al llamador
                 log.warning("no pude hablar en %s: %s", alias, exc)
                 problems.append(f"{alias}: {exc}")

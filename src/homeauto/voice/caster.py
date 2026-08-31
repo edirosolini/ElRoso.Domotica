@@ -21,6 +21,14 @@ AUDIO_MIME = "audio/wav"
 MEDIA_RECEIVER_APP_ID = "CC1AD845"
 
 PLAYBACK_TIMEOUT = 20
+# Waiting for the clip to *end* is a different job from waiting for it to
+# start: the briefing runs well past twenty seconds, and cutting the volume
+# back mid-sentence is exactly what the floor was meant to prevent. The real
+# bound is the length of the audio, which we know; this is only the cap for
+# when it could not be read, so a wedged device never holds the thread for good.
+FINISH_TIMEOUT = 120
+# Margin over the clip length: the device starts a moment after we ask.
+FINISH_MARGIN = 5
 SETTLE_AFTER_QUIT = 2
 
 
@@ -64,11 +72,13 @@ class Caster:
         discover: Callable[..., list] = discover_devices,
         discovery_timeout: int = DISCOVERY_TIMEOUT,
         settle: float = SETTLE_AFTER_QUIT,
+        finish_timeout: float = FINISH_TIMEOUT,
     ):
         self.device_uuid = device_uuid
         self.discover = discover
         self.discovery_timeout = discovery_timeout
         self.settle = settle
+        self.finish_timeout = finish_timeout
         self._device = None
 
     def _resolve(self):
@@ -169,7 +179,18 @@ class Caster:
         device.set_volume(floor)
         return current
 
-    def play(self, url: str, timeout: float = PLAYBACK_TIMEOUT, min_volume: int | None = None) -> None:
+    def _finish_deadline(self, expected_seconds: float | None) -> float:
+        if expected_seconds is None:
+            return self.finish_timeout
+        return min(expected_seconds + FINISH_MARGIN, self.finish_timeout)
+
+    def play(
+        self,
+        url: str,
+        timeout: float = PLAYBACK_TIMEOUT,
+        min_volume: int | None = None,
+        expected_seconds: float | None = None,
+    ) -> None:
         """Play the audio, optionally guaranteeing a minimum volume for it.
 
         The floor is for urgent announcements: a house left at low volume turns
@@ -186,7 +207,7 @@ class Caster:
             controller.block_until_active(timeout=self.discovery_timeout)
             self._wait_until_playing(controller, url, timeout)
             if previous is not None:
-                self._wait_until_finished(controller, url, timeout)
+                self._wait_until_finished(controller, url, self._finish_deadline(expected_seconds))
         finally:
             if previous is not None:
                 device.set_volume(previous)

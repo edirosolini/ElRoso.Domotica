@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from homeauto.quiet import QuietHours
-from homeauto.voice.broadcast import URGENT_MIN_VOLUME, HouseVoice
+from homeauto.voice.broadcast import HouseVoice
 
 from tests.conftest import FakeSpeaker, StubRegistry
 
@@ -25,23 +25,6 @@ def build(clock=lambda: NOON, quiet=None):
         clock=clock,
     )
     return house, speaker, written
-
-
-def test_an_urgent_announcement_demands_a_minimum_volume():
-    """Una casa en volumen bajo convierte un aviso urgente en nada."""
-    house, speaker, _ = build()
-
-    house.announce("se cayó producción", urgent=True)
-
-    assert speaker.floors == [URGENT_MIN_VOLUME]
-
-
-def test_an_ordinary_announcement_leaves_the_volume_alone():
-    house, speaker, _ = build()
-
-    house.announce("la cena está lista")
-
-    assert speaker.floors == [None]
 
 
 def test_the_chat_copy_can_say_more_than_the_speaker():

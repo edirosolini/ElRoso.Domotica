@@ -32,10 +32,11 @@ Telegram, pero los parlantes se quedan callados. Vale para las alarmas y tambié
 `/decir` manual — la regla protege a los que duermen, no a quien está escribiendo. Se cambia
 con `QUIET_FROM` y `QUIET_TO`; poniendo las dos iguales se desactiva.
 
-**Avisos urgentes.** Un aviso marcado como urgente —un servicio caído, o `urgent` por la
-API— se salta el horario de descanso y además **sube el volumen a 60 si está más bajo**,
-devolviéndolo a como estaba en cuanto termina de hablar. Una casa en volumen bajo convierte
-una advertencia en nada.
+**Volumen mínimo.** Todo lo que la casa dice —un `/decir`, una alarma, el clima, el resumen,
+un aviso del monitor— **sube el volumen a 60 si está más bajo**, y lo devuelve a como estaba
+en cuanto termina de hablar. Una casa en volumen bajo convierte cualquier anuncio en nada.
+Si el equipo ya está en 60 o más, no se toca. El `/volumen` que pongas sigue siendo el de la
+música: esto solo aplica mientras habla el bot.
 
 **Silencio a pedido.** Para una siesta o una reunión, `/silencio 2h` calla los parlantes por
 ese rato (acepta los mismos formatos que un timer: `30m`, `1h30m`). `/silencio` sin nada dice

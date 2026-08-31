@@ -7,6 +7,7 @@ repeating an announcement costs nothing after the first time.
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import os
 import threading
@@ -14,6 +15,8 @@ import subprocess
 import wave
 from pathlib import Path
 from typing import Callable, Protocol
+
+log = logging.getLogger(__name__)
 
 # A clip shorter than this never reaches the PLAYING state on a Chromecast
 # device: it finishes before the receiver reports back. Padding with silence
@@ -51,6 +54,21 @@ class PiperRunner:
         )
         if result.returncode != 0:
             raise TtsError(f"piper falló ({result.returncode}): {result.stderr.strip()[:300]}")
+
+
+def duration_seconds(path: Path) -> float | None:
+    """How long the clip lasts, or None if the file cannot be read.
+
+    Whoever waits for the audio to end needs a real bound: a fixed timeout is
+    either too short for the morning briefing or too long for one sentence.
+    """
+    try:
+        with wave.open(str(path), "rb") as source:
+            rate = source.getframerate()
+            return source.getnframes() / rate if rate else None
+    except Exception:  # noqa: BLE001 - un wav ilegible no puede romper el anuncio
+        log.warning("no pude leer la duración de %s", path)
+        return None
 
 
 def _pad_to_minimum(path: Path, min_seconds: float) -> None:

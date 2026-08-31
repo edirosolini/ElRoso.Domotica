@@ -1,8 +1,9 @@
+import wave
 from pathlib import Path
 
 import pytest
 
-from homeauto.voice.speaker import Speaker
+from homeauto.voice.speaker import MIN_VOLUME, Speaker
 
 
 class FakeSynth:
@@ -13,7 +14,13 @@ class FakeSynth:
     def say(self, text):
         self.said.append(text)
         path = self.cache_dir / f"{abs(hash(text))}.wav"
-        path.write_bytes(b"RIFF")
+        # Un wav de verdad, de un segundo: el Speaker le lee la duración para
+        # saber cuánto esperar, y con basura adentro el test no probaría eso.
+        with wave.open(str(path), "wb") as target:
+            target.setnchannels(1)
+            target.setsampwidth(2)
+            target.setframerate(22050)
+            target.writeframes(b"\x00" * 2 * 22050)
         return path
 
 
@@ -23,8 +30,8 @@ class FakeCaster:
         self.volumes = []
         self.stopped = 0
 
-    def play(self, url, min_volume=None):
-        self.played.append((url, min_volume))
+    def play(self, url, min_volume=None, expected_seconds=None):
+        self.played.append((url, min_volume, expected_seconds))
 
     def set_volume(self, percent):
         self.volumes.append(percent)
@@ -106,17 +113,34 @@ def test_device_name_is_exposed(speaker):
     assert spk.device_name() == "Nest"
 
 
-def test_an_urgent_phrase_carries_its_volume_floor(speaker):
-    spk, _, caster, _ = speaker
-
-    spk.say("se cayó producción", min_volume=60)
-
-    assert caster.played[-1][1] == 60
-
-
-def test_an_ordinary_phrase_does_not_touch_the_volume(speaker):
+def test_every_phrase_carries_the_volume_floor(speaker):
+    """Cualquier cosa que se diga: no hay anuncio de segunda."""
     spk, _, caster, _ = speaker
 
     spk.say("la cena está lista")
 
+    assert caster.played[-1][1] == MIN_VOLUME
+
+
+def test_a_speaker_can_be_built_without_a_floor(tmp_path):
+    """El piso es una decisión de la casa, no una ley del objeto."""
+    caster = FakeCaster()
+    spk = Speaker(
+        synth=FakeSynth(tmp_path),
+        caster=caster,
+        media_server=FakeServer(tmp_path),
+        min_volume=None,
+    )
+
+    spk.say("hola")
+
     assert caster.played[-1][1] is None
+
+
+def test_the_length_of_the_audio_travels_with_it(speaker):
+    """Quien espera el final necesita saber cuánto dura, no un número fijo."""
+    spk, _, caster, _ = speaker
+
+    spk.say("la cena está lista")
+
+    assert caster.played[-1][2] == pytest.approx(1.0)
