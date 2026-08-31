@@ -58,7 +58,7 @@ def _split_head(text: str) -> tuple[str, str]:
     return parts[0], parts[1] if len(parts) > 1 else ""
 
 
-def _parse_duration(token: str) -> timedelta:
+def parse_duration(token: str) -> timedelta:
     match = _DURATION_RE.fullmatch(token)
     if match is None or not any(match.groups()):
         raise TimeSpecError(f"No entiendo cuándo: '{token}'")
@@ -104,7 +104,7 @@ def parse_schedule(text: str, now: datetime) -> tuple[datetime, str]:
     elif _CLOCK_RE.fullmatch(head):
         when = _parse_clock(head, now, force_tomorrow=False)
     else:
-        when = now + _parse_duration(head)
+        when = now + parse_duration(head)
 
     message = rest.strip()
     if not message:

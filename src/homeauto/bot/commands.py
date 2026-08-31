@@ -16,10 +16,12 @@ from typing import Callable
 from homeauto.agenda.ical import CalendarError
 from homeauto.config import Config
 from homeauto.schedule.store import DAILY, ONCE, WEEKLY
+from homeauto.quiet import Hush
 from homeauto.timespec import (
     TimeSpecError,
     format_weekdays,
     next_weekday,
+    parse_duration,
     parse_schedule,
     parse_weekdays,
 )
@@ -54,6 +56,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /alarma lun-vie 5:30 arriba — solo esos días
 /lista — lo que está programado
 /cancelar <n> — cancela uno
+/silencio 2h — no habla por un rato · /hablar lo cancela
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
@@ -385,6 +388,47 @@ class Commands:
         if self.preferences:
             self.preferences.set_default_device(chat_id, ",".join(aliases))
         return f"Listo, ahora uso {', '.join(aliases)}"
+
+    # --- silencio ----------------------------------------------------------
+
+    def silence(self, chat_id: int, text: str = "") -> str:
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if not isinstance(self.quiet, Hush):
+            return "No tengo el silencio a pedido configurado."
+
+        asked = text.strip()
+        if not asked:
+            return self._silence_status()
+
+        try:
+            duration = parse_duration(asked)
+        except TimeSpecError as exc:
+            return str(exc)
+
+        ends = self.quiet.start(duration)
+        return f"Listo, no hablo hasta las {ends.strftime('%H:%M')}. /hablar lo cancela."
+
+    def speak(self, chat_id: int, text: str = "") -> str:
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if not isinstance(self.quiet, Hush):
+            return "No tengo el silencio a pedido configurado."
+
+        if not self.quiet.stop():
+            return "No estaba en silencio."
+        return "Listo, vuelvo a hablar."
+
+    def _silence_status(self) -> str:
+        ends = self.quiet.until()
+        if ends is not None:
+            return f"En silencio hasta las {ends.strftime('%H:%M')}. /hablar lo cancela."
+        return (
+            f"Estoy hablando. El horario de descanso va de {self.quiet.hours.label}. "
+            "Para callarme un rato: /silencio 2h"
+        )
 
     # --- programados -------------------------------------------------------
 

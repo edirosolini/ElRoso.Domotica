@@ -14,6 +14,8 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /alarma lun-vie 5:30 arriba     avisa solo esos días
 /lista                          lo que está programado
 /cancelar 3                     cancela por número
+/silencio 2h                    no habla por un rato
+/hablar                         cancela el silencio
 /volumen 40                     0 a 100
 /parar                          corta lo que esté sonando
 /apagar en todos                cierra la app y deja los equipos en reposo
@@ -29,6 +31,11 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 Telegram, pero los parlantes se quedan callados. Vale para las alarmas y también para un
 `/decir` manual — la regla protege a los que duermen, no a quien está escribiendo. Se cambia
 con `QUIET_FROM` y `QUIET_TO`; poniendo las dos iguales se desactiva.
+
+**Silencio a pedido.** Para una siesta o una reunión, `/silencio 2h` calla los parlantes por
+ese rato (acepta los mismos formatos que un timer: `30m`, `1h30m`). `/silencio` sin nada dice
+si está callado y hasta cuándo; `/hablar` lo cancela. Se guarda en SQLite, así que un
+reinicio en medio de la siesta no devuelve la casa hablando.
 
 **Resumen de la mañana.** A la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga) dice
 de una vez lo que hay para el día: la agenda, el clima y qué servicios vigilados no responden.

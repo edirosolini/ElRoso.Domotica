@@ -73,7 +73,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con cinco tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con seis tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -83,6 +83,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `agenda.SeenStore` | ocurrencias ya avisadas |
 | `watch.StatusStore` | último estado de cada chequeo |
 | `watch.Marks` | marcas de tiempo de los watchers |
+| `quiet.HushStore` | hasta cuándo dura el silencio pedido a mano |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -316,6 +317,20 @@ a nadie, y quien escribe a las 3 AM está despierto pero el resto de la casa no.
 hace falta una excepción por mensaje, cuidado con la palabra clave elegida: `en <equipo>` ya
 enseñó que un prefijo que también puede ser texto real se come parte del mensaje.
 
+`/silencio 2h` agrega una ventana **a pedido** encima de la fija, para una siesta o una
+reunión. `quiet.Hush` la implementa.
+
+- 🔴 **`Hush` tiene la misma forma que `QuietHours`.** Contesta `is_quiet()` y `label`, así
+  que el anunciador, los comandos, la API y `HouseVoice` siguen consultando lo mismo sin
+  enterarse de que ahora el silencio se puede mover. `main()` construye un solo `Hush` y lo
+  pasa donde antes iban las `QuietHours` sueltas.
+- **El silencio se guarda en SQLite, no en memoria.** Un reinicio en medio de la siesta
+  devolvería la casa hablando.
+- **Vence solo**: al consultarlo pasada la hora, `until()` lo borra. Nadie aguas abajo tiene
+  que chequear dos cosas.
+- Los comandos verifican con `isinstance` que haya un `Hush` de verdad: con unas `QuietHours`
+  sueltas no hay nada que mover y contestan que no está configurado, en vez de reventar.
+
 ## Alarmas y repetición
 
 Una alarma repite de tres formas: `once`, `daily` y `weekly`. La semanal guarda los días en
@@ -343,8 +358,8 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 21 nombres y `COMMAND_MENU` solo 14: la diferencia son **alias**
-(`ayuda`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`). Funcionan, pero no van
+`ALL_COMMANDS` tiene 24 nombres y `COMMAND_MENU` solo 16: la diferencia son **alias**
+(`ayuda`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`). Funcionan, pero no van
 al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie. Hay test que impide
 que la ayuda ofrezca un comando que no existe.
 

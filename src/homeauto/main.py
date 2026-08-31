@@ -25,6 +25,7 @@ from homeauto.bot.commands import Commands
 from homeauto.briefing import Briefing
 from homeauto.config import Config
 from homeauto.polish import GoogleModel, Polisher, as_is
+from homeauto.quiet import Hush, HushStore
 from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
@@ -69,11 +70,13 @@ OFF_COMMANDS = ("apagar",)
 WEATHER_COMMANDS = ("clima", "tiempo")
 AGENDA_COMMANDS = ("agenda",)
 STATUS_COMMANDS = ("estado",)
+SILENCE_COMMANDS = ("silencio", "siesta")
+SPEAK_COMMANDS = ("hablar",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
-    + AGENDA_COMMANDS + STATUS_COMMANDS
+    + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
 )
 
 # What Telegram offers when you type "/". Without registering this the commands
@@ -85,6 +88,8 @@ COMMAND_MENU = (
     ("alarma", "Avisar a una hora — /alarma 7:30 arriba"),
     ("lista", "Ver lo que está programado"),
     ("cancelar", "Cancelar por número — /cancelar 3"),
+    ("silencio", "No hablar por un rato — /silencio 2h"),
+    ("hablar", "Cancelar el silencio y volver a hablar"),
     ("volumen", "Cambiar el volumen, de 0 a 100"),
     ("parar", "Cortar lo que esté sonando"),
     ("apagar", "Cerrar la app y dejar el equipo en reposo"),
@@ -311,6 +316,8 @@ def register(app: Application, commands: Commands) -> None:
         (WEATHER_COMMANDS, commands.weather),
         (AGENDA_COMMANDS, commands.agenda_command),
         (STATUS_COMMANDS, commands.status),
+        (SILENCE_COMMANDS, commands.silence),
+        (SPEAK_COMMANDS, commands.speak),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -340,6 +347,9 @@ def main() -> None:
 
     notifier = ChatNotifier(app.bot)
     db_path = STATE_DIR / "jobs.db"
+    # The quiet window everyone consults: the fixed hours plus whatever
+    # /silencio asked for. Built before its users, like the rest of the file.
+    hush = Hush(hours=config.quiet_hours, store=HushStore(db_path))
     reminders = Reminders(
         store=Store(db_path),
         timer=JobQueueTimer(app.job_queue),
@@ -347,7 +357,7 @@ def main() -> None:
             speakers=speakers,
             notify=notifier,
             fallback=config.default_device,
-            quiet=config.quiet_hours,
+            quiet=hush,
         ),
     )
     calendar = None
@@ -368,7 +378,7 @@ def main() -> None:
         default_devices=[config.default_device],
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
-        quiet=config.quiet_hours,
+        quiet=hush,
     )
 
     monitor = None
@@ -416,7 +426,7 @@ def main() -> None:
         reminders=reminders,
         preferences=Preferences(db_path),
         weather=weather,
-        quiet=config.quiet_hours,
+        quiet=hush,
         clock=datetime.now,
     )
     register(app, commands)
@@ -441,7 +451,7 @@ def main() -> None:
                 default_devices=[config.default_device],
                 notify=notifier,
                 chat_ids=config.allowed_chat_ids,
-                quiet=config.quiet_hours,
+                quiet=hush,
             ),
             port=config.api_port,
         )
