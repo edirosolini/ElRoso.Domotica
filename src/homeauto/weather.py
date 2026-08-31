@@ -194,12 +194,14 @@ class RainWatcher:
         marks,
         clock: Callable[[], datetime] = datetime.now,
         window_hours: int = RAIN_WINDOW_HOURS,
+        polish: Callable[..., str] = as_is,
     ):
         self.weather = weather
         self.announce = announce
         self.marks = marks
         self.clock = clock
         self.window_hours = window_hours
+        self.polish = polish
 
     def check(self) -> str | None:
         now = self.clock()
@@ -214,7 +216,9 @@ class RainWatcher:
         if rain is None:
             return None
 
-        text = f"Ojo, va a llover a eso de {spoken_clock(rain.when.hour, rain.when.minute)}."
+        text = self.polish(
+            f"Ojo, va a llover a eso de {spoken_clock(rain.when.hour, rain.when.minute)}."
+        )
         try:
             self.announce(text)
         except Exception:

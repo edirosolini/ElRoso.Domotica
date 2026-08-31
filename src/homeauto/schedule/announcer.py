@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 from typing import Callable
 
+from homeauto.polish import as_is
 from homeauto.schedule.store import Job
 from homeauto.timespec import format_weekdays
 from homeauto.voice.caster import CastError
@@ -30,6 +31,7 @@ class Announcer:
         fallback: str,
         quiet=None,
         clock: Callable[[], datetime] = datetime.now,
+        polish: Callable[..., str] = as_is,
     ):
         self.speakers = speakers
         self.notify = notify
@@ -37,10 +39,12 @@ class Announcer:
         self.fallback = fallback
         self.quiet = quiet
         self.clock = clock
+        self.polish = polish
 
     def __call__(self, job: Job) -> None:
         problem = None
         resting = self.quiet is not None and self.quiet.is_quiet(self.clock())
+        message = self.polish(job.message)
 
         if resting:
             log.info("job %s cae en horario de descanso: solo va al chat", job.id)
@@ -48,20 +52,20 @@ class Announcer:
             problems = []
             for alias in job.devices or [self.fallback]:
                 try:
-                    self.speakers.get(alias).say(job.message)
+                    self.speakers.get(alias).say(message)
                 except DEVICE_ERRORS as exc:
                     problems.append(f"{alias}: {exc}")
                     log.warning("el job %s no sonó en %s: %s", job.id, alias, exc)
             problem = "; ".join(problems) if problems else None
 
         try:
-            self.notify(job.chat_id, self._text(job, problem, resting))
+            self.notify(job.chat_id, self._text(message, job, problem, resting))
         except Exception:
             # The speaker may already have spoken; a broken chat does not undo that.
             log.exception("no se pudo avisar por chat del job %s", job.id)
 
-    def _text(self, job: Job, problem: str | None, resting: bool = False) -> str:
-        text = f"⏰ {job.message}"
+    def _text(self, message: str, job: Job, problem: str | None, resting: bool = False) -> str:
+        text = f"⏰ {message}"
         if job.is_daily:
             text += "\n(alarma de todos los días)"
         elif job.is_weekly:

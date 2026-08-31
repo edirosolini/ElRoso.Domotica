@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Callable
 
+from homeauto.polish import as_is
 from homeauto.watch.marks import Marks
 from homeauto.watch.seq import summarize
 
@@ -22,10 +23,11 @@ class SeqWatcher:
         self,
         client,
         marks: Marks,
-        announce: Callable[[str], None],
+        announce: Callable[..., None],
         clock: Callable[[], datetime] = datetime.now,
         cooldown_minutes: int = COOLDOWN_MINUTES,
         lookback_minutes: int = FIRST_LOOKBACK_MINUTES,
+        polish: Callable[..., str] = as_is,
     ):
         self.client = client
         self.marks = marks
@@ -33,6 +35,7 @@ class SeqWatcher:
         self.clock = clock
         self.cooldown_minutes = cooldown_minutes
         self.lookback_minutes = lookback_minutes
+        self.polish = polish
 
     def check(self) -> str | None:
         now = self.clock()
@@ -55,8 +58,13 @@ class SeqWatcher:
             log.info("hay errores en Seq pero seguimos en enfriamiento")
             return None
 
-        message = summarize(events)
-        if message:
-            self.announce(message)
-            self.marks.set(LAST_ALERT, now)
-        return message
+        summary = summarize(events)
+        if summary is None:
+            return None
+
+        # The quoted log line stays written: it is arbitrary text, with digits
+        # and stack traces in it, and none of that survives being spoken.
+        spoken = self.polish(summary.spoken, must_keep=("Seq",))
+        self.announce(spoken, summary.detail)
+        self.marks.set(LAST_ALERT, now)
+        return spoken

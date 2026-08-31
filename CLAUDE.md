@@ -258,7 +258,14 @@ generan texto, porque todos escribían el número con `f"{n}"`.
   generamos nosotros. Un anuncio de agenda tiene que decir exactamente lo que dice el
   calendario; reescribirlo sería peor que leer mal un número.
 
-Hay test que verifica que **ningún dígito** sobrevive en el texto que arma la agenda ni el clima.
+Hay test que verifica que **ningún dígito** sobrevive en el texto que arma la agenda, el clima,
+el resumen de la mañana, el aviso del monitor ni el de Seq.
+
+🔴 **Lo hablado y lo escrito no son lo mismo en los avisos de vigilancia.** El detalle de una
+sonda (`HTTP 503 en 1.24s`) y la cita de un log de Seq son texto arbitrario: sirven leídos y
+son ilegibles dichos, además de estar llenos de dígitos. El monitor y `SeqWatcher` mandan el
+detalle aparte, y `HouseVoice.announce(written=...)` lo suma solo a la copia del chat.
+`seq.Summary` existe para eso: `spoken` y `detail`.
 
 ### Pulido de la redacción
 
@@ -268,8 +275,18 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
 - 🔴 **El original siempre gana.** Sin clave, sin red, con timeout o con una respuesta
   sospechosa, se dice el texto que ya había. Esto es decoración sobre un camino que tiene que
   funcionar: nadie puede quedarse sin aviso porque un modelo estaba lento.
-- 🔴 **Solo se pule lo que generamos nosotros** — agenda, clima y avisos de evento. `/decir`
-  y el mensaje de un timer **van literales**: ahí las palabras son de una persona.
+- 🔴 **`/decir` es lo único que va literal.** Todo lo demás que la casa dice pasa por el
+  pulidor: agenda, clima, avisos de evento, el mensaje de un timer o una alarma, los avisos
+  del monitor, el resumen de Seq, el aviso de lluvia, la línea de servicios caídos del
+  resumen y lo que entra por la API. La decisión es del dueño de la casa y reemplaza la
+  regla anterior, que dejaba afuera todo lo escrito por una persona.
+- ⚠️ Consecuencia de lo anterior: **el mensaje de un timer se reescribe.** "sacá la pizza"
+  puede volver como "es hora de sacar la pizza". La validación protege los datos duros, no
+  impide esa licencia. Si molesta, el cambio es sacar `polish` del `Announcer`.
+- 🔴 **Lo que se pule tiene que estar limpio de dígitos primero, o el pulido es un adorno
+  muerto.** La validación descarta cualquier respuesta con dígitos, así que un texto de
+  entrada con "HTTP 503 en 1.24s" garantiza que toda reescritura se tire y se diga el
+  original. Por eso el monitor y Seq separan lo hablado del detalle escrito.
 - **La respuesta se valida antes de usarla.** Se descarta si trae dígitos, si crece o se
   encoge demasiado, si pierde un término que debía sobrevivir, o si cambia una
   **palabra-dato**. `verbalize.DATA_WORDS` define ese vocabulario: números, fracciones de hora
@@ -304,8 +321,10 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
   "Tenés turno con el dentista en diez minutos", que agrega la palabra "turno". Es la licencia
   que se le pide; si algún día molesta, se endurece el prompt.
 - El pulido hace una llamada HTTP bloqueante, pero cuelga de caminos que **ya** corren en
-  `asyncio.to_thread` (los comandos, el watcher y el briefing). No agregar un llamador nuevo
-  que lo invoque desde el event loop.
+  `asyncio.to_thread` (los comandos, los watchers, el briefing y el disparo de una alarma).
+  No agregar un llamador nuevo que lo invoque desde el event loop.
+- ⚠️ La API también pule, así que un aviso urgente puede tardar hasta el timeout de seis
+  segundos más de lo que tardaba. El original igual sale: es demora, no pérdida.
 
 ## Horario de descanso
 

@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from typing import Callable
 
+from homeauto.polish import as_is
 from homeauto.watch.checks import Check, HttpProbe, TcpProbe, run_check
 from homeauto.watch.status import Status, StatusStore
 
@@ -31,6 +32,7 @@ class Monitor:
         tcp: TcpProbe | None = None,
         clock: Callable[[], datetime] = datetime.now,
         failures_to_declare: int = FAILURES_TO_DECLARE,
+        polish: Callable[..., str] = as_is,
     ):
         self.checks = checks
         self.store = store
@@ -40,6 +42,7 @@ class Monitor:
         self.tcp = tcp or TcpProbe()
         self.clock = clock
         self.failures_to_declare = failures_to_declare
+        self.polish = polish
 
     def snapshot(self) -> dict[str, Status]:
         return self.store.all()
@@ -62,6 +65,11 @@ class Monitor:
 
         return announced
 
+    def _say(self, text: str, name: str) -> str:
+        """The spoken half, reworded. The probe detail never gets here: it
+        carries an HTTP status and a duration, and a digit is read wrong."""
+        return self.polish(text, must_keep=(name,))
+
     def _advance(self, check: Check, result, previous: Status | None, now: datetime) -> str | None:
         was_alerted = previous.alerted if previous else False
         failures = previous.failures if previous else 0
@@ -70,16 +78,16 @@ class Monitor:
             # Only worth telling if somebody was told about the outage.
             message = None
             if was_alerted:
-                message = f"{check.name} volvió a responder. {result.detail}"
-                self.announce(message, False)
+                message = self._say(f"{check.name} volvió a responder.", check.name)
+                self.announce(message, False, result.detail)
             self.store.save(Status(check.name, True, 0, False, result.detail, now))
             return message
 
         failures += 1
         message = None
         if not was_alerted and failures >= self.failures_to_declare:
-            message = f"Atención: {check.name} no responde. {result.detail}"
-            self.announce(message, result.urgent)
+            message = self._say(f"Atención: {check.name} no responde.", check.name)
+            self.announce(message, result.urgent, result.detail)
             was_alerted = True
 
         self.store.save(Status(check.name, False, failures, was_alerted, result.detail, now))

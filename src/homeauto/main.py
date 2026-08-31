@@ -228,11 +228,16 @@ def build_post_init(notifier, reminders, api=None):
     return post_init
 
 
-def _alert(house: HouseVoice, text: str, urgent: bool) -> None:
-    """Say it if allowed, and always leave it written in the chat."""
-    result = house.announce(text, urgent=urgent)
+def _alert(house: HouseVoice, text: str, urgent: bool, detail: str = "") -> None:
+    """Say it if allowed, and always leave it written in the chat.
+
+    The detail is written, never spoken: an HTTP status or a quoted log line
+    is what you need to read and the last thing you want read out loud.
+    """
+    written = f"{text}\n{detail}" if detail else text
+    result = house.announce(text, urgent=urgent, written=written)
     if result["spoken"]:
-        house.tell_everyone(f"{'🚨' if urgent else '⚠️'} {text}")
+        house.tell_everyone(f"{'🚨' if urgent else '⚠️'} {written}")
 
 
 def _announce(house: HouseVoice, text: str) -> None:
@@ -358,6 +363,7 @@ def main() -> None:
             notify=notifier,
             fallback=config.default_device,
             quiet=hush,
+            polish=polish,
         ),
     )
     calendar = None
@@ -393,7 +399,8 @@ def main() -> None:
         monitor = Monitor(
             checks=checks,
             store=StatusStore(db_path),
-            announce=lambda text, urgent: _alert(house, text, urgent=urgent),
+            announce=lambda text, urgent, detail="": _alert(house, text, urgent, detail),
+            polish=polish,
         )
         log.info("vigilando %s servicios: %s", len(checks), ", ".join(c.name for c in checks))
     else:
@@ -404,7 +411,8 @@ def main() -> None:
         seq_watcher = SeqWatcher(
             client=SeqClient(base_url=config.seq_url, api_key=config.seq_api_key),
             marks=Marks(db_path),
-            announce=lambda text: _alert(house, text, urgent=False),
+            announce=lambda text, detail="": _alert(house, text, False, detail),
+            polish=polish,
             cooldown_minutes=config.seq_cooldown,
         )
         log.info("vigilando los errores de Seq en %s", config.seq_url)
@@ -452,6 +460,7 @@ def main() -> None:
                 notify=notifier,
                 chat_ids=config.allowed_chat_ids,
                 quiet=hush,
+                polish=polish,
             ),
             port=config.api_port,
         )
@@ -465,7 +474,7 @@ def main() -> None:
     schedule_briefing(
         app,
         config,
-        Briefing(agenda=agenda, weather=weather, monitor=monitor),
+        Briefing(agenda=agenda, weather=weather, monitor=monitor, polish=polish),
         lambda text: _announce(house, text),
     )
 
@@ -473,6 +482,7 @@ def main() -> None:
         weather=weather,
         announce=lambda text: _announce(house, text),
         marks=Marks(db_path),
+        polish=polish,
     )
 
     async def check_rain(_context):

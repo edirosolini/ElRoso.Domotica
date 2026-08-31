@@ -13,16 +13,21 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
+from homeauto.polish import as_is
+
 log = logging.getLogger(__name__)
 
 NOTHING = "No tengo nada para el resumen de hoy."
 
 
 class Briefing:
-    def __init__(self, agenda=None, weather=None, monitor=None):
+    def __init__(self, agenda=None, weather=None, monitor=None, polish: Callable[..., str] = as_is):
         self.agenda = agenda
         self.weather = weather
         self.monitor = monitor
+        # Only the trouble line: the agenda and the weather arrive already
+        # reworded by their own sources, and polishing twice buys nothing.
+        self.polish = polish
 
     def text(self) -> str:
         """What the house says at the briefing hour."""
@@ -57,5 +62,7 @@ class Briefing:
         if not down:
             return ""
         if len(down) == 1:
-            return f"Ojo: {down[0]} no responde."
-        return f"Ojo: no responden {', '.join(down[:-1])} ni {down[-1]}."
+            text = f"Ojo: {down[0]} no responde."
+        else:
+            text = f"Ojo: no responden {', '.join(down[:-1])} ni {down[-1]}."
+        return self.polish(text, must_keep=tuple(down))

@@ -22,7 +22,7 @@ def build(tmp_path, checks, answers, now=NOW, threshold=2):
     monitor = Monitor(
         checks=checks,
         store=StatusStore(tmp_path / "jobs.db"),
-        announce=lambda text, urgent: said.append((text, urgent)),
+        announce=lambda text, urgent, detail="": said.append((text, urgent, detail)),
         run=runner,
         clock=lambda: now,
         failures_to_declare=threshold,
@@ -55,7 +55,29 @@ def test_two_failures_in_a_row_do_warn(tmp_path):
 
     assert len(said) == 1
     assert "landing" in said[0][0]
-    assert "502" in said[0][0]
+    # El detalle viaja aparte: se escribe, no se dice.
+    assert "502" not in said[0][0]
+    assert "502" in said[0][2]
+
+
+def test_the_spoken_alert_carries_no_digits(tmp_path):
+    """Piper lee mal un dígito, y el detalle de la sonda está lleno de ellos."""
+    monitor, said = build(tmp_path, [LANDING], {"landing": [False, False]})
+
+    monitor.run_once()
+    monitor.run_once()
+
+    assert not any(char.isdigit() for char in said[0][0])
+
+
+def test_the_alert_is_reworded_without_losing_the_name(tmp_path):
+    monitor, said = build(tmp_path, [LANDING], {"landing": [False, False]})
+    monitor.polish = lambda text, must_keep=(): f"[{must_keep[0]}] {text}"
+
+    monitor.run_once()
+    monitor.run_once()
+
+    assert said[0][0].startswith("[landing]")
 
 
 def test_it_does_not_repeat_while_it_stays_down(tmp_path):

@@ -16,6 +16,7 @@ from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Iterable
 
+from homeauto.polish import as_is
 from homeauto.voice.broadcast import HouseVoice
 
 log = logging.getLogger(__name__)
@@ -44,9 +45,11 @@ class ApiService:
         chat_ids: Iterable[int],
         quiet=None,
         clock: Callable[[], datetime] = datetime.now,
+        polish: Callable[..., str] = as_is,
     ):
         self.token = token
         self.speakers = speakers
+        self.polish = polish
         self.voice = HouseVoice(
             speakers=speakers,
             default_devices=default_devices,
@@ -84,7 +87,7 @@ class ApiService:
             raise ApiError(f"'text' es demasiado largo (máximo {MAX_TEXT})")
 
         result = self.voice.announce(
-            text,
+            self.polish(text),
             devices=self._targets(payload),
             urgent=bool(payload.get("urgent")),
         )

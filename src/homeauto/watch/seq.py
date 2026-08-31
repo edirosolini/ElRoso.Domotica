@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
+from homeauto.verbalize import number
+
 log = logging.getLogger(__name__)
 
 TIMEOUT = 15
@@ -113,17 +115,32 @@ class SeqClient:
         )
 
 
-def summarize(events: list[SeqEvent]) -> str | None:
-    """One sentence. Reading seven stack traces out loud helps nobody."""
+@dataclass(frozen=True)
+class Summary:
+    """What gets said out loud, and what only gets written.
+
+    🔴 They are separate because the quoted log line is arbitrary text: it
+    carries stack traces, ids and digits, and Piper reads a digit as a loose
+    masculine cardinal. The count is spelled out for the same reason — "Hay 1
+    error" was said as "hay uno error".
+    """
+
+    spoken: str
+    detail: str
+
+
+def summarize(events: list[SeqEvent]) -> Summary | None:
+    """One sentence out loud. Reading seven stack traces helps nobody."""
     if not events:
         return None
 
     count = len(events)
-    heading = "Hay 1 error nuevo en Seq." if count == 1 else f"Hay {count} errores nuevos en Seq."
+    thing = "error nuevo" if count == 1 else "errores nuevos"
+    heading = f"Hay {number(count)} {thing} en Seq."
 
     latest = max(events, key=lambda e: (e.timestamp is not None, e.timestamp or 0))
     quote = latest.message.strip().replace("\n", " ")
     if len(quote) > QUOTE_LIMIT:
         quote = quote[:QUOTE_LIMIT].rstrip() + "…"
 
-    return f"{heading} El último: {quote}"
+    return Summary(spoken=heading, detail=f"El último: {quote}")

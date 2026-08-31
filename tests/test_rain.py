@@ -201,3 +201,15 @@ def test_the_warning_carries_no_digits(watcher):
     watch.check()
 
     assert not any(char.isdigit() for char in said[0])
+
+
+def test_the_rain_warning_is_reworded(tmp_path):
+    watch = RainWatcher(
+        weather=FakeWeather(Rain(datetime(2026, 8, 31, 15, 0), 80)),
+        announce=lambda text: None,
+        marks=Marks(tmp_path / "jobs.db"),
+        clock=lambda: NOW,
+        polish=lambda text, must_keep=(): "Traete el paraguas.",
+    )
+
+    assert watch.check() == "Traete el paraguas."

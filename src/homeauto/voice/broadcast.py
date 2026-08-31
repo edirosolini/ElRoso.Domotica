@@ -34,14 +34,27 @@ class HouseVoice:
     def resting(self) -> bool:
         return self.quiet is not None and self.quiet.is_quiet(self.clock())
 
-    def announce(self, text: str, devices: list[str] | None = None, urgent: bool = False) -> dict:
+    def announce(
+        self,
+        text: str,
+        devices: list[str] | None = None,
+        urgent: bool = False,
+        written: str | None = None,
+    ) -> dict:
+        """`written` is the chat copy when it carries more than what is said.
+
+        A monitor alert quotes an HTTP status and a stack trace: useful to read,
+        unlistenable, and full of digits that Piper reads wrong.
+        """
         targets = list(devices or self.default_devices)
 
         # Urgent wins over the quiet window: production falling over at 3 AM is
         # exactly what somebody should be woken up for.
         if self.resting() and not urgent:
             log.info("aviso en horario de descanso: solo va al chat")
-            self.tell_everyone(f"🔔 {text}\n\n(horario de descanso: no se dijo en voz alta)")
+            self.tell_everyone(
+                f"🔔 {written or text}\n\n(horario de descanso: no se dijo en voz alta)"
+            )
             return {"spoken": False, "notified": True, "devices": targets, "problems": []}
 
         problems = []

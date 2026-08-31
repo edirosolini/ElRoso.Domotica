@@ -113,25 +113,35 @@ def test_nothing_wrong_summarizes_to_nothing():
 
 
 def test_one_error_reads_naturally():
-    text = summarize([_as_event("Se cayó la base")])
+    summary = summarize([_as_event("Se cayó la base")])
 
-    assert "1 error" in text
-    assert "Se cayó la base" in text
+    assert summary.spoken == "Hay un error nuevo en Seq."
+    assert "Se cayó la base" in summary.detail
 
 
 def test_many_errors_are_counted_and_only_one_is_quoted():
     events = [_as_event(f"error {i}") for i in range(7)]
 
-    text = summarize(events)
+    summary = summarize(events)
 
-    assert "7 errores" in text
-    assert text.count("error 0") + text.count("error 6") == 1, "solo se cita uno"
+    assert summary.spoken == "Hay siete errores nuevos en Seq."
+    assert summary.detail.count("error 0") + summary.detail.count("error 6") == 1, "solo se cita uno"
 
 
 def test_a_very_long_message_is_cut():
-    text = summarize([_as_event("x" * 900)])
+    summary = summarize([_as_event("x" * 900)])
 
-    assert len(text) < 400
+    assert len(summary.detail) < 400
+
+
+def test_the_spoken_half_never_carries_a_digit():
+    """El texto hablado se sintetiza; la cita del log queda solo escrita."""
+    events = [_as_event("Timeout tras 30s en /api/v2") for _ in range(21)]
+
+    summary = summarize(events)
+
+    assert not any(char.isdigit() for char in summary.spoken)
+    assert "30s" in summary.detail
 
 
 def _as_event(message):

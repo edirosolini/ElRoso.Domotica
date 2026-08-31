@@ -105,3 +105,23 @@ def test_no_digit_reaches_the_speaker():
     briefing = Briefing(agenda=FakeAgenda(), weather=FakeWeather(), monitor=FakeMonitor(vpn=False))
 
     assert not any(char.isdigit() for char in briefing.text())
+
+
+def test_the_trouble_line_is_reworded_keeping_the_names():
+    briefing = Briefing(
+        monitor=FakeMonitor(vpn=False),
+        polish=lambda text, must_keep=(): f"[{'+'.join(must_keep)}] {text}",
+    )
+
+    assert briefing.text().startswith("[vpn]")
+
+
+def test_what_the_sources_already_polished_is_not_polished_again():
+    """Agenda y clima ya vienen reescritas; una segunda pasada no agrega nada."""
+    briefing = Briefing(
+        agenda=FakeAgenda(),
+        weather=FakeWeather(),
+        polish=lambda text, must_keep=(): "REESCRITO",
+    )
+
+    assert briefing.text() == "Hoy tenés dentista a las diez. Ahora hay veinte grados, despejado."

@@ -30,7 +30,7 @@ def build(tmp_path, rounds=(), boom=None, now=NOW, cooldown=15):
     watcher = SeqWatcher(
         client=seq,
         marks=Marks(tmp_path / "jobs.db"),
-        announce=said.append,
+        announce=lambda text, detail="": said.append((text, detail)),
         clock=lambda: now,
         cooldown_minutes=cooldown,
     )
@@ -51,7 +51,9 @@ def test_errors_are_announced(tmp_path):
     watcher.check()
 
     assert len(said) == 1
-    assert "Se cayó la base" in said[0]
+    assert said[0][0] == "Hay un error nuevo en Seq."
+    # La cita del log se escribe, no se dice.
+    assert "Se cayó la base" in said[0][1]
 
 
 def test_the_first_look_goes_back_a_little(tmp_path):
@@ -89,7 +91,7 @@ def test_after_the_cooldown_it_speaks_again(tmp_path):
         SeqWatcher(
             client=seq,
             marks=Marks(path),
-            announce=said.append,
+            announce=lambda text, detail="": said.append((text, detail)),
             clock=lambda m=moment: m,
             cooldown_minutes=15,
         ).check()
@@ -110,7 +112,8 @@ def test_the_state_survives_a_restart(tmp_path):
     said = []
     seq = FakeSeq([[error("uno")], [error("dos")]])
 
-    SeqWatcher(client=seq, marks=Marks(path), announce=said.append, clock=lambda: NOW).check()
-    SeqWatcher(client=seq, marks=Marks(path), announce=said.append, clock=lambda: NOW).check()
+    keep = lambda text, detail="": said.append((text, detail))
+    SeqWatcher(client=seq, marks=Marks(path), announce=keep, clock=lambda: NOW).check()
+    SeqWatcher(client=seq, marks=Marks(path), announce=keep, clock=lambda: NOW).check()
 
     assert len(said) == 1, "reiniciar no puede saltear el enfriamiento"

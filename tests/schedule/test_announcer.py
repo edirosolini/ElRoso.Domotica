@@ -138,3 +138,19 @@ def test_weekly_alarm_says_which_days_it_repeats():
     announcer(Job(id=1, chat_id=42, when=JOB.when, message="arriba", repeat="weekly", days="1,3,5"))
 
     assert "lun, mié, vie" in sent[0]
+
+
+def test_the_message_is_reworded_before_being_said():
+    speaker = FakeSpeaker("parlante")
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=speaker),
+        notify=lambda chat_id, text: sent.append(text),
+        fallback="parlante",
+        polish=lambda text, must_keep=(): f"Te recuerdo: {text}",
+    )
+
+    announcer(JOB)
+
+    assert speaker.said == ["Te recuerdo: arriba"]
+    assert "Te recuerdo: arriba" in sent[0], "el chat dice lo mismo que el parlante"

@@ -97,9 +97,14 @@ obligatoria: `/alarma lun-vie 10m` no tiene sentido y se rechaza.
 
 ## Redacción más natural (opcional)
 
-El texto que arma el bot —agenda, clima y avisos de evento— puede pasar por un modelo de
-Google para que suene mejor dicho en voz alta. Entra en el free tier de sobra: el uso real son
-decenas de llamadas por día.
+Todo lo que la casa dice puede pasar por un modelo de Google para que suene mejor en voz alta:
+agenda, clima, avisos de evento, el mensaje de un timer o una alarma, los avisos del monitor y
+de Seq, el aviso de lluvia y lo que entra por la API. Entra en el free tier de sobra: el uso
+real son decenas de llamadas por día.
+
+**`/decir` es la excepción y va literal.** Ahí las palabras son tuyas y se dicen como las
+escribiste. En todo lo demás el original siempre gana cuando el modelo falla, tarda o contesta
+algo sospechoso: nadie se queda sin aviso porque un modelo estaba lento.
 
 ```
 antes:  Atención: Dentista, en diez minutos, en Consultorio.

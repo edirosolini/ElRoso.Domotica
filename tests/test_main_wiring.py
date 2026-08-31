@@ -196,8 +196,8 @@ def test_wiring_with_a_key_builds_the_polisher(wired, tmp_path, monkeypatch):
     assert built[0].llm_api_key == "una-clave"
 
 
-def test_the_polisher_reaches_agenda_weather_and_watcher(tmp_path, monkeypatch):
-    """Los tres textos generados tienen que quedar cableados al mismo pulidor."""
+def test_the_polisher_reaches_everything_the_house_says(tmp_path, monkeypatch):
+    """Todo lo que genera el servicio pasa por el mismo pulidor. Menos /decir."""
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
     monkeypatch.setattr(main, "build_speakers", lambda config: _FakeRegistry())
@@ -208,8 +208,18 @@ def test_the_polisher_reaches_agenda_weather_and_watcher(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "build_polisher", lambda config: sentinel)
 
     seen = {}
-    for name, cls in (("agenda", main.AgendaService), ("weather", main.WeatherClient),
-                      ("watcher", main.EventWatcher)):
+    sources = (
+        ("agenda", main.AgendaService),
+        ("weather", main.WeatherClient),
+        ("watcher", main.EventWatcher),
+        ("announcer", main.Announcer),
+        ("monitor", main.Monitor),
+        ("seq", main.SeqWatcher),
+        ("rain", main.RainWatcher),
+        ("briefing", main.Briefing),
+        ("api", main.ApiService),
+    )
+    for name, cls in sources:
         original = cls.__init__
 
         def spy(self, *args, __name=name, __original=original, **kwargs):
@@ -218,13 +228,40 @@ def test_the_polisher_reaches_agenda_weather_and_watcher(tmp_path, monkeypatch):
 
         monkeypatch.setattr(cls, "__init__", spy)
 
+    checks = tmp_path / "checks.json"
+    checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
     path = config_file(
         tmp_path,
-        "CALENDAR_URL_PERSONAL=https://ejemplo/a.ics\nLLM_API_KEY=una-clave\n",
+        "CALENDAR_URL_PERSONAL=https://ejemplo/a.ics\nLLM_API_KEY=una-clave\n"
+        "SEQ_URL=http://172.68.0.7\nSEQ_API_KEY=una-clave\n"
+        f"CHECKS_FILE={checks}\n"
+        "API_TOKEN=un-token-suficientemente-largo\n",
     )
     run_main(monkeypatch, path)
 
-    assert seen == {"agenda": sentinel, "weather": sentinel, "watcher": sentinel}
+    assert seen == {name: sentinel for name, _ in sources}
+
+
+def test_the_words_of_a_person_never_reach_the_polisher(tmp_path, monkeypatch):
+    """🔴 /decir se dice tal cual: ahí las palabras son de alguien, no nuestras."""
+    app = FakeApp()
+    monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
+    monkeypatch.setattr(main, "build_speakers", lambda config: _FakeRegistry())
+    monkeypatch.setattr(main, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(main, "build_polisher", lambda config: lambda text, must_keep=(): "REESCRITO")
+
+    got = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        got.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    assert "polish" not in got, "los comandos no pulen: /decir va literal"
 
 
 def test_the_wired_polisher_is_actually_callable(wired, tmp_path, monkeypatch):
