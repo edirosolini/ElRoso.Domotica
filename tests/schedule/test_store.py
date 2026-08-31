@@ -95,3 +95,38 @@ def test_daily_repeat_is_kept(store):
 def test_unknown_repeat_is_rejected(store):
     with pytest.raises(ValueError, match="repeat"):
         store.add(OWNER, T1, "mal", repeat="cada dos horas")
+
+
+# --- semanales -------------------------------------------------------------
+
+
+def test_weekly_job_remembers_its_days(store):
+    job = store.add(OWNER, T1, "arriba", repeat="weekly", days=(1, 2, 3, 4, 5))
+
+    assert job.weekdays == [1, 2, 3, 4, 5]
+    assert store.get(job.id).weekdays == [1, 2, 3, 4, 5]
+
+
+def test_weekly_without_days_is_rejected(store):
+    with pytest.raises(ValueError, match="días"):
+        store.add(OWNER, T1, "arriba", repeat="weekly")
+
+
+def test_a_job_without_days_reports_none(store):
+    assert store.add(OWNER, T1, "arriba").weekdays == []
+
+
+def test_days_column_is_added_to_an_older_database(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,"
+            " fires_at TEXT NOT NULL, message TEXT NOT NULL, repeat TEXT NOT NULL DEFAULT 'once')"
+        )
+
+    store = Store(path)
+    job = store.add(OWNER, T1, "arriba", repeat="weekly", days=(6, 7))
+
+    assert store.get(job.id).weekdays == [6, 7]

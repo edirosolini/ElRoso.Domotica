@@ -15,8 +15,14 @@ from typing import Callable
 
 from homeauto.agenda.ical import CalendarError
 from homeauto.config import Config
-from homeauto.schedule.store import DAILY, ONCE
-from homeauto.timespec import TimeSpecError, parse_schedule
+from homeauto.schedule.store import DAILY, ONCE, WEEKLY
+from homeauto.timespec import (
+    TimeSpecError,
+    format_weekdays,
+    next_weekday,
+    parse_schedule,
+    parse_weekdays,
+)
 from homeauto.voice.caster import CastError
 from homeauto.voice.registry import UnknownDevice
 from homeauto.voice.tts import TtsError
@@ -30,6 +36,7 @@ ALL_WORD = "todos"
 
 # A leading run of aliases: "comedor", "comedor,recamara", "comedor, recamara".
 _TARGET_LIST = re.compile(r"^([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
+_CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
 
 
 class TargetError(Exception):
@@ -44,6 +51,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /timer 10m sacá la pizza — avisa dentro de un rato
 /alarma 7:30 arriba — avisa a esa hora
 /alarma diaria 7:30 arriba — todos los días
+/alarma lun-vie 5:30 arriba — solo esos días
 /lista — lo que está programado
 /cancelar <n> — cancela uno
 /volumen <0-100> — cambia el volumen
@@ -55,8 +63,9 @@ HELP = """Hola. Manejo los equipos de casa.
 /equipos — qué equipos tengo y cuál está activo
 /usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
 
-La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, mañana 8:00.
+La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, 5.30, mañana 8:00.
 Una hora que ya pasó se entiende como la de mañana.
+Los días de una alarma van adelante de la hora: lun-vie, mar,jue, finde, sab.
 Cualquier comando acepta «en <equipo>» adelante para mandarlo a otro lado."""
 
 
@@ -379,7 +388,14 @@ class Commands:
 
     # --- programados -------------------------------------------------------
 
-    def _schedule(self, chat_id: int, text: str, repeat: str, label: str) -> str:
+    def _schedule(
+        self,
+        chat_id: int,
+        text: str,
+        repeat: str,
+        label: str,
+        days: tuple[int, ...] | None = None,
+    ) -> str:
         denial = self._denial(chat_id)
         if denial:
             return denial
@@ -395,7 +411,13 @@ class Commands:
         except TimeSpecError as exc:
             return str(exc)
 
-        job = self.reminders.add(chat_id, when, message, repeat=repeat, device=",".join(aliases))
+        if days:
+            # The hour already rolled to its next occurrence; now pick the day.
+            when = next_weekday(when, days)
+
+        job = self.reminders.add(
+            chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days
+        )
         return (
             f"{label} #{job.id} en {', '.join(aliases)} "
             f"para {format_when(when, now)}: «{message}»"
@@ -414,6 +436,17 @@ class Commands:
         prefix = f"{TARGET_WORD} {','.join(aliases)} "
         if head.lower() in ("diaria", "diario", "daily"):
             return self._schedule(chat_id, prefix + tail, DAILY, "Alarma todos los días")
+
+        days = parse_weekdays(head)
+        if days:
+            # Days pick the occurrence, so what follows has to be a clock time:
+            # "lun-vie 10m" would mean ten minutes from now on a Tuesday.
+            if not _CLOCK.fullmatch(tail.strip().split(" ")[0]):
+                return "Con días de la semana necesito una hora. Ej: /alarma lun-vie 5:30 arriba"
+            return self._schedule(
+                chat_id, prefix + tail, WEEKLY, f"Alarma {format_weekdays(days)}", days=days
+            )
+
         return self._schedule(chat_id, prefix + rest, ONCE, "Alarma")
 
     def list(self, chat_id: int) -> str:
@@ -428,10 +461,18 @@ class Commands:
         now = self.clock()
         lines = [
             f"#{job.id} · {format_when(job.when, now)} · {', '.join(job.devices) or self.config.default_device}"
-            f"{' · todos los días' if job.is_daily else ''} — {job.message}"
+            f"{self._repetition(job)} — {job.message}"
             for job in jobs
         ]
         return "\n".join(lines)
+
+    @staticmethod
+    def _repetition(job) -> str:
+        if job.is_daily:
+            return " · todos los días"
+        if job.is_weekly:
+            return f" · {format_weekdays(job.weekdays)}"
+        return ""
 
     def cancel(self, chat_id: int, text: str) -> str:
         denial = self._denial(chat_id)

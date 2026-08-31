@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Callable, Protocol
+from typing import Callable, Iterable, Protocol
 
-from homeauto.schedule.store import DAILY, ONCE, Job, Store
+from homeauto.schedule.store import DAILY, ONCE, WEEKLY, Job, Store
+from homeauto.timespec import next_weekday
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +44,9 @@ class Reminders:
         message: str,
         repeat: str = ONCE,
         device: str | None = None,
+        days: Iterable[int] | None = None,
     ) -> Job:
-        job = self.store.add(chat_id, when, message, repeat, device)
+        job = self.store.add(chat_id, when, message, repeat, device, days)
         self._arm(job)
         return job
 
@@ -72,10 +74,20 @@ class Reminders:
             # A speaker that is off must not take the schedule down with it.
             log.exception("no se pudo anunciar el job %s", job_id)
 
-        if job.repeat == DAILY:
-            next_time = job.when + timedelta(days=1)
-            self.store.reschedule(job_id, next_time)
-            self._arm(self.store.get(job_id))
-        else:
+        next_time = self._next_run(job)
+        if next_time is None:
             self.timer.unschedule(str(job_id))
             self.store.remove(job_id)
+        else:
+            self.store.reschedule(job_id, next_time)
+            self._arm(self.store.get(job_id))
+
+    @staticmethod
+    def _next_run(job: Job) -> datetime | None:
+        """When a repeating job fires again; None if it was a one-shot."""
+        if job.repeat == DAILY:
+            return job.when + timedelta(days=1)
+        if job.repeat == WEEKLY:
+            # Start from the day after, or it would match today all over again.
+            return next_weekday(job.when + timedelta(days=1), job.weekdays)
+        return None

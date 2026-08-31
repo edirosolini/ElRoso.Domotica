@@ -128,3 +128,29 @@ def test_start_fires_what_was_missed_while_it_was_down(tmp_path):
     Reminders(store=Store(path), timer=FakeTimer(), announce=announced.append).start(now=NOW)
 
     assert [j.message for j in announced] == ["esto se perdió"]
+
+
+# --- semanales -------------------------------------------------------------
+
+
+def test_weekly_job_jumps_to_the_next_day_it_asked_for(parts):
+    reminders, store, timer, announced = parts
+    friday = datetime(2026, 9, 4, 5, 30)
+
+    job = reminders.add(OWNER, friday, "arriba", repeat="weekly", days=(1, 2, 3, 4, 5))
+    timer.fire(str(job.id))
+
+    assert announced[0].message == "arriba"
+    assert store.get(job.id).when == datetime(2026, 9, 7, 5, 30)  # el lunes, no el sábado
+    assert timer.armed[str(job.id)][0] == datetime(2026, 9, 7, 5, 30)
+
+
+def test_weekly_job_survives_the_firing(parts):
+    reminders, store, timer, _ = parts
+    monday = datetime(2026, 8, 31, 5, 30)
+
+    job = reminders.add(OWNER, monday, "arriba", repeat="weekly", days=(1,))
+    timer.fire(str(job.id))
+
+    assert store.get(job.id) is not None
+    assert store.get(job.id).when == datetime(2026, 9, 7, 5, 30)

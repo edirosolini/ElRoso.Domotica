@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Callable
 
 from homeauto.schedule.store import Job
+from homeauto.timespec import format_weekdays
 from homeauto.voice.caster import CastError
 from homeauto.voice.registry import UnknownDevice
 from homeauto.voice.tts import TtsError
@@ -63,6 +64,8 @@ class Announcer:
         text = f"⏰ {job.message}"
         if job.is_daily:
             text += "\n(alarma de todos los días)"
+        elif job.is_weekly:
+            text += f"\n(alarma de {format_weekdays(job.weekdays)})"
         if resting:
             text += f"\n\nHorario de descanso ({self.quiet.label}): no lo dije en voz alta."
         elif problem:

@@ -11,6 +11,7 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /timer 10m sacá la pizza        avisa dentro de 10 minutos
 /alarma 7:30 arriba             avisa a esa hora, una vez
 /alarma diaria 7:30 arriba      avisa todos los días
+/alarma lun-vie 5:30 arriba     avisa solo esos días
 /lista                          lo que está programado
 /cancelar 3                     cancela por número
 /volumen 40                     0 a 100
@@ -68,8 +69,14 @@ qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
 Los timers y las alarmas se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 
-Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `mañana 8:00`.
-Una hora que ya pasó se entiende como la de mañana.
+Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `5.30`,
+`mañana 8:00`. Una hora que ya pasó se entiende como la de mañana.
+
+Una alarma puede repetirse los días que se le pidan, escribiéndolos antes de la hora:
+rangos (`lun-vie`, `vie-lun` cruza el fin de semana), listas (`mar,jue`), un día suelto
+(`sab`) o los atajos `finde` y `habiles`. Se aceptan nombres completos y con acento
+(`miércoles`). Los días eligen qué ocurrencia de la hora dispara, así que ahí la hora es
+obligatoria: `/alarma lun-vie 10m` no tiene sentido y se rechaza.
 
 ## Redacción más natural (opcional)
 

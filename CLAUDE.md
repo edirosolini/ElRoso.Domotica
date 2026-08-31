@@ -284,6 +284,31 @@ a nadie, y quien escribe a las 3 AM está despierto pero el resto de la casa no.
 hace falta una excepción por mensaje, cuidado con la palabra clave elegida: `en <equipo>` ya
 enseñó que un prefijo que también puede ser texto real se come parte del mensaje.
 
+## Alarmas y repetición
+
+Una alarma repite de tres formas: `once`, `daily` y `weekly`. La semanal guarda los días en
+la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración que
+`datetime.isoweekday()`.
+
+- **Los días eligen la ocurrencia de la hora, no la hora.** Por eso `parse_weekdays()` está
+  separado de `parse_schedule()`: primero se resuelve la hora — que ya rueda sola al día
+  siguiente si pasó — y recién después `next_weekday()` la corre hasta el primer día pedido.
+- **Con días, la hora es obligatoria.** `/alarma lun-vie 10m` se rechaza: una duración
+  relativa cae en el día que caiga y no tiene nada que ver con los días pedidos.
+- Un rango **da la vuelta**: `vie-lun` es viernes, sábado, domingo y lunes. Se cuenta hacia
+  adelante en módulo siete en vez de rebanar una lista.
+- `Store.add()` **rechaza una alarma semanal sin días**: no encontraría nunca un día para
+  disparar y quedaría muerta en la base sin ruido.
+- Al disparar, la próxima corrida se busca **desde el día siguiente**, o volvería a caer en
+  el mismo día para siempre.
+- La columna `days` entra por `_add_missing_columns`, como `device`: hay bases desplegadas
+  de antes.
+- ⚠️ **Los nombres de día son texto de chat, no de parlante.** `format_weekdays()` vive en
+  `timespec.py` y no pasa por `verbalize.py` porque el parlante dice el mensaje de la alarma,
+  nunca sus días. Si algún día se hablan, hay que verbalizarlos.
+- El reloj acepta `5.30` además de `5:30`. Es como la gente escribe la hora; no cambia nada
+  más del parser.
+
 ## Comandos y alias
 
 `ALL_COMMANDS` tiene 21 nombres y `COMMAND_MENU` solo 14: la diferencia son **alias**

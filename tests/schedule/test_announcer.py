@@ -125,3 +125,16 @@ def test_a_device_that_no_longer_exists_still_reaches_the_chat():
 
     assert len(sent) == 1
     assert "cocina" in sent[0][1]
+
+
+def test_weekly_alarm_says_which_days_it_repeats():
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=FakeSpeaker()),
+        notify=lambda chat_id, text: sent.append(text),
+        fallback="parlante",
+    )
+
+    announcer(Job(id=1, chat_id=42, when=JOB.when, message="arriba", repeat="weekly", days="1,3,5"))
+
+    assert "lun, mié, vie" in sent[0]
