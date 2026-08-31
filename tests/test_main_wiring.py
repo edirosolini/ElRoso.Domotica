@@ -108,7 +108,15 @@ def test_wiring_with_calendar_schedules_its_jobs(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, path)
 
     assert "calendar-watch" in wired.job_queue.repeating
-    assert "calendar-briefing" in wired.job_queue.daily
+    assert "briefing" in wired.job_queue.daily
+
+
+def test_the_briefing_does_not_need_a_calendar(wired, tmp_path, monkeypatch):
+    """Sin agenda, el clima y el estado de los servicios siguen valiendo la pena."""
+    run_main(monkeypatch, config_file(tmp_path, "BRIEFING_AT=08:00\n"))
+
+    assert "briefing" in wired.job_queue.daily
+    assert "calendar-watch" not in wired.job_queue.repeating
 
 
 def test_wiring_with_seq_schedules_its_job(wired, tmp_path, monkeypatch):

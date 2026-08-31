@@ -30,11 +30,15 @@ Telegram, pero los parlantes se quedan callados. Vale para las alarmas y tambié
 `/decir` manual — la regla protege a los que duermen, no a quien está escribiendo. Se cambia
 con `QUIET_FROM` y `QUIET_TO`; poniendo las dos iguales se desactiva.
 
+**Resumen de la mañana.** A la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga) dice
+de una vez lo que hay para el día: la agenda, el clima y qué servicios vigilados no responden.
+Si todo está en orden no nombra ningún servicio. No hace falta tener agenda configurada: con
+el clima solo ya sirve, y una fuente que falla no se lleva puestas a las otras.
+
 **Agenda.** Lee Google Calendar por su **dirección privada en formato iCal**, no por la API:
 es solo lectura, así que no hace falta proyecto en Google Cloud, ni OAuth, ni tokens que se
-vencen. Además del `/agenda` a pedido hace dos cosas solo:
+vencen. Además del `/agenda` a pedido:
 
-- **Resumen del día** a la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga).
 - **Aviso antes de cada evento**, `EVENT_LEAD_MINUTES` minutos antes (por defecto 10).
 
 Cada aviso se manda una sola vez: queda registrado en SQLite, así que un reinicio no

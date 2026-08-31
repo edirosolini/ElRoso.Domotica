@@ -22,6 +22,7 @@ from homeauto.agenda.service import AgendaService
 from homeauto.agenda.watcher import EventWatcher
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
+from homeauto.briefing import Briefing
 from homeauto.config import Config
 from homeauto.polish import GoogleModel, Polisher, as_is
 from homeauto.schedule.announcer import Announcer
@@ -163,27 +164,34 @@ def local_timezone():
     return get_localzone()
 
 
-def schedule_calendar_jobs(app, config, agenda, watcher) -> None:
-    """The repeating jobs behind the agenda.
-
-    🔴 The times carry their timezone. APScheduler reads a naive time as UTC,
-    and a briefing meant for 08:00 would land at 05:00.
-    """
-    zone = local_timezone()
+def schedule_calendar_jobs(app, watcher) -> None:
+    """The look-ahead that announces an event before it starts."""
 
     async def look_ahead(_context):
         await asyncio.to_thread(watcher.check)
 
     app.job_queue.run_repeating(look_ahead, interval=60, first=30, name="calendar-watch")
 
-    if config.briefing_at is not None:
-        moment = clock_time(config.briefing_at.hour, config.briefing_at.minute, tzinfo=zone)
 
-        async def briefing(_context):
-            await asyncio.to_thread(watcher.say_briefing, agenda)
+def schedule_briefing(app, config, briefing, announce) -> None:
+    """The morning summary.
 
-        app.job_queue.run_daily(briefing, time=moment, name="calendar-briefing")
-        log.info("resumen diario a las %s", moment.strftime("%H:%M"))
+    🔴 The time carries its timezone. APScheduler reads a naive time as UTC,
+    and a briefing meant for 08:00 would land at 05:00.
+
+    It does not depend on the calendar: with no calendar configured the weather
+    and the state of the services are still worth hearing.
+    """
+    if config.briefing_at is None:
+        return
+
+    moment = clock_time(config.briefing_at.hour, config.briefing_at.minute, tzinfo=local_timezone())
+
+    async def say_briefing(_context):
+        await asyncio.to_thread(lambda: announce(briefing.text()))
+
+    app.job_queue.run_daily(say_briefing, time=moment, name="briefing")
+    log.info("resumen diario a las %s", moment.strftime("%H:%M"))
 
 
 def build_post_init(notifier, reminders, api=None):
@@ -388,6 +396,13 @@ def main() -> None:
     else:
         log.info("Seq apagado: faltan SEQ_URL o SEQ_API_KEY")
 
+    weather = WeatherClient(
+        latitude=config.weather_lat,
+        longitude=config.weather_lon,
+        place=config.weather_place,
+        polish=polish,
+    )
+
     commands = Commands(
         config=config,
         speakers=speakers,
@@ -395,12 +410,7 @@ def main() -> None:
         monitor=monitor,
         reminders=reminders,
         preferences=Preferences(db_path),
-        weather=WeatherClient(
-            latitude=config.weather_lat,
-            longitude=config.weather_lon,
-            place=config.weather_place,
-            polish=polish,
-        ),
+        weather=weather,
         quiet=config.quiet_hours,
         clock=datetime.now,
     )
@@ -416,7 +426,6 @@ def main() -> None:
             clock=lambda: datetime.now(local_timezone()),
             polish=polish,
         )
-        watcher.say_briefing = lambda service: _announce(house, service.briefing())
 
     api = None
     if config.api_enabled:
@@ -436,7 +445,14 @@ def main() -> None:
 
     app.post_init = build_post_init(notifier, reminders, api)
     if watcher is not None:
-        schedule_calendar_jobs(app, config, agenda, watcher)
+        schedule_calendar_jobs(app, watcher)
+
+    schedule_briefing(
+        app,
+        config,
+        Briefing(agenda=agenda, weather=weather, monitor=monitor),
+        lambda text: _announce(house, text),
+    )
 
     if monitor is not None:
         async def check_services(_context):

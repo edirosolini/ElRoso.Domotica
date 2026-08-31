@@ -149,6 +149,21 @@ comando propio que consulta y habla — nunca intentando engancharse al Asistent
 Al 2026-08-30 el Nest está en `locale es-419` y zona horaria de Buenos Aires, o sea que su
 configuración regional es correcta y no es la causa de las fallas del Asistente.
 
+## Resumen de la mañana
+
+`briefing.py` junta agenda, clima y servicios caídos en un solo texto hablado, a la hora de
+`BRIEFING_AT`.
+
+- **Las tres fuentes son independientes.** Una que falla deja un hueco, no cancela el
+  resumen: un calendario que no contesta no te puede costar el clima. Es la misma postura
+  que dentro de `agenda/`, donde un calendario roto no tapa a los otros.
+- **No depende de la agenda.** El job del resumen se agenda aunque no haya ningún calendario
+  configurado. Por eso está fuera de `schedule_calendar_jobs()`.
+- **De los servicios solo se nombran los caídos.** Escuchar "todo en orden" cada mañana
+  enseña a no escuchar; el estado completo está en `/estado`.
+- El texto se sintetiza, así que **no lleva dígitos**: las fuentes ya hablan en palabras y
+  este módulo solo agrega nombres y conectores. Hay test que lo verifica.
+
 ## Agenda
 
 `homeauto/agenda/` lee Google Calendar por la **dirección privada en formato iCal**, elegida
