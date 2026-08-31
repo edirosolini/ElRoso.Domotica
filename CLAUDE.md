@@ -420,6 +420,16 @@ abajo en ese orden a propósito.
 - 🔴 **Confirmar que empezó a sonar, y que suena lo que se pidió.** Por un instante el
   dispositivo sigue reportando el clip anterior como `PLAYING`: aceptarlo es informar que la
   casa fue avisada cuando no salió nada por los parlantes.
+- 🔴 **Un `content_id` vacío no es "nuestro audio", es "todavía no dijo nada".** Contarlo como
+  cargado dejaba pasar el caso real: receptor recién lanzado, `BUFFERING` con nada adentro,
+  el caster daba el anuncio por dicho y el Nest se quedaba mudo. Se veía como un aviso que
+  llegaba a Telegram y no sonaba, **sin una sola línea de error en el log**. Ahora el equipo
+  tiene que nombrar nuestra URL. Pasa seguido después de un rato sin usar el equipo: cuando
+  ya hay un anuncio reciente, el estado viene lleno y el agujero no se nota.
+- **Un aviso urgente sube el volumen y lo devuelve.** `URGENT_MIN_VOLUME` (60) es el piso: una
+  casa que quedó en volumen bajo convierte una advertencia en nada. Se restaura en un
+  `finally`, así que un audio que falla tampoco deja los parlantes a todo volumen. Solo ahí se
+  espera a que el clip termine; restaurar en el medio se comería el final de la frase.
 - **No existe apagar por Cast.** Lo máximo es `quit_app()`, que deja el equipo en reposo;
   el televisor se apaga solo si está configurado para dormirse al perder señal. El apagado
   real pide ADB, y los dos equipos de la casa son Google TV, así que los dos podrían.

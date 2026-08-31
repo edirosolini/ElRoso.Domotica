@@ -23,8 +23,8 @@ class FakeCaster:
         self.volumes = []
         self.stopped = 0
 
-    def play(self, url):
-        self.played.append(url)
+    def play(self, url, min_volume=None):
+        self.played.append((url, min_volume))
 
     def set_volume(self, percent):
         self.volumes.append(percent)
@@ -63,8 +63,8 @@ def test_say_synthesizes_then_plays_the_served_url(speaker):
 
     assert synth.said == ["hola"]
     assert len(caster.played) == 1
-    assert caster.played[0].startswith("http://fake/")
-    assert caster.played[0].endswith(".wav")
+    assert caster.played[0][0].startswith("http://fake/")
+    assert caster.played[0][0].endswith(".wav")
 
 
 def test_the_played_url_matches_the_synthesized_file(speaker):
@@ -72,7 +72,7 @@ def test_the_played_url_matches_the_synthesized_file(speaker):
 
     path = spk.say("hola")
 
-    assert caster.played[0] == f"http://fake/{path.name}"
+    assert caster.played[0][0] == f"http://fake/{path.name}"
 
 
 def test_server_is_started_once_even_after_several_phrases(speaker):
@@ -104,3 +104,19 @@ def test_device_name_is_exposed(speaker):
     spk, _, _, _ = speaker
 
     assert spk.device_name() == "Nest"
+
+
+def test_an_urgent_phrase_carries_its_volume_floor(speaker):
+    spk, _, caster, _ = speaker
+
+    spk.say("se cayó producción", min_volume=60)
+
+    assert caster.played[-1][1] == 60
+
+
+def test_an_ordinary_phrase_does_not_touch_the_volume(speaker):
+    spk, _, caster, _ = speaker
+
+    spk.say("la cena está lista")
+
+    assert caster.played[-1][1] is None

@@ -114,9 +114,14 @@ class Caster:
         """Confirm that *this* clip actually started.
 
         Reporting success without checking is worse than failing: the person is
-        told the house was warned when nothing came out of the speakers. The
-        content is compared too, because for a moment the device still reports
-        the previous clip as playing.
+        told the house was warned when nothing came out of the speakers.
+
+        🔴 The device has to name our URL. An empty `content_id` means it has
+        not told us anything yet, never that our audio is loaded: a freshly
+        launched receiver reports BUFFERING with nothing in it, and taking that
+        as good is how a service alert was marked as announced while the
+        speaker stayed silent. Waiting costs a few polls; guessing costs the
+        warning.
         """
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -125,24 +130,66 @@ class Caster:
             if status.idle_reason == "ERROR":
                 raise CastError("el dispositivo rechazó el audio")
 
-            loaded = getattr(status, "content_id", None) in (None, url)
-            if loaded and status.player_state in ("PLAYING", "BUFFERING"):
-                return
-            # A clip can be over before the first poll: that still counts.
-            if loaded and status.idle_reason == "FINISHED":
-                return
+            if getattr(status, "content_id", None) == url:
+                if status.player_state in ("PLAYING", "BUFFERING"):
+                    return
+                # A clip can be over before the first poll: that still counts.
+                if status.idle_reason == "FINISHED":
+                    return
             time.sleep(0.2)
 
         raise CastError("el audio no empezó a sonar (¿el equipo está ocupado o apagado?)")
 
-    def play(self, url: str, timeout: float = PLAYBACK_TIMEOUT) -> None:
+    def _wait_until_finished(self, controller, url: str, timeout: float) -> None:
+        """Wait for the clip to end. Only used when the volume has to go back:
+        restoring it mid-sentence would drop the tail of the announcement."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            controller.update_status()
+            status = controller.status
+            if getattr(status, "content_id", None) != url:
+                return  # someone else took the session; not ours to wait for
+            if status.player_state not in ("PLAYING", "BUFFERING"):
+                return
+            time.sleep(0.2)
+
+    @staticmethod
+    def _raise_volume(device, min_volume: int | None) -> float | None:
+        """Lift the volume to the floor, returning what to put back afterwards.
+
+        None means it was already loud enough and nothing has to be restored.
+        """
+        if min_volume is None:
+            return None
+        current = getattr(getattr(device, "status", None), "volume_level", None)
+        floor = min_volume / 100
+        if current is None or current >= floor:
+            return None
+        log.info("subo el volumen de %.2f a %.2f para un aviso urgente", current, floor)
+        device.set_volume(floor)
+        return current
+
+    def play(self, url: str, timeout: float = PLAYBACK_TIMEOUT, min_volume: int | None = None) -> None:
+        """Play the audio, optionally guaranteeing a minimum volume for it.
+
+        The floor is for urgent announcements: a house left at low volume turns
+        a warning into nothing. It is put back afterwards, including when the
+        audio fails, so an alert never leaves the speakers loud for good.
+        """
         device = self._resolve()
         self._take_over(device)
+        previous = self._raise_volume(device, min_volume)
 
         controller = device.media_controller
-        controller.play_media(url, AUDIO_MIME)
-        controller.block_until_active(timeout=self.discovery_timeout)
-        self._wait_until_playing(controller, url, timeout)
+        try:
+            controller.play_media(url, AUDIO_MIME)
+            controller.block_until_active(timeout=self.discovery_timeout)
+            self._wait_until_playing(controller, url, timeout)
+            if previous is not None:
+                self._wait_until_finished(controller, url, timeout)
+        finally:
+            if previous is not None:
+                device.set_volume(previous)
 
     def set_volume(self, percent: int) -> None:
         if not 0 <= percent <= 100:

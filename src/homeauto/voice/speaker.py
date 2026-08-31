@@ -21,11 +21,15 @@ class Speaker:
             self.media_server.start()
             self._serving = True
 
-    def say(self, text: str) -> Path:
-        """Synthesize, publish and play. Returns the audio file used."""
+    def say(self, text: str, min_volume: int | None = None) -> Path:
+        """Synthesize, publish and play. Returns the audio file used.
+
+        `min_volume` guarantees the announcement is audible: a house left at
+        low volume turns an urgent warning into nothing.
+        """
         path = self.synth.say(text)
         self._ensure_serving()
-        self.caster.play(self.media_server.url_for(path.name))
+        self.caster.play(self.media_server.url_for(path.name), min_volume=min_volume)
         return path
 
     def set_volume(self, percent: int) -> None:
