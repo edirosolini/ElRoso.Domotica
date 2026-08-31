@@ -41,7 +41,7 @@ from homeauto.watch.monitor import Monitor
 from homeauto.watch.seq import SeqClient
 from homeauto.watch.seq_watcher import SeqWatcher
 from homeauto.watch.status import StatusStore
-from homeauto.weather import WeatherClient
+from homeauto.weather import RainWatcher, WeatherClient
 
 CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
 PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
@@ -95,6 +95,11 @@ COMMAND_MENU = (
     ("usar", "Cambiar el equipo por defecto — /usar tv"),
     ("ayuda", "Cómo se usa"),
 )
+
+
+# Half an hour is enough for a warning that fires at most once a day, and it
+# keeps the free forecast requests down to a couple dozen.
+RAIN_INTERVAL = 1800
 
 
 def local_ip() -> str:
@@ -453,6 +458,17 @@ def main() -> None:
         Briefing(agenda=agenda, weather=weather, monitor=monitor),
         lambda text: _announce(house, text),
     )
+
+    rain = RainWatcher(
+        weather=weather,
+        announce=lambda text: _announce(house, text),
+        marks=Marks(db_path),
+    )
+
+    async def check_rain(_context):
+        await asyncio.to_thread(rain.check)
+
+    app.job_queue.run_repeating(check_rain, interval=RAIN_INTERVAL, first=90, name="rain-watch")
 
     if monitor is not None:
         async def check_services(_context):

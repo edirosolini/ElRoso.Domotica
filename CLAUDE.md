@@ -149,6 +149,23 @@ comando propio que consulta y habla — nunca intentando engancharse al Asistent
 Al 2026-08-30 el Nest está en `locale es-419` y zona horaria de Buenos Aires, o sea que su
 configuración regional es correcta y no es la causa de las fallas del Asistente.
 
+## Aviso de lluvia
+
+`weather.RainWatcher` mira el pronóstico **por hora** y avisa que se viene el agua.
+
+- **Una sola vez por día.** Es el diseño, no una limitación: un segundo aviso el mismo día
+  es ruido, y el ruido es cómo un aviso deja de escucharse. La marca vive en `watch.Marks`.
+- **Un aviso que falla no se marca**, igual que en la agenda: se reintenta en la vuelta
+  siguiente.
+- El pronóstico se pide con `forecast_days=2`: a las 22:00 las próximas seis horas caen casi
+  todas en el día siguiente. Las listas `daily` siguen empezando por hoy, así que el índice
+  cero no cambia de significado.
+- ⚠️ **Open-Meteo contesta en hora local y sin offset** (`timezone=auto`). El reloj puede
+  venir con zona; se compara naive porque el offset ya está aplicado del otro lado.
+- Los umbrales son constantes del módulo, no config: `RAIN_WINDOW_HOURS` y
+  `RAIN_ALERT_CHANCE`. Si algún día hay que tocarlos desde el contenedor, ahí sí van a
+  `Config`.
+
 ## Resumen de la mañana
 
 `briefing.py` junta agenda, clima y servicios caídos en un solo texto hablado, a la hora de

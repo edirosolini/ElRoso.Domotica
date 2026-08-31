@@ -119,6 +119,13 @@ def test_the_briefing_does_not_need_a_calendar(wired, tmp_path, monkeypatch):
     assert "calendar-watch" not in wired.job_queue.repeating
 
 
+def test_the_rain_watcher_is_always_scheduled(wired, tmp_path, monkeypatch):
+    """El clima tiene coordenadas por defecto, así que el aviso no depende de nada."""
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert "rain-watch" in wired.job_queue.repeating
+
+
 def test_wiring_with_seq_schedules_its_job(wired, tmp_path, monkeypatch):
     path = config_file(tmp_path, "SEQ_URL=http://172.68.0.7\nSEQ_API_KEY=una-clave\n")
 
@@ -150,7 +157,9 @@ def test_everything_at_once_wires_up(wired, tmp_path, monkeypatch):
 
     run_main(monkeypatch, path)
 
-    assert {"calendar-watch", "seq-watch", "service-watch"} <= set(wired.job_queue.repeating)
+    assert {"calendar-watch", "seq-watch", "service-watch", "rain-watch"} <= set(
+        wired.job_queue.repeating
+    )
 
 
 def test_a_broken_checks_file_stops_the_service(wired, tmp_path, monkeypatch):

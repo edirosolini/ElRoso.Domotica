@@ -58,6 +58,12 @@ entiendo". Combinado con una alarma diaria da el parte de la mañana:
 /alarma diaria 7:00 clima
 ```
 
+**Aviso de lluvia.** Cada media hora mira el pronóstico hora por hora y, si en las próximas
+seis horas hay al menos 60 % de probabilidad de lluvia, lo dice: *"Ojo, va a llover a eso de
+las tres de la tarde"*. Avisa **una vez por día** — la idea es que entres la ropa, no que te
+narre el cielo. Se ajusta en `weather.py` (`RAIN_WINDOW_HOURS`, `RAIN_ALERT_CHANCE`), no hay
+clave de configuración.
+
 **Apagar.** El protocolo Cast **no tiene apagado**. `/apagar` cierra la app que esté
 corriendo y deja el equipo en reposo; de ahí en más, un televisor configurado para dormirse
 al perder señal se apaga solo por HDMI-CEC. Un apagado de verdad requeriría ADB, que hay

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Callable
 
-from homeauto.verbalize import number
+from homeauto.verbalize import clock as spoken_clock, number
 from homeauto.polish import as_is
 
 log = logging.getLogger(__name__)
@@ -33,6 +34,12 @@ SKY = {
 # Below this gap, saying the "feels like" adds nothing.
 FEELS_LIKE_GAP = 3
 RAIN_WORTH_MENTIONING = 20
+
+# How far ahead the rain warning looks, and how sure it has to be. Warning
+# about a coin flip is how a warning stops being read.
+RAIN_WINDOW_HOURS = 6
+RAIN_ALERT_CHANCE = 60
+RAIN_MARK = "rain-alert"
 
 
 class WeatherError(Exception):
@@ -57,13 +64,22 @@ def fetch_open_meteo(latitude: float, longitude: float) -> dict:
             "longitude": longitude,
             "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code",
             "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
+            "hourly": "precipitation_probability",
             "timezone": "auto",
-            "forecast_days": 1,
+            # Two days, not one: at 22:00 the next six hours are mostly tomorrow.
+            # The daily lists still start at today, so index 0 keeps meaning today.
+            "forecast_days": 2,
         },
         timeout=TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
+
+
+@dataclass(frozen=True)
+class RainAhead:
+    when: datetime
+    chance: int
 
 
 @dataclass(frozen=True)
@@ -114,6 +130,35 @@ class WeatherClient:
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise WeatherError(f"El servicio de clima contestó algo que no entiendo: {exc}") from exc
 
+    def rain_ahead(self, now: datetime, hours: int = RAIN_WINDOW_HOURS) -> RainAhead | None:
+        """The first hour in the window where rain is likely, or None.
+
+        Open-Meteo answers in local time and without an offset (`timezone=auto`),
+        so an aware clock is compared naive: the offset is already baked in.
+        """
+        try:
+            payload = self.fetch(self.latitude, self.longitude)
+        except Exception as exc:
+            log.warning("no se pudo consultar el pronóstico por hora: %s", exc)
+            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+
+        hourly = payload.get("hourly") or {}
+        moments = hourly.get("time") or []
+        chances = hourly.get("precipitation_probability") or []
+
+        start = now.replace(tzinfo=None)
+        end = start + timedelta(hours=hours)
+        for raw, chance in zip(moments, chances):
+            try:
+                moment = datetime.fromisoformat(raw)
+            except (TypeError, ValueError):
+                continue
+            if chance is None or moment <= start or moment > end:
+                continue
+            if chance >= RAIN_ALERT_CHANCE:
+                return RainAhead(when=moment, chance=int(chance))
+        return None
+
     def spoken(self) -> str:
         """One or two sentences, written to be heard rather than read."""
         forecast = self.now()
@@ -132,3 +177,50 @@ class WeatherClient:
         if forecast.rain_chance >= RAIN_WORTH_MENTIONING:
             parts.append(f"Probabilidad de lluvia, {number(forecast.rain_chance)} por ciento.")
         return self.polish(" ".join(parts), must_keep=[self.place] if self.place else [])
+
+
+class RainWatcher:
+    """Says once a day that rain is coming, while there is still time to react.
+
+    At most one warning per day on purpose: the point is to bring the clothes
+    in, not to narrate the sky. A second one the same day would be noise, and
+    noise is how a warning gets ignored.
+    """
+
+    def __init__(
+        self,
+        weather: WeatherClient,
+        announce: Callable[[str], None],
+        marks,
+        clock: Callable[[], datetime] = datetime.now,
+        window_hours: int = RAIN_WINDOW_HOURS,
+    ):
+        self.weather = weather
+        self.announce = announce
+        self.marks = marks
+        self.clock = clock
+        self.window_hours = window_hours
+
+    def check(self) -> str | None:
+        now = self.clock()
+        already = self.marks.get(RAIN_MARK)
+        if already is not None and already.date() == now.date():
+            return None
+
+        try:
+            rain = self.weather.rain_ahead(now, hours=self.window_hours)
+        except WeatherError:
+            return None  # ya quedó en el log; la vuelta siguiente reintenta
+        if rain is None:
+            return None
+
+        text = f"Ojo, va a llover a eso de {spoken_clock(rain.when.hour, rain.when.minute)}."
+        try:
+            self.announce(text)
+        except Exception:
+            # A warning that did not get out is not done: it retries next round.
+            log.exception("no se pudo avisar de la lluvia")
+            return None
+
+        self.marks.set(RAIN_MARK, now)
+        return text
