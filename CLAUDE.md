@@ -15,11 +15,12 @@ está pensado para sumar dispositivos (luces) sin rediseñar nada.
 Domotica/
 ├── src/homeauto/
 │   ├── config.py        # carga y validación del archivo de entorno
-│   ├── quiet.py         # horario de descanso
-│   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00"
+│   ├── quiet.py         # horario de descanso y silencio a pedido
+│   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00", "lun-vie"
 │   ├── verbalize.py     # números y horas a palabras, para el sintetizador
 │   ├── polish.py        # reescribe la redacción con un LLM, sin tocar los datos
-│   ├── weather.py       # clima por Open-Meteo
+│   ├── weather.py       # clima por Open-Meteo y aviso de lluvia
+│   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── api.py           # endpoint HTTP para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
@@ -378,7 +379,7 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
 ## Comandos y alias
 
 `ALL_COMMANDS` tiene 24 nombres y `COMMAND_MENU` solo 16: la diferencia son **alias**
-(`ayuda`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`). Funcionan, pero no van
+(`help`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`). Funcionan, pero no van
 al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie. Hay test que impide
 que la ayuda ofrezca un comando que no existe.
 
