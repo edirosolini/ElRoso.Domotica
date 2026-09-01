@@ -565,6 +565,15 @@ abajo en ese orden a propósito.
   un Chromecast, un `play_media` se lo come YouTube y el anuncio se pierde **en silencio**.
   Hay que desalojar la app ajena primero. El receptor propio (`CC1AD845`) se respeta:
   relanzarlo cortaría el audio en curso.
+- **Los `Launching app CC1AD845` repetidos en el mismo milisegundo son normales.** Diagnosticado
+  el 2026-09-01 y **no hay nada que arreglar**: `BaseController.send_message` de pychromecast
+  "ensures app is loaded" y pide el lanzamiento en *cada* mensaje mientras la app activa no
+  sea la nuestra. `_wait_until_playing` sondea con `update_status()` cada doscientos
+  milisegundos, así que los primeros sondeos caen con el receptor todavía arrancando y cada
+  uno vuelve a pedirlo. Son idempotentes y paran solos cuando el equipo reporta la app. **No
+  tocar el sondeo para callar el log**: ese loop es lo que garantiza que un aviso se escuchó,
+  y ya se rompió una vez por confiar de más. No es el retry de la librería —ese loguea
+  "retrying once" y acá aparece cero veces.
 - 🔴 **Confirmar que empezó a sonar, y que suena lo que se pidió.** Por un instante el
   dispositivo sigue reportando el clip anterior como `PLAYING`: aceptarlo es informar que la
   casa fue avisada cuando no salió nada por los parlantes.
