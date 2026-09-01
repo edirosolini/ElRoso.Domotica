@@ -136,7 +136,7 @@ def test_the_old_lone_url_stays_quiet(tmp_path):
 
 
 def test_an_alias_can_have_several_words(tmp_path):
-    """Un VPS de verdad se llama "hosting externo", no cabe en una sola palabra.
+    """Un nombre real no siempre entra en una sola palabra.
 
     El guion bajo es el separador natural de una variable de entorno, así que
     se acepta y al hablar se dice como espacio.
