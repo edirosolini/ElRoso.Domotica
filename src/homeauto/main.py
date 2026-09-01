@@ -14,13 +14,14 @@ from datetime import datetime, time as clock_time
 from pathlib import Path
 
 from telegram import BotCommand, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from homeauto.agenda.ical import CalendarClient
 from homeauto.agenda.seen import SeenStore
 from homeauto.agenda.service import AgendaService
 from homeauto.agenda.watcher import EventWatcher
 from homeauto.ask import ASK_TIMEOUT, Asker
+from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.briefing import Briefing
@@ -36,7 +37,12 @@ from homeauto.voice.media_server import MediaServer
 from homeauto.voice.broadcast import HouseVoice
 from homeauto.voice.registry import SpeakerRegistry
 from homeauto.voice.speaker import Speaker
-from homeauto.voice.tts import PiperRunner, VoiceSynth
+from homeauto.voice.tts import (
+    DEFAULT_LENGTH_SCALE,
+    DEFAULT_SENTENCE_SILENCE,
+    PiperRunner,
+    VoiceSynth,
+)
 from homeauto.watch.loading import ChecksError, load_checks
 from homeauto.watch.marks import Marks
 from homeauto.watch.monitor import Monitor
@@ -50,6 +56,44 @@ PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
 VOICE_PATH = os.environ.get("DOMOTICA_VOICE", "/opt/domotica/voices/es_AR-daniela-high.onnx")
 CACHE_DIR = os.environ.get("DOMOTICA_CACHE", "/var/lib/domotica/cache")
 MEDIA_PORT = int(os.environ.get("DOMOTICA_MEDIA_PORT", "8765"))
+
+
+def _knob(name: str, default: float | None) -> float | None:
+    """One pacing knob from the environment, or its default."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        log.warning("%s no es un número (%r), uso el valor de siempre", name, raw)
+        return default
+
+
+def pacing_from_env() -> dict:
+    """How the house should speak. Moved from the container, not from code."""
+    return {
+        "length_scale": _knob("DOMOTICA_LENGTH_SCALE", DEFAULT_LENGTH_SCALE),
+        "sentence_silence": _knob("DOMOTICA_SENTENCE_SILENCE", DEFAULT_SENTENCE_SILENCE),
+        "noise_scale": _knob("DOMOTICA_NOISE_SCALE", None),
+        "noise_w": _knob("DOMOTICA_NOISE_W", None),
+    }
+
+
+def build_synth(cache_dir: Path | str) -> VoiceSynth:
+    """Synthesis with its pacing, and the pacing inside the cache key.
+
+    🔴 The two have to come from the same place. Keyed without it, changing how
+    the house speaks leaves every phrase already said playing at the old pacing,
+    with nothing in the log to explain it.
+    """
+    runner = PiperRunner(PYTHON_BIN, VOICE_PATH, **pacing_from_env())
+    return VoiceSynth(
+        cache_dir=cache_dir,
+        runner=runner,
+        voice=VOICE_PATH,
+        pacing=runner.pacing,
+    )
 STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/domotica"))
 
 log = logging.getLogger("homeauto")
@@ -284,6 +328,20 @@ def build_asker(config: Config) -> Asker | None:
     )
 
 
+def build_router(config: Config) -> Router | None:
+    """Who reads a message with no slash, or None when there is no key.
+
+    🔴 The cheap model, and no search. Interpreting is not finding out: every
+    free-text message pays this call, so it has to be the fast one. Grounding
+    here would put thirty seconds in front of "bajá el volumen".
+    """
+    if not config.polish_enabled:
+        return None
+    return Router(
+        model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
+    )
+
+
 def build_speakers(config: Config) -> SpeakerRegistry:
     """One Speaker per configured device, sharing synthesis and the media server.
 
@@ -291,11 +349,7 @@ def build_speakers(config: Config) -> SpeakerRegistry:
     HTTP servers would be waste.
     """
     cache_dir = Path(CACHE_DIR)
-    synth = VoiceSynth(
-        cache_dir=cache_dir,
-        runner=PiperRunner(PYTHON_BIN, VOICE_PATH),
-        voice=VOICE_PATH,
-    )
+    synth = build_synth(cache_dir)
     media_server = MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT)
 
     def build(device_uuid) -> Speaker:
@@ -322,6 +376,16 @@ def register(app: Application, commands: Commands) -> None:
 
     def handler(run_command):
         async def callback(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+            # 🔴 Only a fresh message. With allowed_updates=ALL_TYPES an edit
+            # arrives too, and there `update.message` is None: replying blew up
+            # with AttributeError, and before that the command had already run
+            # with an empty argument, because the text came from the same place.
+            # Ignoring edits is also the right behaviour on its own — fixing a
+            # typo must not set a second alarm.
+            if update.message is None or update.effective_chat is None:
+                log.debug("ignoro un update que no es un mensaje nuevo")
+                return
+
             chat_id = update.effective_chat.id
             text = _argument_text(update)
             answer = await asyncio.to_thread(run_command, chat_id, text)
@@ -351,6 +415,12 @@ def register(app: Application, commands: Commands) -> None:
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
+
+    # Anything without a slash. Registered last, so a real command never
+    # reaches the interpreter and never pays for a model call.
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handler(commands.free_text))
+    )
 
 
 def main() -> None:
@@ -466,6 +536,7 @@ def main() -> None:
         weather=weather,
         quiet=hush,
         asker=build_asker(config),
+        router=build_router(config),
         clock=datetime.now,
     )
     register(app, commands)

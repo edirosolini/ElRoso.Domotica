@@ -23,6 +23,14 @@ log = logging.getLogger(__name__)
 # is what makes playback observable, and audible.
 DEFAULT_MIN_SECONDS = 1.5
 
+# 🔴 Piper's own defaults leave **no pause between sentences**, so a two-part
+# announcement runs together: the punchline of a joke lands on top of its setup
+# and the whole thing is heard as if it were sped up. These two are the smallest
+# change that fixes it; the other two knobs stay unset so the voice model keeps
+# deciding them.
+DEFAULT_LENGTH_SCALE = 1.15
+DEFAULT_SENTENCE_SILENCE = 0.45
+
 
 class TtsError(Exception):
     """Synthesis failed or was asked for something it cannot say."""
@@ -35,18 +43,60 @@ class Runner(Protocol):
 
 
 class PiperRunner:
-    """Calls the piper CLI in a subprocess."""
+    """Calls the piper CLI in a subprocess, with the pacing it should speak at."""
 
-    def __init__(self, python_bin: Path | str, voice_path: Path | str):
+    def __init__(
+        self,
+        python_bin: Path | str,
+        voice_path: Path | str,
+        length_scale: float | None = DEFAULT_LENGTH_SCALE,
+        sentence_silence: float | None = DEFAULT_SENTENCE_SILENCE,
+        noise_scale: float | None = None,
+        noise_w: float | None = None,
+        run: Callable = subprocess.run,
+    ):
         self.python_bin = str(python_bin)
         self.voice_path = str(voice_path)
+        self.length_scale = length_scale
+        self.sentence_silence = sentence_silence
+        self.noise_scale = noise_scale
+        self.noise_w = noise_w
+        self.run = run
+
+    @property
+    def pacing(self) -> str:
+        """How this runner speaks, as a string. It belongs in the cache key.
+
+        🔴 Without it, changing the pacing leaves every phrase already said
+        playing in the old one, with nothing in the log to explain it — the
+        same bug the voice itself caused before it was keyed.
+        """
+        return "|".join(
+            "" if value is None else f"{value}"
+            for value in (self.length_scale, self.sentence_silence,
+                          self.noise_scale, self.noise_w)
+        )
+
+    def _flags(self) -> list[str]:
+        """Only what was set: the rest stays the voice model's decision."""
+        flags: list[str] = []
+        for name, value in (
+            ("--length-scale", self.length_scale),
+            ("--sentence-silence", self.sentence_silence),
+            ("--noise-scale", self.noise_scale),
+            ("--noise-w-scale", self.noise_w),
+        ):
+            if value is not None:
+                flags += [name, f"{value}"]
+        return flags
 
     def __call__(self, text: str, out_path: Path) -> None:
         # onnxruntime cannot set thread affinity inside an unprivileged LXC and
         # logs an error for it; pinning the thread count keeps the log clean.
         env = {**os.environ, "OMP_NUM_THREADS": "1"}
-        result = subprocess.run(
-            [self.python_bin, "-m", "piper", "-m", self.voice_path, "-f", str(out_path)],
+        result = self.run(
+            [self.python_bin, "-m", "piper", "-m", self.voice_path, "-f", str(out_path)]
+            + self._flags(),
             input=text,
             text=True,
             capture_output=True,
@@ -102,10 +152,13 @@ class VoiceSynth:
         runner: Runner | Callable[[str, Path], None],
         min_seconds: float = DEFAULT_MIN_SECONDS,
         voice: str = "",
+        pacing: str = "",
     ):
         self.cache_dir = Path(cache_dir)
         self.runner = runner
         self.min_seconds = min_seconds
+        # Same reason as the voice: it changes the audio, so it changes the key.
+        self.pacing = pacing
         # 🔴 The voice belongs in the cache key. Keyed on the text alone, every
         # phrase already said kept playing in the previous voice after a voice
         # change, with nothing in the logs to show why.
@@ -142,5 +195,5 @@ class VoiceSynth:
         return cached
 
     def _key(self, text: str) -> str:
-        seed = f"{self.voice}\x00{text}"
+        seed = f"{self.voice}\x00{self.pacing}\x00{text}"
         return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]

@@ -167,6 +167,46 @@ def test_with_a_key_the_asker_is_wired_and_searches(wired, tmp_path, monkeypatch
     assert asker.model.timeout > 6, "una búsqueda no entra en el timeout del pulido"
 
 
+def test_free_text_is_only_understood_with_a_key(wired, tmp_path, monkeypatch):
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["router"] = kwargs.get("router")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["router"] is None
+
+
+def test_the_router_uses_the_cheap_model_and_does_not_search(wired, tmp_path, monkeypatch):
+    """🔴 Clasificar no es averiguar: buscar acá pagaría treinta segundos por mensaje."""
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["router"] = kwargs.get("router")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    path = config_file(tmp_path, "LLM_API_KEY=una-clave\nLLM_MODEL=barato\nASK_MODEL=caro\n")
+    run_main(monkeypatch, path)
+
+    router = seen["router"]
+    assert router is not None
+    assert router.model.search is False
+    assert router.model.model == "barato", "el que interpreta es el rápido, no el que busca"
+
+
+def test_a_message_without_a_slash_gets_a_handler(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    kinds = [type(handler).__name__ for handler in wired.handlers]
+    assert "MessageHandler" in kinds, "el texto libre no tiene quién lo atienda"
+
+
 def test_each_seq_instance_gets_its_own_job(wired, tmp_path, monkeypatch):
     """Dos VPS, dos Seq, dos jobs: un nombre repetido dejaría uno sin agendar."""
     path = config_file(

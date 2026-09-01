@@ -16,6 +16,7 @@ from typing import Callable
 from homeauto.agenda.ical import CalendarError
 from homeauto.ask import AskError
 from homeauto.config import Config
+from homeauto.route import RouteError
 from homeauto.schedule.store import DAILY, ONCE, WEEKLY
 from homeauto.quiet import Hush
 from homeauto.timespec import (
@@ -97,6 +98,7 @@ class Commands:
         monitor=None,
         quiet=None,
         asker=None,
+        router=None,
         clock: Callable[[], datetime] = datetime.now,
     ):
         self.config = config
@@ -108,6 +110,7 @@ class Commands:
         self.monitor = monitor
         self.quiet = quiet
         self.asker = asker
+        self.router = router
         self.clock = clock
 
     # --- permisos y destino ------------------------------------------------
@@ -325,6 +328,58 @@ class Commands:
         results = self._broadcast(aliases, lambda speaker: speaker.say(answer.spoken))
         summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
         return f"{answer.written}\n\n{summary}"
+
+    def _dispatch(self) -> dict:
+        """Every command reachable without a slash, by name.
+
+        Kept next to the commands themselves and not in the Telegram wiring:
+        the router names a command, and naming is not transport.
+        """
+        return {
+            "decir": self.say,
+            "timer": self.timer,
+            "alarma": self.alarm,
+            "lista": lambda chat_id, _text="": self.list(chat_id),
+            "cancelar": self.cancel,
+            "silencio": self.silence,
+            "hablar": self.speak,
+            "volumen": self.volume,
+            "parar": self.stop,
+            "apagar": self.turn_off,
+            "clima": self.weather,
+            "agenda": self.agenda_command,
+            "estado": self.status,
+            "equipos": lambda chat_id, _text="": self.devices(chat_id),
+            "usar": self.use,
+            "preguntar": self.ask,
+        }
+
+    def free_text(self, chat_id: int, text: str) -> str:
+        """Run whatever a message without a slash was asking for.
+
+        It runs it and says what it understood, instead of asking first: the
+        owner's call. A wrong read is undone by hand, and /cancelar exists.
+        """
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        if self.router is None:
+            return "No entiendo mensajes sueltos. Los comandos están en /ayuda."
+
+        try:
+            decision = self.router.route(text)
+        except RouteError as exc:
+            # 🔴 Not a question. Sending "apagá la tele" out to a web search
+            # would answer something nobody asked, slowly and confidently.
+            return str(exc)
+
+        run = None if decision.is_question else self._dispatch().get(decision.command)
+        if run is None:
+            return self.ask(chat_id, text)
+
+        understood = f"/{decision.command} {decision.argument}".strip()
+        return f"Entendí: {understood}\n\n{run(chat_id, decision.argument)}"
 
     def agenda_command(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)

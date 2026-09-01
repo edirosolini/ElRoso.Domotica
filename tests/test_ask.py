@@ -137,3 +137,28 @@ def test_the_written_half_is_capped_for_telegram():
 
     assert len(answer.written) == 100
     assert answer.spoken == "son muchos datos.", "recortar lo escrito no toca lo hablado"
+
+
+def test_a_short_answer_is_said_whole():
+    """🔴 Resumir un chiste lo pasa a estilo indirecto y deja de ser un chiste.
+
+    Pasó de verdad: «—Papá, ¿qué se siente tener un hijo tan lindo? —No sé,
+    preguntale a tu abuelo» volvió al parlante como «un pibe le pregunta al
+    padre qué se siente... y el papá le responde que no sabe».
+    """
+    chiste = (
+        "RESPUESTA: ¿Sabés cómo se despiden los químicos? Ácido un placer.\n"
+        "VOZ: ¿Sabés cómo se despiden los químicos? Ácido un placer."
+    )
+    answer = Asker(model_saying(chiste)).ask("contame un chiste")
+
+    assert answer.spoken == answer.written
+
+
+def test_the_prompt_tells_it_not_to_summarize_a_short_answer():
+    """El prompt es lo único que sostiene esto: se verifica que siga diciéndolo."""
+    from homeauto.ask import PROMPT
+
+    bajado = PROMPT.lower()
+    assert "entera" in bajado or "completa" in bajado
+    assert "chiste" in bajado, "el caso que rompió tiene que estar nombrado en el prompt"

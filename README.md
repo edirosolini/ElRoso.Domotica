@@ -102,6 +102,32 @@ rangos (`lun-vie`, `vie-lun` cruza el fin de semana), listas (`mar,jue`), un dí
 (`miércoles`). Los días eligen qué ocurrencia de la hora dispara, así que ahí la hora es
 obligatoria: `/alarma lun-vie 10m` no tiene sentido y se rechaza.
 
+## Sin la barra (opcional)
+
+Con `LLM_API_KEY` cargada, un mensaje suelto también se entiende. No hace falta acordarse de
+ningún comando:
+
+```
+decí que ya llegué                        →  /decir que ya llegué
+decile a todos que la comida está lista   →  /decir en todos que la comida está lista
+poneme un timer de 10 minutos para la pizza  →  /timer 10m sacar la pizza
+despertame a las 7 y media                →  /alarma 7:30 despertame
+bajá el volumen a 40                      →  /volumen 40
+callate una hora                          →  /silencio 1h
+cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
+```
+
+**Ejecuta y te dice qué entendió**, no pregunta antes. La respuesta arranca con
+`Entendí: /timer 10m sacar la pizza`, así que si leyó mal se ve en el acto y se deshace con
+`/cancelar`. Tarda alrededor de un segundo más que escribir el comando a mano.
+
+⚠️ **Lo que la casa dice en voz alta siempre sale de tu mensaje.** El intérprete puede elegir
+el comando y el equipo, pero no puede reescribir el texto de un `/decir`: si lo que quedaría
+para decir no está en lo que escribiste, no lo dice y lo trata como pregunta. Un mensaje
+inventado en boca de la casa es peor que no entender.
+
+Los comandos con barra siguen funcionando igual y no pasan por el intérprete.
+
 ## Preguntas (opcional)
 
 `/preguntar` manda la pregunta a un modelo con búsqueda, escribe la respuesta en el chat y
@@ -316,6 +342,19 @@ systemctl restart domotica
 
 `ALLOWED_CHAT_IDS` vacío deja el bot **abierto**: cualquiera que lo encuentre puede usarlo.
 Se deja así solo para el alta inicial; una vez que sabés tu chat ID, se completa y se reinicia.
+
+**Cómo habla.** Piper no deja pausa entre oraciones si no se le pide, y eso hace que un
+aviso de dos frases suene apurado. Se ajusta por entorno, sin tocar código:
+
+| variable | default | qué hace |
+| --- | --- | --- |
+| `DOMOTICA_LENGTH_SCALE` | 1.15 | más alto, más despacio |
+| `DOMOTICA_SENTENCE_SILENCE` | 0.45 | segundos de pausa entre oraciones |
+| `DOMOTICA_NOISE_SCALE` | — | más bajo, más contenido |
+| `DOMOTICA_NOISE_W` | — | más alto, menos plano |
+
+Las dos últimas sin valor las decide el modelo de voz. Cambiar cualquiera **rehace el cache**
+a propósito: el audio ya guardado se generó con el ritmo viejo.
 
 Rutas, sobreescribibles por entorno: `DOMOTICA_CONFIG`, `DOMOTICA_PYTHON`, `DOMOTICA_VOICE`,
 `DOMOTICA_CACHE`, `DOMOTICA_MEDIA_PORT`. La base de timers vive en `STATE_DIRECTORY`, que

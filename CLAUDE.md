@@ -20,6 +20,7 @@ Domotica/
 │   ├── verbalize.py     # números y horas a palabras, para el sintetizador
 │   ├── polish.py        # reescribe la redacción con un LLM, sin tocar los datos
 │   ├── ask.py           # contesta preguntas con búsqueda: lo escrito y lo dicho
+│   ├── route.py         # interpreta un mensaje sin barra y lo manda al comando
 │   ├── weather.py       # clima por Open-Meteo y aviso de lluvia
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── api.py           # endpoint HTTP para otros sistemas
@@ -362,6 +363,11 @@ que la casa dice que no generó ella ni escribió una persona: viene de afuera.
 - 🔴 **Si la voz no se puede confiar, no se habla, pero nunca se pierde la respuesta.** Con un
   dígito, vacía o demasiado larga, el parlante dice "te lo dejé escrito en el chat" y el chat
   tiene la respuesta entera. Se descarta, no se recorta: media oración es peor que un puntero.
+- ⚠️ **La mitad hablada no es un resumen.** Pedirle "resumida" convirtió un chiste en estilo
+  indirecto —"el papá le responde que no sabe"— y lo mató. Ahora el prompt dice que una
+  respuesta corta se repite entera y tal cual, y que solo se condensa lo que de verdad es
+  largo. Hay test que verifica que el prompt lo siga diciendo, porque es lo único que lo
+  sostiene.
 - **Un top diez dicho entero es un minuto de parlante.** Por eso hay tope de largo
   (`MAX_SPOKEN`) además del de dígitos. Está en cuatrocientos porque el top diez real volvió
   entre doscientos noventa y trescientos cincuenta y cinco caracteres: más ajustado tiraba al
@@ -444,6 +450,44 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
 - El reloj acepta `5.30` además de `5:30`. Es como la gente escribe la hora; no cambia nada
   más del parser.
 
+## Texto libre
+
+`route.py` interpreta un mensaje **sin barra adelante**: decide qué comando quiso la persona
+y con qué argumento. No ejecuta nada — `Commands` ya sabe hacerlo y los parsers que ya
+existen ya saben rechazar un argumento malo.
+
+- **Ejecuta y avisa qué entendió; no pide confirmación.** Es decisión del dueño de la casa.
+  La respuesta arranca con `Entendí: /timer 10m sacá la pizza` para que una lectura errada se
+  vea, y `/cancelar` es el deshacer.
+- 🔴 **Lo que la casa va a decir con voz propia tiene que salir del mensaje.** Un modelo al
+  que se le pide extraer un texto lo mejora de paso. `Router._faithful()` compara el payload
+  de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
+  el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
+  casa es peor que no entender.
+- 🔴 **Los ejemplos del prompt sostienen el comportamiento, no lo decoran.** Sin ellos el
+  modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
+  `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
+  medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
+  limpios. Si se toca el prompt, se vuelve a medir.
+- 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
+  mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
+  segundos delante de "bajá el volumen". El que sí busca es `ASK_MODEL`, y solo cuando la
+  cosa terminó siendo una pregunta.
+- 🔴 **Que el router falle no es una pregunta.** Mandar "apagá la tele" a buscar en internet
+  contestaría algo que nadie pidió, lento y con seguridad. `RouteError` sale como texto y
+  apunta a `/ayuda`; solo un "esto no era un comando" cae en `preguntar`.
+- **Medido: el modelo rutea las preguntas a `preguntar`, no a "ninguno".** Los dos caminos
+  terminan en `Commands.ask`, así que da igual, pero conviene saberlo antes de pelearse con
+  el prompt por eso.
+- **El `MessageHandler` se registra último y filtra `~filters.COMMAND`**, así un comando de
+  verdad nunca llega al intérprete ni paga la llamada al modelo.
+- **`Commands._dispatch()` vive con los comandos, no en el cableado de Telegram**: el router
+  nombra un comando, y nombrar no es transporte. Hay test en las dos direcciones — que todo
+  lo que el router puede pedir se pueda ejecutar, y que no haya nada ejecutable que el router
+  nunca nombre. Sin eso, agregar un comando lo deja mudo al texto libre y nadie se entera.
+- ⚠️ Sin `LLM_API_KEY` no hay intérprete: un mensaje suelto contesta que los comandos están
+  en `/ayuda`.
+
 ## Comandos y alias
 
 `ALL_COMMANDS` tiene 26 nombres y `COMMAND_MENU` solo 17: la diferencia son **alias**
@@ -470,6 +514,17 @@ abajo en ese orden a propósito.
 
 ## Gotchas
 
+- 🔴 **Piper no deja pausa entre oraciones si no se le pide.** Se lo llamaba sin un solo
+  parámetro, así que el remate de un chiste salía pegado al setup y el dueño lo describió
+  como "va a velocidad de dos". No estaba acelerado: los wav son 22050 Hz y la duración
+  coincide con lo que tarda en sonar. Era el ritmo. `PiperRunner` ahora manda
+  `--length-scale` y `--sentence-silence` con un default que respira, y las cuatro perillas
+  se mueven por entorno (`DOMOTICA_LENGTH_SCALE`, `DOMOTICA_SENTENCE_SILENCE`,
+  `DOMOTICA_NOISE_SCALE`, `DOMOTICA_NOISE_W`).
+- 🔴 **El ritmo va en la clave del cache, igual que la voz, y por el mismo motivo.**
+  `build_synth()` arma el runner y el `VoiceSynth` juntos para que los dos usen el mismo
+  `pacing`: si se separan, se sintetiza con un ritmo y se reusa audio hecho con otro.
+  Lo que no se configura **no se manda**, así que el modelo sigue decidiéndolo.
 - 🔴 **La voz es parte de la clave del cache de audio.** `VoiceSynth` cachea por hash;
   cuando la clave era solo el texto, cambiar `DOMOTICA_VOICE` dejaba sonando la voz vieja en
   toda frase ya dicha, sin nada en el log que lo explicara. Cambiar de voz ya no pide vaciar
@@ -550,6 +605,13 @@ abajo en ese orden a propósito.
   UTC — tres horas en el pasado — y el timer disparaba al instante. `JobQueueTimer` le pega
   `astimezone()` antes de agendar. En los logs se veía como `Run time of job was missed by
   2:59:00`, que parece un problema de carga y no de husos.
+- 🔴 **Un mensaje editado llega con `update.message` en None.** Con
+  `allowed_updates=ALL_TYPES` las ediciones entran a los mismos handlers; `reply_text`
+  reventaba con `AttributeError` y en el log salía como "No error handlers are registered",
+  que no dice nada. Y antes de reventar el comando **ya se había ejecutado con el argumento
+  vacío**, porque el texto salía del mismo `update.message` ausente. El handler ignora todo
+  update que no sea un mensaje nuevo, que además es lo correcto: corregir un typo no puede
+  poner una segunda alarma.
 - 🔴 **Nada bloqueante en el event loop.** Los handlers de Telegram son async, pero el
   descubrimiento (zeroconf) y la síntesis (Piper) son bloqueantes. Llamados desde dentro del
   loop, zeroconf **no descubre nada** y todos los comandos responden "no encontré el

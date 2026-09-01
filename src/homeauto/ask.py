@@ -5,8 +5,12 @@ answer comes from a model with search, and search answers are made of years,
 scores and counts. That is exactly what the synthesizer reads wrong.
 
 🔴 So the answer comes back in two halves, the same split `watch.seq.Summary`
-already makes: `written` keeps every digit and goes to the chat, `spoken` is a
-short line with the numbers in words and is the only half that reaches Piper.
+already makes: `written` keeps every digit and goes to the chat, `spoken` says
+the same thing with the numbers in words and is the only half that reaches Piper.
+
+⚠️ Spoken is not a *summary*. Asked to summarize, the model turned a joke into
+reported speech —"el papá le responde que no sabe"— and the joke died. It only
+condenses what is genuinely long, like a top ten.
 When the spoken half cannot be trusted, the house says it left the answer
 written — never the digits, and never nothing.
 """
@@ -53,7 +57,12 @@ secciones, con estos rótulos:
 
 RESPUESTA: la respuesta para leer en un chat. Breve y concreta, como mucho unas
 pocas líneas. Acá sí podés usar números.
-VOZ: la misma respuesta resumida para decirla en voz alta, en una o dos oraciones.
+VOZ: la misma respuesta, para decirla en voz alta.
+Si es corta, repetila entera y tal cual: un chiste, una definición o un dato se
+arruinan si los resumís. Nunca la cuentes en tercera persona ni con "le respondió
+que": si hay diálogo, dejá el diálogo.
+Solo si la respuesta es larga —una lista, una enumeración— quedate con lo
+principal en dos o tres oraciones.
 Escribí todos los números con palabras y no uses ni un solo dígito.
 
 Nada de saludos, emojis, ni comentarios tuyos.
