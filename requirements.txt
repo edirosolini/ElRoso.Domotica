@@ -4,3 +4,9 @@ python-telegram-bot[job-queue]
 APScheduler
 icalendar
 recurring-ical-events
+# Se importan directo desde src/. Estaban andando porque los arrastraban
+# pychromecast (vía casttube) y APScheduler; declararlos es lo que evita que
+# un cambio en esas cadenas rompa el clima, la agenda, el monitor, Seq o el
+# pulido recién cuando alguien los usa.
+requests
+tzlocal
