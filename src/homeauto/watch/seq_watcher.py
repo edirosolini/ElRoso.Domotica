@@ -44,8 +44,13 @@ class SeqWatcher:
 
     @property
     def name(self) -> str:
-        """How it is named out loud. The alias is a word for exactly this."""
-        return f"Seq de {self.alias}" if self.alias else "Seq"
+        """How it is named out loud.
+
+        🔴 The underscores become spaces. They are the separator an environment
+        variable name forces on a multi-word alias, and "seq de vps guion bajo
+        id" is not what anybody meant to hear.
+        """
+        return f"Seq de {self.alias.replace('_', ' ')}" if self.alias else "Seq"
 
     @property
     def last_check_key(self) -> str:

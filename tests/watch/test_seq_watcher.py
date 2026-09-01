@@ -180,3 +180,23 @@ def test_the_old_instance_keeps_its_marks(tmp_path):
                clock=lambda: NOW).check()
 
     assert marks.get("seq:last_check") == NOW
+
+
+def test_a_multi_word_alias_is_spoken_with_spaces(tmp_path):
+    """🔴 "Seq de hosting_externo" dicho sería el guion bajo en el medio."""
+    watcher, _, said = build(tmp_path, rounds=[[error("algo")]], alias="hosting_externo")
+
+    watcher.check()
+
+    assert said[0][0] == "Hay un error nuevo en Seq de hosting externo."
+    assert "_" not in said[0][0]
+
+
+def test_the_marks_keep_the_alias_as_written(tmp_path):
+    """Lo hablado cambia; la clave de estado no, o se pierde dónde iba leyendo."""
+    path = tmp_path / "jobs.db"
+    marks = Marks(path)
+    SeqWatcher(client=FakeSeq([[]]), marks=marks, announce=lambda *a, **k: None,
+               clock=lambda: NOW, alias="hosting_externo").check()
+
+    assert marks.get("seq:hosting_externo:last_check") == NOW

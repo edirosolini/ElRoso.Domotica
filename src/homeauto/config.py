@@ -63,9 +63,11 @@ DEFAULT_SEQ_COOLDOWN = 15
 SEQ_URL_PREFIX = "SEQ_URL_"
 SEQ_KEY_PREFIX = "SEQ_API_KEY_"
 # 🔴 El alias de un Seq se dice en voz alta ("Hay dos errores nuevos en Seq de
-# hosting"), así que tiene que ser una palabra pronunciable: Piper lee un dígito
-# como cardinal masculino suelto, y "vps-dos" dicho no se entiende.
-SEQ_ALIAS_SHAPE = re.compile(r"^[a-záéíóúñ]{2,20}$")
+# hosting externo"), así que no puede llevar dígitos: Piper los lee como
+# cardinal masculino suelto. El guion bajo sí, porque es el separador natural de
+# una variable de entorno y al hablar se dice como espacio — un nombre real como
+# "hosting externo" no entra en una sola palabra.
+SEQ_ALIAS_SHAPE = re.compile(r"^[a-záéíóúñ]+(?:_[a-záéíóúñ]+)*$")
 
 # Pulido de la redacción con un LLM. Sin clave, apagado: la casa habla igual.
 # Gemma 4 razona sin poder desactivarlo y tarda decenas de segundos: no va acá.
@@ -198,7 +200,8 @@ def _parse_seq(pairs: dict[str, str]) -> tuple["SeqInstance", ...]:
         if not SEQ_ALIAS_SHAPE.fullmatch(alias):
             raise ConfigError(
                 f"{name}: '{alias}' no sirve como alias de Seq. Se dice en voz alta, "
-                "así que va una sola palabra sin dígitos, guiones ni espacios"
+                "así que van palabras sin dígitos ni guiones medios; "
+                "separalas con guion bajo"
             )
         _check_seq_url(url, name)
 

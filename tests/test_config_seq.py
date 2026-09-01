@@ -133,3 +133,22 @@ def test_an_aliased_key_without_its_url_stops_the_service(tmp_path):
 def test_the_old_lone_url_stays_quiet(tmp_path):
     """🔴 El env desplegado tiene SEQ_URL con la clave vacía: no puede dejar de arrancar."""
     assert load(tmp_path, "SEQ_URL=http://172.68.0.7\nSEQ_API_KEY=\n").seq_enabled is False
+
+
+def test_an_alias_can_have_several_words(tmp_path):
+    """Un VPS de verdad se llama "hosting externo", no cabe en una sola palabra.
+
+    El guion bajo es el separador natural de una variable de entorno, así que
+    se acepta y al hablar se dice como espacio.
+    """
+    cfg = load(
+        tmp_path,
+        "SEQ_URL_HOSTING_EXTERNO=http://172.68.3.7\nSEQ_API_KEY_HOSTING_EXTERNO=abc\n",
+    )
+
+    assert cfg.seq_instances[0].alias == "hosting_externo"
+
+
+def test_an_alias_of_only_underscores_is_rejected(tmp_path):
+    with pytest.raises(ConfigError, match="SEQ_URL___"):
+        load(tmp_path, "SEQ_URL___=http://uno\nSEQ_API_KEY___=abc\n")

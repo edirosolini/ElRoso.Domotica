@@ -215,9 +215,18 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   `SEQ_API_KEY_<ALIAS>`), igual que los calendarios y por el mismo motivo: una lista separada
   por comas sería ambigua porque las URLs traen `:` y `/` propios.
 - 🔴 **El alias de un Seq se dice en voz alta.** Va dentro de "hay dos errores nuevos en Seq
-  de hosting", que se sintetiza. Por eso `SEQ_ALIAS_SHAPE` exige una sola palabra sin dígitos
-  ni guiones, más estricta que la de los equipos: es la única config del proyecto cuyo
-  *nombre* llega al parlante.
+  de hosting externo", que se sintetiza. Por eso `SEQ_ALIAS_SHAPE` prohíbe dígitos y guiones
+  medios: es la única config del proyecto cuyo *nombre* llega al parlante.
+- **El guion bajo separa palabras y al hablar se dice como espacio.** La primera versión
+  exigía una sola palabra y el primer VPS real que se cargó ya no entraba
+  (`SEQ_URL_HOSTING_EXTERNO`): la config quedó sin poder leerse y el servicio no hubiera
+  arrancado en el reinicio siguiente. El guion bajo es el separador que impone el nombre de
+  una variable de entorno, así que se acepta ahí y se convierte en espacio en
+  `SeqWatcher.name`. ⚠️ **Las marcas guardan el alias tal cual**, con guiones bajos: lo que
+  cambia es lo hablado, no la clave de estado.
+- ⚠️ **La forma no puede verificar que se entienda dicho.** `vps` pasa la validación —son
+  letras— y Piper lo lee como una palabra, no como siglas. Elegir el alias sigue siendo una
+  decisión de quien lo escribe.
 - 🔴 **Cada instancia lleva sus propias marcas**, `seq:<alias>:last_check` y `:last_alert`.
   Compartir el archivo no es compartir estado: con un enfriamiento común, un VPS que loguea
   un error por segundo dejaría al otro sin avisar nunca.

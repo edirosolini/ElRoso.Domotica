@@ -235,8 +235,10 @@ no solo que no responde; pero muere junto con el VPS, y por eso el túnel se vig
 
 Se vigila **un Seq por VPS**, con una clave de configuración por instancia
 (`SEQ_URL_<ALIAS>` y `SEQ_API_KEY_<ALIAS>`), igual que los calendarios. El alias **se dice
-en voz alta** —"hay dos errores nuevos en Seq de hosting"—, así que tiene que ser una sola
-palabra, sin dígitos ni guiones. Cada instancia lleva su propio enfriamiento y su propia
+en voz alta** —"hay dos errores nuevos en Seq de hosting externo"—, así que no lleva dígitos
+ni guiones medios. Para un nombre de varias palabras se usa guion bajo, que al hablar se dice
+como espacio: `SEQ_URL_HOSTING_EXTERNO`. ⚠️ Que pase la validación no quiere decir que se
+entienda dicho: `vps` son letras y el sintetizador lo lee como palabra, no como siglas. Cada instancia lleva su propio enfriamiento y su propia
 marca de hasta dónde leyó: un VPS ruidoso no puede tapar el aviso del otro. Con alias, una URL sin
 su clave —o una clave sin su URL— **hace fallar el arranque**: saltearla en silencio dejaría
 creyendo que se vigilan dos VPS mientras se vigila uno. El par suelto `SEQ_URL`/`SEQ_API_KEY`
