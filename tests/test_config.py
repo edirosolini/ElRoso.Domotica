@@ -131,3 +131,42 @@ def test_the_model_can_be_changed(tmp_path):
     )
 
     assert Config.from_file(path).llm_model == "gemma-4-31b-it"
+
+
+def test_the_asking_model_is_not_the_polishing_one(tmp_path):
+    """🔴 Medido contra la API real: el modelo del pulido buscó en 1 de 4 preguntas.
+
+    Contestar de memoria una pregunta sobre hoy es peor que no contestar, así que
+    el que pregunta tiene su propio default y no hereda el del pulido.
+    """
+    path = write_env(
+        tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nLLM_API_KEY=k\n"
+    )
+    cfg = Config.from_file(path)
+
+    assert cfg.ask_model != cfg.llm_model
+    assert "lite" not in cfg.ask_model, "los lite no usan la búsqueda de forma confiable"
+
+
+def test_changing_the_polishing_model_does_not_drag_the_asking_one(tmp_path):
+    path = write_env(
+        tmp_path,
+        f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nLLM_API_KEY=k\nLLM_MODEL=uno\n",
+    )
+    cfg = Config.from_file(path)
+
+    assert cfg.llm_model == "uno"
+    assert cfg.ask_model != "uno"
+
+
+def test_the_asking_model_can_be_changed_on_its_own(tmp_path):
+    """Pulir una frase y contestar buscando no piden lo mismo de un modelo."""
+    path = write_env(
+        tmp_path,
+        f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\n"
+        "LLM_API_KEY=k\nLLM_MODEL=uno\nASK_MODEL=otro\n",
+    )
+    cfg = Config.from_file(path)
+
+    assert cfg.llm_model == "uno"
+    assert cfg.ask_model == "otro"

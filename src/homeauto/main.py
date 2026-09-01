@@ -20,6 +20,7 @@ from homeauto.agenda.ical import CalendarClient
 from homeauto.agenda.seen import SeenStore
 from homeauto.agenda.service import AgendaService
 from homeauto.agenda.watcher import EventWatcher
+from homeauto.ask import ASK_TIMEOUT, Asker
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.briefing import Briefing
@@ -68,6 +69,7 @@ DEVICES_COMMANDS = ("equipos",)
 USE_COMMANDS = ("usar",)
 OFF_COMMANDS = ("apagar",)
 WEATHER_COMMANDS = ("clima", "tiempo")
+ASK_COMMANDS = ("preguntar", "pregunta")
 AGENDA_COMMANDS = ("agenda",)
 STATUS_COMMANDS = ("estado",)
 SILENCE_COMMANDS = ("silencio", "siesta")
@@ -77,6 +79,7 @@ ALL_COMMANDS = (
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
+    + ASK_COMMANDS
 )
 
 # What Telegram offers when you type "/". Without registering this the commands
@@ -94,6 +97,7 @@ COMMAND_MENU = (
     ("parar", "Cortar lo que esté sonando"),
     ("apagar", "Cerrar la app y dejar el equipo en reposo"),
     ("clima", "Decir el pronóstico en voz alta"),
+    ("preguntar", "Averiguar algo y contestarlo en voz alta"),
     ("agenda", "Qué queda hoy — /agenda mañana para el día siguiente"),
     ("estado", "Cómo están los servicios que vigilo"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
@@ -260,6 +264,26 @@ def build_polisher(config: Config):
     ).polish
 
 
+def build_asker(config: Config) -> Asker | None:
+    """Who answers a question, or None when there is no key.
+
+    🔴 The same client as the polisher, configured the other way round: this one
+    grounds in Google Search and waits far longer for it. Rewording a sentence
+    has nothing to look up and nobody waits for prose; a question does and they
+    do.
+    """
+    if not config.polish_enabled:
+        return None
+    return Asker(
+        model=GoogleModel(
+            api_key=config.llm_api_key,
+            model=config.ask_model,
+            search=True,
+            timeout=ASK_TIMEOUT,
+        )
+    )
+
+
 def build_speakers(config: Config) -> SpeakerRegistry:
     """One Speaker per configured device, sharing synthesis and the media server.
 
@@ -319,6 +343,7 @@ def register(app: Application, commands: Commands) -> None:
         (USE_COMMANDS, commands.use),
         (OFF_COMMANDS, commands.turn_off),
         (WEATHER_COMMANDS, commands.weather),
+        (ASK_COMMANDS, commands.ask),
         (AGENDA_COMMANDS, commands.agenda_command),
         (STATUS_COMMANDS, commands.status),
         (SILENCE_COMMANDS, commands.silence),
@@ -440,6 +465,7 @@ def main() -> None:
         preferences=Preferences(db_path),
         weather=weather,
         quiet=hush,
+        asker=build_asker(config),
         clock=datetime.now,
     )
     register(app, commands)

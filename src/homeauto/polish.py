@@ -145,25 +145,37 @@ class GoogleModel:
         post: Callable[..., object] = _post,
         timeout: float = TIMEOUT,
         thinking: bool = False,
+        search: bool = False,
     ):
         self.api_key = api_key
         self.model = model
         self.post = post
         self.timeout = timeout
+        # Grounding in Google Search. Off for polishing — rewording a sentence
+        # has nothing to look up — and on for answering a question.
+        self.search = search
         # Rewording a sentence needs no deliberation, and the wait is the whole
         # cost. Models that refuse to have it turned off take this back to True
         # so the request stays valid — they are just too slow to be the default.
         self.thinking = thinking
 
-    def _always_thinks(self) -> bool:
-        return self.model.startswith("gemma")
+    def _must_think(self) -> bool:
+        """Deliberation that cannot be turned off.
+
+        Gemma reasons no matter what. A search does too, for a different
+        reason: the criterion to decide *what* to look up is the reasoning,
+        and switching it off leaves the grounding guessing.
+        """
+        return self.search or self.model.startswith("gemma")
 
     def __call__(self, prompt: str) -> str:
         body = {"contents": [{"parts": [{"text": prompt}]}]}
+        if self.search:
+            body["tools"] = [{"google_search": {}}]
         # Gemma answers 400 to the switch instead of ignoring it, which would
         # make every single rewrite fail quietly. Asked without it, it works —
         # just slowly, because it always reasons first.
-        if not self.thinking and not self._always_thinks():
+        if not self.thinking and not self._must_think():
             body["generationConfig"] = {"thinkingConfig": {"thinkingBudget": 0}}
 
         try:

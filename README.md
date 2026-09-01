@@ -20,6 +20,7 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /parar                          corta lo que esté sonando
 /apagar en todos                cierra la app y deja los equipos en reposo
 /clima                          dice el pronóstico en voz alta
+/preguntar cuánto mide el Aconcagua   lo averigua y lo contesta en voz alta
 /agenda                         qué te queda hoy
 /agenda mañana                  el día siguiente completo
 /estado                         cómo están los servicios vigilados
@@ -101,12 +102,45 @@ rangos (`lun-vie`, `vie-lun` cruza el fin de semana), listas (`mar,jue`), un dí
 (`miércoles`). Los días eligen qué ocurrencia de la hora dispara, así que ahí la hora es
 obligatoria: `/alarma lun-vie 10m` no tiene sentido y se rechaza.
 
+## Preguntas (opcional)
+
+`/preguntar` manda la pregunta a un modelo con búsqueda, escribe la respuesta en el chat y
+dice un resumen por el parlante. Usa la misma `LLM_API_KEY` que la redacción.
+
+```
+/preguntar top 10 de los mejores goles de Messi
+```
+
+**Lo escrito y lo dicho no son el mismo texto, a propósito.** Una respuesta de búsqueda está
+llena de años y cifras, y el sintetizador lee un dígito como un número suelto mal declinado.
+Así que al chat va la respuesta completa y al parlante una o dos oraciones con los números en
+palabras. Un top diez dicho entero también sería un minuto de parlante.
+
+Si esa versión hablada no se puede confiar —le quedó un dígito, vino vacía o se fue de largo—
+el parlante dice **"te lo dejé escrito en el chat"** y no lee nada más. La respuesta nunca se
+pierde: siempre está escrita.
+
+**Contestar tarda.** Sale a buscar, y medido contra la API real las respuestas tardaron entre
+8 y 40 segundos. Espera hasta 60. Mientras tanto el bot sigue atendiendo todo lo demás.
+
+⚠️ **No le pongas acá el modelo del pulido.** `/preguntar` usa un modelo distinto a propósito:
+con las mismas cuatro preguntas, el `flash-lite` que pule los avisos **usó la búsqueda en una
+de cuatro** y contestó el resto de memoria — se inventó la temperatura del momento. Un flash
+entero buscó en las cuatro. Para pulir una frase el lite sobra; para contestar no alcanza.
+
+```ini
+ASK_MODEL=gemini-3.7-flash     # default; vacío usa este mismo
+```
+
 ## Redacción más natural (opcional)
 
 Todo lo que la casa dice puede pasar por un modelo de Google para que suene mejor en voz alta:
 agenda, clima, avisos de evento, el mensaje de un timer o una alarma, los avisos del monitor y
 de Seq, el aviso de lluvia y lo que entra por la API. Entra en el free tier de sobra: el uso
 real son decenas de llamadas por día.
+
+La respuesta de `/preguntar` **no** pasa por acá: ya es prosa de un modelo, y una segunda
+pasada solo sumaría espera.
 
 **`/decir` es la excepción y va literal.** Ahí las palabras son tuyas y se dicen como las
 escribiste. En todo lo demás el original siempre gana cuando el modelo falla, tarda o contesta
@@ -266,6 +300,7 @@ SEQ_API_KEY_NUBE=
 SEQ_COOLDOWN_MINUTES=15             # el enfriamiento es de cada instancia
 LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado
 LLM_MODEL=gemini-3.1-flash-lite
+ASK_MODEL=gemini-3.7-flash     # el que contesta /preguntar; NO hereda de LLM_MODEL
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

@@ -70,6 +70,12 @@ SEQ_ALIAS_SHAPE = re.compile(r"^[a-záéíóúñ]{2,20}$")
 # Pulido de la redacción con un LLM. Sin clave, apagado: la casa habla igual.
 # Gemma 4 razona sin poder desactivarlo y tarda decenas de segundos: no va acá.
 DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
+# 🔴 Preguntar no es pulir. Medido contra la API real con la misma consigna, el
+# flash-lite del pulido usó la búsqueda en **una de cuatro** preguntas y contestó
+# el resto de memoria: inventó la temperatura de ahora. Un flash entero buscó en
+# las cuatro. Tarda mucho más, y vale la pena: una respuesta vieja dicha con
+# seguridad es peor que ninguna.
+DEFAULT_ASK_MODEL = "gemini-3.7-flash"
 
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
@@ -321,6 +327,10 @@ class Config:
     seq_cooldown: int = DEFAULT_SEQ_COOLDOWN
     llm_api_key: str = ""
     llm_model: str = DEFAULT_LLM_MODEL
+    # Answering a question is not rewording one: it grounds in search and takes
+    # its time. It never inherits LLM_MODEL — the cheap model that polishes every
+    # announcement does not reliably search, and would answer from memory.
+    ask_model: str = DEFAULT_ASK_MODEL
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -374,6 +384,7 @@ class Config:
             seq_cooldown=_parse_seq_cooldown(pairs),
             llm_api_key=pairs.get("LLM_API_KEY", "").strip(),
             llm_model=pairs.get("LLM_MODEL", "").strip() or DEFAULT_LLM_MODEL,
+            ask_model=pairs.get("ASK_MODEL", "").strip() or DEFAULT_ASK_MODEL,
         )
 
     @property

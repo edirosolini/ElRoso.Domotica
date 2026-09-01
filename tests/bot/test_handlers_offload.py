@@ -50,7 +50,7 @@ class ThreadSpyCommands:
 
     start = say = volume = stop = where = timer = alarm = list = cancel = _record
     devices = use = turn_off = weather = agenda_command = _record
-    status = silence = speak = _record
+    status = silence = speak = ask = _record
 
 
 @pytest.mark.asyncio

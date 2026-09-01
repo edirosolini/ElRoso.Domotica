@@ -19,6 +19,7 @@ Domotica/
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00", "lun-vie"
 │   ├── verbalize.py     # números y horas a palabras, para el sintetizador
 │   ├── polish.py        # reescribe la redacción con un LLM, sin tocar los datos
+│   ├── ask.py           # contesta preguntas con búsqueda: lo escrito y lo dicho
 │   ├── weather.py       # clima por Open-Meteo y aviso de lluvia
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── api.py           # endpoint HTTP para otros sistemas
@@ -346,6 +347,54 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
 - ⚠️ La API también pule, así que un aviso urgente puede tardar hasta el timeout de seis
   segundos más de lo que tardaba. El original igual sale: es demora, no pérdida.
 
+## Preguntas
+
+`ask.py` contesta una pregunta con un modelo con **búsqueda** y la casa la dice. Es lo único
+que la casa dice que no generó ella ni escribió una persona: viene de afuera.
+
+- 🔴 **Lo escrito y lo hablado son textos distintos**, la misma separación que hace
+  `seq.Summary`. Una respuesta de búsqueda está hecha de años, cifras y resultados, y eso es
+  exactamente lo que el sintetizador lee mal. `Answer.written` conserva todo y va al chat;
+  `Answer.spoken` es una o dos oraciones con los números en palabras y es lo único que llega
+  a Piper. Contra el endpoint real, en doce corridas la mitad hablada volvió **siempre sin un
+  solo dígito**: el modelo respeta la consigna. La validación está igual, porque el día que no
+  la respete nadie se va a enterar por el log.
+- 🔴 **Si la voz no se puede confiar, no se habla, pero nunca se pierde la respuesta.** Con un
+  dígito, vacía o demasiado larga, el parlante dice "te lo dejé escrito en el chat" y el chat
+  tiene la respuesta entera. Se descarta, no se recorta: media oración es peor que un puntero.
+- **Un top diez dicho entero es un minuto de parlante.** Por eso hay tope de largo
+  (`MAX_SPOKEN`) además del de dígitos. Está en cuatrocientos porque el top diez real volvió
+  entre doscientos noventa y trescientos cincuenta y cinco caracteres: más ajustado tiraba al
+  chat una respuesta que se podía decir.
+- ⚠️ **La pregunta viaja literal**, como el texto de `/decir`. Reescribirla contestaría otra
+  pregunta.
+- 🔴 **La respuesta no pasa por el pulidor**, y es la única excepción a la regla de que todo
+  lo generado se pule. Ya es prosa de un modelo: pulirla sumaría otros seis segundos a un
+  camino que ya es lento y la validación la descartaría igual, porque cambia los números
+  respecto del original por diseño.
+- **`GoogleModel` es el mismo cliente que el del pulido, configurado al revés**: `search=True`
+  y `ASK_TIMEOUT` de **sesenta** segundos, contra los seis del pulido. Pulir no tiene nada que
+  buscar y nadie espera una reescritura; una pregunta sí y alguien está mirando el chat.
+  Medido contra la API real, un flash tardó **entre ocho y cuarenta segundos**: treinta
+  hubiera cortado las más lentas.
+- 🔴 **Buscar obliga a razonar.** `_must_think()` ignora el `thinking=False` cuando hay
+  búsqueda: el criterio para decidir *qué* buscar es el razonamiento, y apagarlo deja el
+  grounding adivinando. Es la misma razón por la que Gemma nunca recibe el switch.
+- 🔴 **`ASK_MODEL` nunca hereda de `LLM_MODEL`, y el default es un flash entero.** Medido
+  contra el endpoint real con la misma consigna y las mismas cuatro preguntas:
+  `gemini-3.1-flash-lite` —el del pulido— **usó la búsqueda en una de cuatro** y contestó el
+  resto de memoria, incluida la temperatura de ahora, que se inventó. `gemini-3.7-flash` y
+  `gemini-flash-latest` buscaron en las cuatro. Un lite es la elección correcta para pulir,
+  donde no hay nada que buscar, y la incorrecta acá: **una respuesta vieja dicha con
+  seguridad es peor que ninguna.**
+- 🔴 **El prompt tiene que mandar a buscar primero, y decirle que su información está vieja.**
+  Con "buscá en internet si hace falta" al final, el mismo modelo grande buscaba mucho menos:
+  el formato rígido de dos secciones le corría la atención a formatear. Con la orden adelante,
+  cuatro de cuatro. No es adorno del texto: es la diferencia entre buscar y no.
+- ⚠️ La pregunta entra por `/preguntar`, que acepta `en <equipo>` adelante como todos. Como
+  un solo alias desconocido se trata como texto, "en qué año nació Messi" se contesta sin
+  intentar hablarle a un equipo llamado "qué".
+
 ## Horario de descanso
 
 De 23:00 a 07:00 (`QUIET_FROM`/`QUIET_TO`) **nada se dice en voz alta**: el aviso va solo a
@@ -397,10 +446,10 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 24 nombres y `COMMAND_MENU` solo 16: la diferencia son **alias**
-(`help`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`). Funcionan, pero no van
-al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie. Hay test que impide
-que la ayuda ofrezca un comando que no existe.
+`ALL_COMMANDS` tiene 26 nombres y `COMMAND_MENU` solo 17: la diferencia son **alias**
+(`help`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`). Funcionan,
+pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie. Hay test que
+impide que la ayuda ofrezca un comando que no existe.
 
 ## Cableado
 

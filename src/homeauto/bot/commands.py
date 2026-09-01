@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Callable
 
 from homeauto.agenda.ical import CalendarError
+from homeauto.ask import AskError
 from homeauto.config import Config
 from homeauto.schedule.store import DAILY, ONCE, WEEKLY
 from homeauto.quiet import Hush
@@ -61,6 +62,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
 /clima — dice el pronóstico en voz alta
+/preguntar <pregunta> — la averigua y la contesta en voz alta
 /agenda — qué te queda hoy · /agenda mañana
 /estado — cómo están los servicios que vigilo
 /equipos — qué equipos tengo y cuál está activo
@@ -94,6 +96,7 @@ class Commands:
         agenda=None,
         monitor=None,
         quiet=None,
+        asker=None,
         clock: Callable[[], datetime] = datetime.now,
     ):
         self.config = config
@@ -104,6 +107,7 @@ class Commands:
         self.agenda = agenda
         self.monitor = monitor
         self.quiet = quiet
+        self.asker = asker
         self.clock = clock
 
     # --- permisos y destino ------------------------------------------------
@@ -283,6 +287,44 @@ class Commands:
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
         summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
         return f"{spoken}\n\n{summary}"
+
+    def ask(self, chat_id: int, text: str = "") -> str:
+        """Answer a question out loud, and leave the whole answer written.
+
+        🔴 What is said and what is written are different texts. A search answer
+        is made of years and counts, and a digit is read as a loose masculine
+        cardinal; `Asker` splits them and this only forwards the split.
+        """
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        if self.asker is None:
+            return (
+                "No tengo modelo para contestar preguntas. "
+                "Cargá LLM_API_KEY en el archivo de entorno."
+            )
+
+        try:
+            aliases, question = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
+        if not question.strip():
+            return "Preguntame algo: /preguntar cuántos goles hizo Messi"
+
+        try:
+            answer = self.asker.ask(question)
+        except AskError as exc:
+            return str(exc)
+
+        resting = self._resting()
+        if resting:
+            return f"{answer.written}\n\n{resting}"
+
+        results = self._broadcast(aliases, lambda speaker: speaker.say(answer.spoken))
+        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        return f"{answer.written}\n\n{summary}"
 
     def agenda_command(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)

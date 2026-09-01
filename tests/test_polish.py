@@ -287,3 +287,44 @@ def test_a_changed_count_is_still_caught_without_the_article():
     inventado = "Hoy tenés dos cosas. A las nueve de la mañana, Dentista."
 
     assert polisher(inventado).polish(original) == original
+
+
+# --- el mismo cliente, pero con búsqueda: es lo que contesta las preguntas ---
+
+
+def test_without_search_no_tool_travels():
+    """El pulido no busca nada: agregarle la herramienta sería pagar de más."""
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    GoogleModel(api_key="k", post=post)("prompt")
+
+    assert "tools" not in calls[0]["json"]
+
+
+def test_with_search_the_tool_travels():
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    GoogleModel(api_key="k", post=post, search=True)("prompt")
+
+    assert calls[0]["json"]["tools"] == [{"google_search": {}}]
+
+
+def test_searching_does_not_turn_thinking_off():
+    """🔴 Apagar el razonamiento con búsqueda le saca el criterio para buscar."""
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    GoogleModel(api_key="k", post=post, search=True)("prompt")
+
+    assert "generationConfig" not in calls[0]["json"]

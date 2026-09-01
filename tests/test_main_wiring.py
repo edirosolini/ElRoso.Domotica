@@ -134,6 +134,39 @@ def test_wiring_with_seq_schedules_its_job(wired, tmp_path, monkeypatch):
     assert "seq-watch" in wired.job_queue.repeating
 
 
+def test_without_a_key_there_is_nobody_to_ask(wired, tmp_path, monkeypatch):
+    """Sin LLM_API_KEY el comando tiene que contestar que no está configurado."""
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["asker"] = kwargs.get("asker")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["asker"] is None
+
+
+def test_with_a_key_the_asker_is_wired_and_searches(wired, tmp_path, monkeypatch):
+    """🔴 El que contesta preguntas busca; el que pule la redacción no."""
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["asker"] = kwargs.get("asker")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    asker = seen["asker"]
+    assert asker is not None
+    assert asker.model.search is True, "sin búsqueda contesta de memoria"
+    assert asker.model.timeout > 6, "una búsqueda no entra en el timeout del pulido"
+
+
 def test_each_seq_instance_gets_its_own_job(wired, tmp_path, monkeypatch):
     """Dos VPS, dos Seq, dos jobs: un nombre repetido dejaría uno sin agendar."""
     path = config_file(
