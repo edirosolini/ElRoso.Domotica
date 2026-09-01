@@ -58,7 +58,9 @@ en el lado equivocado de esa línea.
 Todo lo que la casa dice pasa por el mismo lugar, venga de donde venga:
 
 ```
-/decir · API HTTP · alarma · evento de agenda · monitor
+mensaje suelto → route.Router → el comando que quiso decir
+                    ↓
+/decir · /preguntar · API HTTP · alarma · evento de agenda · monitor
                     ↓
         HouseVoice.announce()      ← horario de descanso + a qué equipos
                     ↓
@@ -66,6 +68,9 @@ Todo lo que la casa dice pasa por el mismo lugar, venga de donde venga:
                     ↓
         Speaker.say()  =  VoiceSynth (Piper) → MediaServer (HTTP) → Caster (Cast)
 ```
+
+El router está **arriba** de todo esto y no habla: solo elige por qué puerta entra el
+mensaje. Un mensaje sin barra termina en el mismo lugar que el comando escrito a mano.
 
 `HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat.
 Las alarmas son la excepción: pasan por `Announcer`, que aplica la misma regla de descanso

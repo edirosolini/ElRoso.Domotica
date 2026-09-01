@@ -175,7 +175,9 @@ class Caster:
         floor = min_volume / 100
         if current is None or current >= floor:
             return None
-        log.info("subo el volumen de %.2f a %.2f para un aviso urgente", current, floor)
+        # El piso vale para todo lo que se dice, no solo para lo urgente: decir
+        # "urgente" acá mandaba a buscar una urgencia que no existía.
+        log.info("subo el volumen de %.2f a %.2f, estaba por debajo del piso", current, floor)
         device.set_volume(floor)
         return current
 
