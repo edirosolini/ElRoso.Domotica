@@ -243,6 +243,16 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   VPS hacia la casa y ese sentido del túnel no está verificado. El de ida sí.
 - **El monitor solo habla cuando algo cambia**, y aguanta dos rondas antes de declarar una
   caída. Un monitor que llora en cada timeout enseña a ignorarlo, que es peor que no tenerlo.
+- 🔴 **`/estado` muestra lo que se vigila ahora, no lo que quedó en la tabla.** `snapshot()`
+  filtra por los chequeos configurados: renombrar uno deja su fila vieja y nadie la vuelve a
+  chequear, así que quedaba en rojo para siempre, esperando una recuperación que no puede
+  llegar. Pasó de verdad al renombrar `vpn-vps` a `vps`.
+- ⚠️ **La fila vieja no se borra, se deja de mostrar.** Si algún día se vuelve a usar ese
+  nombre, resucita con su `alerted` de entonces: en `alerted=1` se cree que ya avisó y no
+  vuelve a avisar de la caída. Borrarla a mano en `service_status` es el arreglo.
+- ⚠️ **El `name` de un chequeo también se dice en voz alta** ("atención, hosting externo no
+  responde") y ahí **no hay validación** que lo frene, a diferencia del alias de Seq. Un
+  nombre con dígitos o guiones se va a escuchar mal.
 - **La recuperación nunca es urgente.** Nadie se despierta por una buena noticia.
 - Un campo desconocido en `checks.json` **hace fallar el arranque**. Un typo silencioso en
   `urgent` significaría que nunca te despierta.

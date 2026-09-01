@@ -45,7 +45,16 @@ class Monitor:
         self.polish = polish
 
     def snapshot(self) -> dict[str, Status]:
-        return self.store.all()
+        """The state of what is being watched *now*.
+
+        🔴 Filtered by the configured checks, not the whole table. Renaming or
+        dropping a check leaves its old row behind, and nothing ever checks it
+        again: it would sit in `/estado` red forever, a recovery that can never
+        arrive. A monitor showing an outage that no longer exists teaches you
+        to stop reading it.
+        """
+        watched = {check.name for check in self.checks}
+        return {name: state for name, state in self.store.all().items() if name in watched}
 
     def run_once(self) -> list[str]:
         now = self.clock()

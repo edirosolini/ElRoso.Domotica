@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from homeauto.watch.checks import Check, CheckResult
 from homeauto.watch.monitor import Monitor
-from homeauto.watch.status import StatusStore
+from homeauto.watch.status import Status, StatusStore
 
 NOW = datetime(2026, 8, 30, 10, 0)
 
@@ -169,3 +169,37 @@ def test_it_reports_the_current_picture(tmp_path):
 
     assert picture["landing"].up is True
     assert picture["facturador"].up is False
+
+
+# --- renombrar o sacar un chequeo no puede dejar un fantasma ----------------
+
+
+def test_a_check_nobody_watches_anymore_is_not_reported(tmp_path):
+    """🔴 Renombrar un chequeo dejaba la fila vieja en `/estado`, en rojo y para
+    siempre: nadie la vuelve a chequear, así que nunca se recupera. Un monitor
+    que muestra una caída que ya no existe enseña a no mirarlo."""
+    store = StatusStore(tmp_path / "jobs.db")
+    store.save(Status("vpn-vps", False, 9, True, "No route to host", NOW))
+    store.save(Status("vps", True, 0, False, "conectó", NOW))
+
+    monitor = Monitor(
+        checks=[Check(name="vps", host="10.0.0.1", port=443)],
+        store=store,
+        announce=lambda *a, **k: None,
+    )
+
+    assert set(monitor.snapshot()) == {"vps"}
+
+
+def test_what_is_configured_is_still_reported(tmp_path):
+    store = StatusStore(tmp_path / "jobs.db")
+    store.save(Status("vps", False, 2, True, "timeout", NOW))
+
+    monitor = Monitor(
+        checks=[Check(name="vps", host="10.0.0.1", port=443),
+                Check(name="otro", host="10.0.0.2", port=443)],
+        store=store,
+        announce=lambda *a, **k: None,
+    )
+
+    assert set(monitor.snapshot()) == {"vps"}, "solo lo que ya tiene estado"
