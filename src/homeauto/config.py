@@ -56,8 +56,16 @@ DEFAULT_CHECKS_FILE = "/etc/domotica/checks.json"
 DEFAULT_CHECK_INTERVAL = 120
 MIN_CHECK_INTERVAL = 30
 
-# Seq: los logs del VPS. Sin URL y clave, apagado.
+# Seq: los logs de un VPS. Sin URL y clave, apagado. Una clave por instancia,
+# como los calendarios: una lista separada por comas sería ambigua porque las
+# URLs traen `:` y `/` propios.
 DEFAULT_SEQ_COOLDOWN = 15
+SEQ_URL_PREFIX = "SEQ_URL_"
+SEQ_KEY_PREFIX = "SEQ_API_KEY_"
+# 🔴 El alias de un Seq se dice en voz alta ("Hay dos errores nuevos en Seq de
+# hosting"), así que tiene que ser una palabra pronunciable: Piper lee un dígito
+# como cardinal masculino suelto, y "vps-dos" dicho no se entiende.
+SEQ_ALIAS_SHAPE = re.compile(r"^[a-záéíóúñ]{2,20}$")
 
 # Pulido de la redacción con un LLM. Sin clave, apagado: la casa habla igual.
 # Gemma 4 razona sin poder desactivarlo y tarda decenas de segundos: no va acá.
@@ -149,11 +157,67 @@ def _parse_lead(pairs: dict[str, str]) -> int:
     return minutes
 
 
-def _parse_seq_url(pairs: dict[str, str]) -> str:
-    url = pairs.get("SEQ_URL", "").strip().rstrip("/")
-    if url and not url.startswith(("http://", "https://")):
-        raise ConfigError("SEQ_URL tiene que empezar con http:// o https://")
+def _check_seq_url(url: str, key: str) -> str:
+    if not url.startswith(("http://", "https://")):
+        raise ConfigError(f"{key} tiene que empezar con http:// o https://")
     return url
+
+
+def _parse_seq(pairs: dict[str, str]) -> tuple["SeqInstance", ...]:
+    """Every Seq to watch: the legacy single pair plus one per alias.
+
+    A VPS cannot report its own death — Seq dies with it — so each one is
+    watched from here, and each keeps its own marks. A noisy VPS must not
+    silence the alert of another.
+    """
+    instances: list[SeqInstance] = []
+
+    # Older deployments carry a bare SEQ_URL/SEQ_API_KEY. It keeps the empty
+    # alias so it goes on saying "Seq" and reading from the marks it already has.
+    legacy_url = pairs.get("SEQ_URL", "").strip().rstrip("/")
+    legacy_key = pairs.get("SEQ_API_KEY", "").strip()
+    if legacy_url:
+        _check_seq_url(legacy_url, "SEQ_URL")
+        if legacy_key:
+            instances.append(SeqInstance(alias="", url=legacy_url, api_key=legacy_key))
+
+    for name, value in pairs.items():
+        if not name.startswith(SEQ_URL_PREFIX):
+            continue
+        url = value.strip().rstrip("/")
+        if not url:
+            continue
+
+        alias = name[len(SEQ_URL_PREFIX):].strip().lower()
+        if not SEQ_ALIAS_SHAPE.fullmatch(alias):
+            raise ConfigError(
+                f"{name}: '{alias}' no sirve como alias de Seq. Se dice en voz alta, "
+                "así que va una sola palabra sin dígitos, guiones ni espacios"
+            )
+        _check_seq_url(url, name)
+
+        key_name = f"{SEQ_KEY_PREFIX}{alias.upper()}"
+        api_key = pairs.get(key_name, "").strip()
+        if not api_key:
+            # 🔴 Loud, never skipped: dropping it quietly would leave somebody
+            # believing two VPS are watched while only one is.
+            raise ConfigError(f"Falta {key_name} para el Seq de '{alias}'")
+
+        instances.append(SeqInstance(alias=alias, url=url, api_key=api_key))
+
+    # The symmetric hole: a key whose URL is missing is another VPS that would
+    # be believed watched. The bare legacy pair stays lenient on purpose — the
+    # deployed env file carries SEQ_URL with an empty SEQ_API_KEY, and refusing
+    # to boot on that would take the house down on the next restart.
+    watched = {instance.alias for instance in instances}
+    for name in pairs:
+        if not name.startswith(SEQ_KEY_PREFIX) or not pairs[name].strip():
+            continue
+        alias = name[len(SEQ_KEY_PREFIX):].strip().lower()
+        if alias and alias not in watched:
+            raise ConfigError(f"Falta {SEQ_URL_PREFIX}{alias.upper()} para la clave de '{alias}'")
+
+    return tuple(instances)
 
 
 def _parse_seq_cooldown(pairs: dict[str, str]) -> int:
@@ -226,6 +290,15 @@ def _parse_chat_ids(raw: str) -> frozenset[int]:
 
 
 @dataclass(frozen=True)
+class SeqInstance:
+    """One Seq to read errors from. The alias names it out loud."""
+
+    alias: str
+    url: str
+    api_key: str
+
+
+@dataclass(frozen=True)
 class Config:
     """Runtime configuration read from the environment file."""
 
@@ -244,8 +317,7 @@ class Config:
     event_lead_minutes: int = DEFAULT_EVENT_LEAD
     checks_file: Path = Path(DEFAULT_CHECKS_FILE)
     check_interval: int = DEFAULT_CHECK_INTERVAL
-    seq_url: str = ""
-    seq_api_key: str = ""
+    seq_instances: tuple[SeqInstance, ...] = ()
     seq_cooldown: int = DEFAULT_SEQ_COOLDOWN
     llm_api_key: str = ""
     llm_model: str = DEFAULT_LLM_MODEL
@@ -298,8 +370,7 @@ class Config:
             event_lead_minutes=_parse_lead(pairs),
             checks_file=Path(pairs.get("CHECKS_FILE", "").strip() or DEFAULT_CHECKS_FILE),
             check_interval=_parse_interval(pairs),
-            seq_url=_parse_seq_url(pairs),
-            seq_api_key=pairs.get("SEQ_API_KEY", "").strip(),
+            seq_instances=_parse_seq(pairs),
             seq_cooldown=_parse_seq_cooldown(pairs),
             llm_api_key=pairs.get("LLM_API_KEY", "").strip(),
             llm_model=pairs.get("LLM_MODEL", "").strip() or DEFAULT_LLM_MODEL,
@@ -325,8 +396,7 @@ class Config:
 
     @property
     def seq_enabled(self) -> bool:
-        # Both halves or nothing: a URL without a key just logs 401 forever.
-        return bool(self.seq_url and self.seq_api_key)
+        return bool(self.seq_instances)
 
     def has_device(self, alias: str) -> bool:
         return alias.strip().lower() in self.devices

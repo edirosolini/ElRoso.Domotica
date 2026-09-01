@@ -406,17 +406,22 @@ def main() -> None:
     else:
         log.info("sin servicios que vigilar en %s", config.checks_file)
 
-    seq_watcher = None
-    if config.seq_enabled:
-        seq_watcher = SeqWatcher(
-            client=SeqClient(base_url=config.seq_url, api_key=config.seq_api_key),
+    # One watcher per Seq: a VPS cannot report its own death, so each one is
+    # read from here, and each keeps its own marks.
+    seq_watchers = [
+        SeqWatcher(
+            client=SeqClient(base_url=instance.url, api_key=instance.api_key),
             marks=Marks(db_path),
             announce=lambda text, detail="": _alert(house, text, False, detail),
             polish=polish,
             cooldown_minutes=config.seq_cooldown,
+            alias=instance.alias,
         )
-        log.info("vigilando los errores de Seq en %s", config.seq_url)
-    else:
+        for instance in config.seq_instances
+    ]
+    for watcher in seq_watchers:
+        log.info("vigilando los errores de %s", watcher.name)
+    if not seq_watchers:
         log.info("Seq apagado: faltan SEQ_URL o SEQ_API_KEY")
 
     weather = WeatherClient(
@@ -498,12 +503,18 @@ def main() -> None:
             check_services, interval=config.check_interval, first=20, name="service-watch"
         )
 
-    if seq_watcher is not None:
-        async def check_seq(_context):
+    for index, watcher in enumerate(seq_watchers):
+        # 🔴 The watcher goes in as a default argument. Closing over the loop
+        # variable would leave every job reading the last Seq of the list.
+        async def check_seq(_context, seq_watcher=watcher):
             await asyncio.to_thread(seq_watcher.check)
 
+        # Staggered so two instances do not query at the same second.
         app.job_queue.run_repeating(
-            check_seq, interval=config.check_interval, first=40, name="seq-watch"
+            check_seq,
+            interval=config.check_interval,
+            first=40 + index * 10,
+            name=f"seq-watch-{watcher.alias}" if watcher.alias else "seq-watch",
         )
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

@@ -148,3 +148,15 @@ def _as_event(message):
     from homeauto.watch.seq import SeqEvent
 
     return SeqEvent(timestamp=NOW, level="Error", message=message)
+
+
+def test_the_summary_says_which_seq_it_is():
+    """Con dos VPS, "hay errores en Seq" no dice en cuál."""
+    summary = summarize([_as_event("Se cayó la base")], source="Seq de hosting")
+
+    assert summary.spoken == "Hay un error nuevo en Seq de hosting."
+
+
+def test_the_source_has_a_default():
+    """La instancia de siempre sigue diciendo lo mismo que decía."""
+    assert summarize([_as_event("x")]).spoken == "Hay un error nuevo en Seq."

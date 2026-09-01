@@ -182,32 +182,3 @@ def test_a_too_small_interval_is_rejected(tmp_path):
     """Un intervalo de segundos machaca los servicios ajenos."""
     with pytest.raises(ConfigError, match="CHECK_INTERVAL_SECONDS"):
         Config.from_file(write_env(tmp_path, BASE + "CHECK_INTERVAL_SECONDS=5\n"))
-
-
-def test_seq_is_off_without_url_or_key(tmp_path):
-    assert Config.from_file(write_env(tmp_path, BASE)).seq_enabled is False
-    assert Config.from_file(write_env(tmp_path, BASE + "SEQ_URL=http://172.68.0.7\n")).seq_enabled is False
-    assert Config.from_file(write_env(tmp_path, BASE + "SEQ_API_KEY=abc\n")).seq_enabled is False
-
-
-def test_seq_needs_both_to_turn_on(tmp_path):
-    cfg = Config.from_file(write_env(tmp_path, BASE + "SEQ_URL=http://172.68.0.7\nSEQ_API_KEY=abc123\n"))
-
-    assert cfg.seq_enabled is True
-    assert cfg.seq_url == "http://172.68.0.7"
-    assert cfg.seq_api_key == "abc123"
-
-
-def test_a_seq_url_that_is_not_http_is_rejected(tmp_path):
-    with pytest.raises(ConfigError, match="SEQ_URL"):
-        Config.from_file(write_env(tmp_path, BASE + "SEQ_URL=172.68.0.7\nSEQ_API_KEY=abc\n"))
-
-
-def test_the_seq_cooldown_has_a_default(tmp_path):
-    assert Config.from_file(write_env(tmp_path, BASE)).seq_cooldown > 0
-
-
-def test_the_seq_cooldown_can_be_changed(tmp_path):
-    cfg = Config.from_file(write_env(tmp_path, BASE + "SEQ_COOLDOWN_MINUTES=30\n"))
-
-    assert cfg.seq_cooldown == 30

@@ -209,6 +209,25 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
 
 - 🔴 **Seq no puede avisar de que el VPS se cayó**: muere con él. Por eso el túnel se vigila
   aparte, con un TCP simple. Son dos señales que cubren agujeros distintos.
+- **Un Seq por VPS**, con una clave de config por instancia (`SEQ_URL_<ALIAS>` /
+  `SEQ_API_KEY_<ALIAS>`), igual que los calendarios y por el mismo motivo: una lista separada
+  por comas sería ambigua porque las URLs traen `:` y `/` propios.
+- 🔴 **El alias de un Seq se dice en voz alta.** Va dentro de "hay dos errores nuevos en Seq
+  de hosting", que se sintetiza. Por eso `SEQ_ALIAS_SHAPE` exige una sola palabra sin dígitos
+  ni guiones, más estricta que la de los equipos: es la única config del proyecto cuyo
+  *nombre* llega al parlante.
+- 🔴 **Cada instancia lleva sus propias marcas**, `seq:<alias>:last_check` y `:last_alert`.
+  Compartir el archivo no es compartir estado: con un enfriamiento común, un VPS que loguea
+  un error por segundo dejaría al otro sin avisar nunca.
+- **La instancia vieja conserva el alias vacío**: sigue diciendo "Seq" a secas y sigue leyendo
+  `seq:last_check`. Renombrarla haría que un despliegue releyera todo y avisara de errores
+  viejos.
+- **Con alias, una mitad sin la otra hace fallar el arranque** —URL sin clave o clave sin
+  URL—, igual que un campo raro en `checks.json`: saltearla en silencio dejaría creyendo que
+  se vigilan dos VPS mientras se vigila uno. ⚠️ El par suelto **no**: el env desplegado tiene
+  `SEQ_URL` con la clave vacía, y ponerse estricto ahí dejaría la casa sin arrancar.
+- ⚠️ **El watcher entra al job por argumento por defecto**, no por closure: cerrar sobre la
+  variable del `for` dejaría todos los jobs leyendo el último Seq de la lista.
 - **Se consulta desde casa, no al revés.** Seq tiene alertas por webhook, pero saldrían del
   VPS hacia la casa y ese sentido del túnel no está verificado. El de ida sí.
 - **El monitor solo habla cuando algo cambia**, y aguanta dos rondas antes de declarar una

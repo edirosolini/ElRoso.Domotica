@@ -129,14 +129,18 @@ class Summary:
     detail: str
 
 
-def summarize(events: list[SeqEvent]) -> Summary | None:
-    """One sentence out loud. Reading seven stack traces helps nobody."""
+def summarize(events: list[SeqEvent], source: str = "Seq") -> Summary | None:
+    """One sentence out loud. Reading seven stack traces helps nobody.
+
+    `source` names which Seq it is: with a VPS per instance, "hay errores en
+    Seq" does not say where to look.
+    """
     if not events:
         return None
 
     count = len(events)
     thing = "error nuevo" if count == 1 else "errores nuevos"
-    heading = f"Hay {number(count)} {thing} en Seq."
+    heading = f"Hay {number(count)} {thing} en {source}."
 
     latest = max(events, key=lambda e: (e.timestamp is not None, e.timestamp or 0))
     quote = latest.message.strip().replace("\n", " ")

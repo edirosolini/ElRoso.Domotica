@@ -173,13 +173,24 @@ un typo en `urgent` significaría que nunca te despierta.
 **Los logs.** Consulta Seq y avisa si hay errores nuevos. Seq dice *por qué* se rompió algo,
 no solo que no responde; pero muere junto con el VPS, y por eso el túnel se vigila aparte.
 
+Se vigila **un Seq por VPS**, con una clave de configuración por instancia
+(`SEQ_URL_<ALIAS>` y `SEQ_API_KEY_<ALIAS>`), igual que los calendarios. El alias **se dice
+en voz alta** —"hay dos errores nuevos en Seq de hosting"—, así que tiene que ser una sola
+palabra, sin dígitos ni guiones. Cada instancia lleva su propio enfriamiento y su propia
+marca de hasta dónde leyó: un VPS ruidoso no puede tapar el aviso del otro. Con alias, una URL sin
+su clave —o una clave sin su URL— **hace fallar el arranque**: saltearla en silencio dejaría
+creyendo que se vigilan dos VPS mientras se vigila uno. El par suelto `SEQ_URL`/`SEQ_API_KEY`
+de antes se sigue aceptando, sigue diciéndose "Seq" a secas y sigue apagándose sin ruido si
+le falta una mitad: así está el env desplegado y no puede dejar de arrancar por eso.
+
 Dos reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
 
 - Un fallo suelto no es una caída: hacen falta dos rondas seguidas para avisar.
 - Se avisa **al cambiar de estado**, no mientras dure. La recuperación también se avisa, y
   nunca como urgente: no hay que despertar a nadie por una buena noticia.
 - Los errores de Seq tienen enfriamiento (`SEQ_COOLDOWN_MINUTES`): un servicio roto logra
-  cientos de errores por minuto y no puede convertirse en cientos de avisos.
+  cientos de errores por minuto y no puede convertirse en cientos de avisos. El enfriamiento
+  corre por instancia, no para todas juntas.
 
 ## API para otros sistemas
 
@@ -248,9 +259,11 @@ BRIEFING_AT=08:00        # resumen del día; "off" lo apaga
 EVENT_LEAD_MINUTES=10    # cuántos minutos antes avisar
 CHECKS_FILE=/etc/domotica/checks.json
 CHECK_INTERVAL_SECONDS=120
-SEQ_URL=http://172.68.0.7      # logs del VPS, por el túnel
-SEQ_API_KEY=                   # clave de solo lectura; sin ella Seq queda apagado
-SEQ_COOLDOWN_MINUTES=15
+SEQ_URL_HOSTING=http://172.68.0.7   # logs de un VPS, por el túnel
+SEQ_API_KEY_HOSTING=                # clave de solo lectura; falta la clave, no arranca
+SEQ_URL_NUBE=http://172.68.2.7      # una clave por VPS; el sufijo es el alias
+SEQ_API_KEY_NUBE=
+SEQ_COOLDOWN_MINUTES=15             # el enfriamiento es de cada instancia
 LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado
 LLM_MODEL=gemini-3.1-flash-lite
 ```

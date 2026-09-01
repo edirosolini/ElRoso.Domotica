@@ -24,7 +24,7 @@ class FakeSeq:
         return self.rounds.pop(0) if self.rounds else []
 
 
-def build(tmp_path, rounds=(), boom=None, now=NOW, cooldown=15):
+def build(tmp_path, rounds=(), boom=None, now=NOW, cooldown=15, alias=""):
     said = []
     seq = FakeSeq(rounds, boom)
     watcher = SeqWatcher(
@@ -33,6 +33,7 @@ def build(tmp_path, rounds=(), boom=None, now=NOW, cooldown=15):
         announce=lambda text, detail="": said.append((text, detail)),
         clock=lambda: now,
         cooldown_minutes=cooldown,
+        alias=alias,
     )
     return watcher, seq, said
 
@@ -117,3 +118,65 @@ def test_the_state_survives_a_restart(tmp_path):
     SeqWatcher(client=seq, marks=Marks(path), announce=keep, clock=lambda: NOW).check()
 
     assert len(said) == 1, "reiniciar no puede saltear el enfriamiento"
+
+
+# --- varias instancias: un Seq por VPS -------------------------------------
+
+
+def test_an_aliased_watcher_says_which_seq_it_is(tmp_path):
+    watcher, _, said = build(tmp_path, rounds=[[error("Se cayó la base")]], alias="hosting")
+
+    watcher.check()
+
+    assert said[0][0] == "Hay un error nuevo en Seq de hosting."
+
+
+def test_what_it_says_carries_no_digits(tmp_path):
+    """🔴 Lo hablado va al sintetizador, y Piper lee un dígito como cardinal suelto."""
+    watcher, _, said = build(tmp_path, rounds=[[error("x"), error("y")]], alias="hosting")
+
+    watcher.check()
+
+    assert not any(c.isdigit() for c in said[0][0]), said[0][0]
+
+
+def test_two_instances_do_not_share_their_cooldown(tmp_path):
+    """🔴 Un VPS ruidoso no puede tapar el aviso del otro: comparten archivo, no estado."""
+    path = tmp_path / "jobs.db"
+    said = []
+    keep = lambda text, detail="": said.append((text, detail))
+
+    for alias in ("hosting", "nube"):
+        SeqWatcher(
+            client=FakeSeq([[error("algo")]]),
+            marks=Marks(path),
+            announce=keep,
+            clock=lambda: NOW,
+            alias=alias,
+        ).check()
+
+    assert len(said) == 2, "cada instancia lleva su propio enfriamiento"
+    assert "hosting" in said[0][0] and "nube" in said[1][0]
+
+
+def test_two_instances_do_not_share_where_they_were_reading(tmp_path):
+    path = tmp_path / "jobs.db"
+    quiet = FakeSeq([[]])
+    noisy = FakeSeq([[]])
+
+    SeqWatcher(client=quiet, marks=Marks(path), announce=lambda *a, **k: None,
+               clock=lambda: NOW, alias="hosting").check()
+    SeqWatcher(client=noisy, marks=Marks(path), announce=lambda *a, **k: None,
+               clock=lambda: NOW, alias="nube").check()
+
+    assert noisy.asked[0] < NOW, "la primera vuelta de cada instancia mira hacia atrás sola"
+
+
+def test_the_old_instance_keeps_its_marks(tmp_path):
+    """Un despliegue nuevo no puede hacer que la instancia de siempre relea todo."""
+    path = tmp_path / "jobs.db"
+    marks = Marks(path)
+    SeqWatcher(client=FakeSeq([[]]), marks=marks, announce=lambda *a, **k: None,
+               clock=lambda: NOW).check()
+
+    assert marks.get("seq:last_check") == NOW

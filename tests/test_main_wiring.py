@@ -134,6 +134,20 @@ def test_wiring_with_seq_schedules_its_job(wired, tmp_path, monkeypatch):
     assert "seq-watch" in wired.job_queue.repeating
 
 
+def test_each_seq_instance_gets_its_own_job(wired, tmp_path, monkeypatch):
+    """Dos VPS, dos Seq, dos jobs: un nombre repetido dejaría uno sin agendar."""
+    path = config_file(
+        tmp_path,
+        "SEQ_URL_HOSTING=http://172.68.1.7\nSEQ_API_KEY_HOSTING=una\n"
+        "SEQ_URL_NUBE=http://172.68.2.7\nSEQ_API_KEY_NUBE=otra\n",
+    )
+
+    run_main(monkeypatch, path)
+
+    assert "seq-watch-hosting" in wired.job_queue.repeating
+    assert "seq-watch-nube" in wired.job_queue.repeating
+
+
 def test_wiring_with_services_schedules_the_monitor(wired, tmp_path, monkeypatch):
     checks = tmp_path / "checks.json"
     checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
