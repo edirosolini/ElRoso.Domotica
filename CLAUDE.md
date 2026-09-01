@@ -482,6 +482,13 @@ abajo en ese orden a propósito.
   para abrir la conexión: si se llama `stop_discovery()` antes de `wait()`, el dispositivo
   aparece en el descubrimiento pero la conexión muere con un timeout de 20 s sin explicación.
   Por eso `_Discovery` guarda el browser.
+- 🔴 **Kokoro se midió y se descartó.** Es el candidato obvio para reemplazar a Piper y no
+  entra: **612 MB de RSS contra los 512 del CT**. El int8 entra (439 MB) pero tarda
+  **dieciséis segundos** en una frase de cuatro, y el fp16 es el peor de los dos mundos
+  porque onnxruntime no tiene kernels de media precisión para CPU: ocupa más y va más lento
+  que el modelo entero. Aparte, de sus cincuenta y cuatro voces **solo tres hablan español y
+  las tres son peninsulares**; la casa habla rioplatense. Usarlo obligaría a subir el
+  contenedor a 2 GB. El dueño escuchó las muestras y se quedó con `es_AR-daniela-high`.
 - **`catt` no sirve** para archivos locales — falla siempre con "Playback of local file has
   failed". Se descartó a favor de `pychromecast` directo, que anda.
 - **Audios de menos de ~1 s** terminan sin pasar nunca por estado `PLAYING`. Hay que padear
