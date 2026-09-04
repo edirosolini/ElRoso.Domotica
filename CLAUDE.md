@@ -121,13 +121,27 @@ python3 -m venv .venv
 ```
 
 `pytest.ini` fija `pythonpath = src .` y `asyncio_mode = auto`: no hay que instalar el paquete
-ni decorar los tests async. La cobertura sale en cada corrida por `addopts`.
+ni decorar los tests async. La cobertura sale en cada corrida por `addopts`, y es **un
+informe, no una puerta**: `pytest.ini` no fija `fail-under`, así que ningún porcentaje frena
+la suite.
 
-No hay linter ni formateador configurados en el repo.
+No hay linter ni formateador configurados en el repo, y **tampoco `.claude/rules/`**: las
+reglas del proyecto son este archivo.
 
 Los tests **no tocan hardware ni red**: `pychromecast`, el subproceso de Piper y las llamadas
 HTTP están mockeados. `tests/conftest.py` tiene lo compartido — `make_config()`, `FakeSpeaker`
 y `StubRegistry`; agregar un campo a `Config` se arregla en un solo lugar.
+
+🔴 **Lo que se importa en `src/` va en `requirements.txt`, aunque ande sin declararlo.**
+`requests` andaba en el contenedor sin estar declarado: lo arrastraba `casttube`, que es
+dependencia de pychromecast. Los cinco módulos que lo usan —clima, agenda, monitor, Seq y
+pulido— lo importan **adentro de la función**, así que el día que esa cadena cambie no falla
+el arranque: falla el primer comando que alguien use, de a uno.
+`tests/test_requirements_declared.py` lo sostiene.
+
+El proceso es `python -m homeauto.main`, sin entry point instalado.
+`deploy/domotica.service` es la referencia de con qué entorno corre de verdad; leerlo antes de
+intentar levantarlo a mano.
 
 Despliegue al contenedor (empaqueta, instala dependencias, reinstala el unit y **reinicia**):
 
@@ -144,6 +158,10 @@ Para correrlo fuera del contenedor hay que apuntar las rutas por entorno:
 
 **CT 300 `domotica`** del Proxmox de casa (`192.168.68.60`), en `192.168.68.10`.
 El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (chmod 600).
+
+**`config.py` es la fuente de verdad de las claves de entorno**, y acá no hay lista de ellas a
+propósito: una lista paralela se desactualiza sola y manda a configurar algo que ya no se lee.
+Lo que el archivo acepta se lee en `Config.from_file()`.
 
 ## Sobre el Asistente de Google
 
