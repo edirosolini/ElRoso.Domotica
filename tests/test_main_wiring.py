@@ -329,14 +329,20 @@ def test_the_polisher_reaches_everything_the_house_says(tmp_path, monkeypatch):
     assert seen == {name: sentinel for name, _ in sources}
 
 
-def test_the_words_of_a_person_never_reach_the_polisher(tmp_path, monkeypatch):
-    """🔴 /decir se dice tal cual: ahí las palabras son de alguien, no nuestras."""
+def test_the_commands_get_both_the_polisher_and_the_corrector(tmp_path, monkeypatch):
+    """Dos caminos y no uno: lo que genera la casa se pule, lo que escriben se corrige.
+
+    Que `/decir` no pase por el pulidor se prueba donde se puede ver hablar, en
+    `tests/bot/test_call_command.py`; acá se prueba que las dos piezas llegan.
+    """
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
     monkeypatch.setattr(main, "build_speakers", lambda config: _FakeRegistry())
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setattr(main, "build_polisher", lambda config: lambda text, must_keep=(): "REESCRITO")
+    monkeypatch.setattr(
+        main, "build_polisher", lambda config: lambda text, must_keep=(): "REESCRITO"
+    )
 
     got = {}
     original = main.Commands.__init__
@@ -348,7 +354,8 @@ def test_the_words_of_a_person_never_reach_the_polisher(tmp_path, monkeypatch):
     monkeypatch.setattr(main.Commands, "__init__", spy)
     run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
 
-    assert "polish" not in got, "los comandos no pulen: /decir va literal"
+    assert got["polish"]("lo que sea") == "REESCRITO"
+    assert callable(got["correct"])
 
 
 def test_the_wired_polisher_is_actually_callable(wired, tmp_path, monkeypatch):
@@ -370,3 +377,93 @@ def test_the_wired_polisher_is_actually_callable(wired, tmp_path, monkeypatch):
     # Y con la firma real que usan agenda, clima y watcher.
     polish.__self__.model = lambda _prompt: ""
     assert polish("Hoy tenés dos cosas.", must_keep=["nada"]) == "Hoy tenés dos cosas."
+
+
+def test_the_conversation_is_wired_and_usable(wired, tmp_path, monkeypatch):
+    """🔴 El doble tiene que servir para lo que sirve el real.
+
+    Acá el real es barato de armar, así que se usa el que quedó cableado: se le
+    guarda un pendiente y se lo vuelve a leer. Un centinela que solo viaja hasta
+    su lugar no habría visto una tabla que no se crea.
+    """
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["conversation"] = kwargs.get("conversation")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    talk = seen["conversation"]
+    assert talk is not None
+    talk.remember(7, "alarma", "creá una alarma", ("hora",))
+    assert talk.get(7).command == "alarma"
+
+
+def test_the_conversation_shares_the_one_database(wired, tmp_path, monkeypatch):
+    """Séptima tabla del mismo archivo, no una base aparte."""
+    run_main(monkeypatch, config_file(tmp_path))
+
+    import sqlite3
+
+    with sqlite3.connect(tmp_path / "jobs.db") as conn:
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "pending" in tables
+
+
+def test_wiring_without_a_key_leaves_the_text_as_typed(wired, tmp_path, monkeypatch):
+    from homeauto.correct import as_written
+
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["correct"] = kwargs.get("correct")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["correct"] is as_written
+
+
+def test_the_wired_corrector_is_actually_callable(wired, tmp_path, monkeypatch):
+    """🔴 Un `Corrector` no es llamable; ya se desplegó ese bug con el pulidor.
+
+    El servicio arrancaba perfecto y reventaba con TypeError recién cuando
+    alguien hablaba.
+    """
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["correct"] = kwargs.get("correct")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    monkeypatch.setattr(main, "GoogleModel", lambda **kwargs: (lambda prompt: "Hola."))
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    assert seen["correct"]("hola") == "Hola."
+
+
+def test_the_wired_corrector_refuses_a_rewrite(wired, tmp_path, monkeypatch):
+    """No alcanza con que sea llamable: tiene que traer puesta la validación.
+
+    Un modelo que contesta otra cosa no puede llegar al parlante ni siquiera
+    cableado de verdad; el pulidor sí puede, y son dos caminos distintos.
+    """
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["correct"] = kwargs.get("correct")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    monkeypatch.setattr(main, "GoogleModel", lambda **kwargs: (lambda prompt: "Buenas tardes."))
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    assert seen["correct"]("hola") == "hola"

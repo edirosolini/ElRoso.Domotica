@@ -26,7 +26,10 @@ from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.briefing import Briefing
 from homeauto.config import Config
+from homeauto.correct import as_written
+from homeauto.correct import build as build_correction
 from homeauto.polish import GoogleModel, Polisher, as_is
+from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import Hush, HushStore
 from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.preferences import Preferences
@@ -102,6 +105,7 @@ log = logging.getLogger("homeauto")
 # Aliases in Spanish are fine as long as they stay unaccented.
 START_COMMANDS = ("start", "help", "ayuda")
 SAY_COMMANDS = ("decir",)
+CALL_COMMANDS = ("llamar", "llama")
 VOLUME_COMMANDS = ("volumen", "volume")
 STOP_COMMANDS = ("parar", "stop")
 WHERE_COMMANDS = ("donde",)
@@ -119,7 +123,7 @@ STATUS_COMMANDS = ("estado",)
 SILENCE_COMMANDS = ("silencio", "siesta")
 SPEAK_COMMANDS = ("hablar",)
 ALL_COMMANDS = (
-    START_COMMANDS + SAY_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
+    START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
@@ -131,6 +135,7 @@ ALL_COMMANDS = (
 # of each one goes here; the aliases would just clutter the menu.
 COMMAND_MENU = (
     ("decir", "Decirlo en voz alta ahora"),
+    ("llamar", "Llamar a la casa — /llamar a cenar"),
     ("timer", "Avisar dentro de un rato — /timer 10m sacá la pizza"),
     ("alarma", "Avisar a una hora — /alarma 7:30 arriba"),
     ("lista", "Ver lo que está programado"),
@@ -299,13 +304,29 @@ def build_polisher(config: Config):
     """The rewriter for generated wording, or None when there is no key.
 
     Only text this service writes goes through it. What a person typed into
-    /decir or a timer is said exactly as they wrote it.
+    /decir goes to `build_corrector` instead, which fixes the spelling and
+    leaves the words alone.
     """
     # The bound method, not the object: everything downstream calls it like the
     # `as_is` default, and a Polisher is not callable on its own.
     return Polisher(
         model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
     ).polish
+
+
+def build_corrector(config: Config):
+    """The speller for what a person typed, or the identity when there is no key.
+
+    🔴 A different thing from the polisher, and on purpose: this one may not
+    change a word. It exists because a digit somebody typed is read by Piper as
+    a loose masculine cardinal, and it knows the time because a meal named
+    without saying which one follows the clock.
+    """
+    if not config.polish_enabled:
+        return as_written
+    return build_correction(
+        model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
+    )
 
 
 def build_asker(config: Config) -> Asker | None:
@@ -396,6 +417,7 @@ def register(app: Application, commands: Commands) -> None:
     routes = (
         (START_COMMANDS, lambda chat_id, _text: commands.start(chat_id)),
         (SAY_COMMANDS, commands.say),
+        (CALL_COMMANDS, commands.call),
         (VOLUME_COMMANDS, commands.volume),
         (STOP_COMMANDS, commands.stop),
         (WHERE_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
@@ -537,6 +559,11 @@ def main() -> None:
         quiet=hush,
         asker=build_asker(config),
         router=build_router(config),
+        conversation=Conversation(PendingStore(db_path)),
+        correct=build_corrector(config),
+        # 🔴 Solo para /llamar, que es texto nuestro. Lo que escribe una
+        # persona va por `correct`, que no puede cambiarle una palabra.
+        polish=polish,
         clock=datetime.now,
     )
     register(app, commands)

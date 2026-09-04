@@ -8,6 +8,7 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 ```
 /decir buenas noches            habla ahora
 /decir en tv que bajen a comer  lo dice en ese equipo
+/llamar a cenar                 llama a toda la casa; sin nada, a lo que toque
 /timer 10m sacá la pizza        avisa dentro de 10 minutos
 /alarma 7:30 arriba             avisa a esa hora, una vez
 /alarma diaria 7:30 arriba      avisa todos los días
@@ -115,6 +116,7 @@ despertame a las 7 y media                →  /alarma 7:30 despertame
 bajá el volumen a 40                      →  /volumen 40
 callate una hora                          →  /silencio 1h
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
+llamá a todos a cenar                     →  /llamar en todos a cenar
 ```
 
 **Ejecuta y te dice qué entendió**, no pregunta antes. La respuesta arranca con
@@ -125,6 +127,29 @@ cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconc
 el comando y el equipo, pero no puede reescribir el texto de un `/decir`: si lo que quedaría
 para decir no está en lo que escribiste, no lo dice y lo trata como pregunta. Un mensaje
 inventado en boca de la casa es peor que no entender.
+
+**Si falta un dato, te lo pregunta.** «creá una alarma» no es un error: es media orden, así
+que el bot pide la otra mitad y se acuerda de lo que ya le dijiste.
+
+```
+vos:  creá una alarma
+bot:  ¿A qué hora?
+vos:  a las 7
+bot:  ¿Qué querés que diga?
+vos:  arriba
+bot:  ¿Una sola vez, todos los días, o algunos días?
+vos:  de lunes a viernes
+bot:  Entendí: /alarma lun-vie 7:00 arriba
+      Alarma lun, mar, mié, jue, vie #3 en parlante para mañana 07:00: «arriba»
+```
+
+Solo pregunta lo que **falta**: `dame el clima` se ejecuta de una, como siempre. Un comando
+completo en medio de la charla gana —«dame el clima» mientras armás una alarma es un comando,
+no una respuesta— y **`olvidalo` deja lo que estaba a medio armar**. Si te vas, vence solo a
+los diez minutos: una respuesta de la nada no puede caer en una pregunta de hace media hora.
+
+Lo que quedó a medio armar se guarda en SQLite, así que un reinicio en medio de la charla no
+pierde el hilo.
 
 Los comandos con barra siguen funcionando igual y no pasan por el intérprete.
 
@@ -168,9 +193,28 @@ real son decenas de llamadas por día.
 La respuesta de `/preguntar` **no** pasa por acá: ya es prosa de un modelo, y una segunda
 pasada solo sumaría espera.
 
-**`/decir` es la excepción y va literal.** Ahí las palabras son tuyas y se dicen como las
-escribiste. En todo lo demás el original siempre gana cuando el modelo falla, tarda o contesta
-algo sospechoso: nadie se queda sin aviso porque un modelo estaba lento.
+**`/decir` no pasa por acá: se corrige, no se reescribe.** Ahí las palabras son tuyas y
+siguen siendo tuyas; lo que se arregla es cómo quedaron escritas. En todo lo demás el original
+siempre gana cuando el modelo falla, tarda o contesta algo sospechoso: nadie se queda sin
+aviso porque un modelo estaba lento.
+
+**Lo que escribís se dice bien escrito.** Antes de sintetizar, `/decir` pasa por una
+corrección que arregla la ortografía y **no puede cambiar ninguna palabra**:
+
+```
+vos:   deci a Diego que es hoa de comer
+suena: «Diego, es hora de cenar»          ← a las 21:30
+bot:   Ya le avisé: «Diego, es hora de cenar»
+
+vos:   avisales q llego en 1 minuto
+suena: «Avisales que llego en un minuto»  ← antes sonaba "uno minuto"
+```
+
+Tres cosas puede tocar, y nada más: la ortografía y la puntuación, los números —que pasan a
+palabras porque el sintetizador lee mal un dígito— y **la comida, que sigue al reloj**: "es
+hora de comer" a la noche es cenar, y al mediodía almorzar. Si el modelo intenta cualquier
+otra cosa —agregar una palabra, sacarla, dar vuelta la frase— se descarta y se dice tal cual
+lo escribiste. Sin `LLM_API_KEY` tampoco cambia nada.
 
 ```
 antes:  Atención: Dentista, en diez minutos, en Consultorio.

@@ -48,7 +48,7 @@ class ThreadSpyCommands:
         self.threads.append(threading.current_thread().name)
         return "ok"
 
-    start = say = volume = stop = where = timer = alarm = list = cancel = _record
+    start = say = call = volume = stop = where = timer = alarm = list = cancel = _record
     devices = use = turn_off = weather = agenda_command = _record
     status = silence = speak = ask = free_text = _record
 

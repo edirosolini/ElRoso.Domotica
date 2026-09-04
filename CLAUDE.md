@@ -19,8 +19,12 @@ Domotica/
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00", "lun-vie"
 │   ├── verbalize.py     # números y horas a palabras, para el sintetizador
 │   ├── polish.py        # reescribe la redacción con un LLM, sin tocar los datos
+│   ├── correct.py       # corrige lo que escribió una persona, sin cambiar las palabras
 │   ├── ask.py           # contesta preguntas con búsqueda: lo escrito y lo dicho
+│   ├── summon.py        # la frase con la que la casa llama a alguien
 │   ├── route.py         # interpreta un mensaje sin barra y lo manda al comando
+│   ├── slots.py         # qué dato le falta a un comando para poder ejecutarse
+│   ├── pending.py       # la conversación a medio armar de cada chat
 │   ├── weather.py       # clima por Open-Meteo y aviso de lluvia
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── api.py           # endpoint HTTP para otros sistemas
@@ -58,7 +62,7 @@ en el lado equivocado de esa línea.
 Todo lo que la casa dice pasa por el mismo lugar, venga de donde venga:
 
 ```
-mensaje suelto → route.Router → el comando que quiso decir
+mensaje suelto → route.Router → slots.missing() → falta un dato: pregunta y espera
                     ↓
 /decir · /preguntar · API HTTP · alarma · evento de agenda · monitor
                     ↓
@@ -70,7 +74,9 @@ mensaje suelto → route.Router → el comando que quiso decir
 ```
 
 El router está **arriba** de todo esto y no habla: solo elige por qué puerta entra el
-mensaje. Un mensaje sin barra termina en el mismo lugar que el comando escrito a mano.
+mensaje. Un mensaje sin barra termina en el mismo lugar que el comando escrito a mano, salvo
+que le falte un dato: ahí sale una pregunta al chat y el hilo queda esperando la respuesta,
+sin que nada de esto se entere.
 
 `HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat.
 Las alarmas son la excepción: pasan por `Announcer`, que aplica la misma regla de descanso
@@ -81,7 +87,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con seis tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con siete tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -92,6 +98,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `watch.StatusStore` | último estado de cada chequeo |
 | `watch.Marks` | marcas de tiempo de los watchers |
 | `quiet.HushStore` | hasta cuándo dura el silencio pedido a mano |
+| `pending.PendingStore` | el comando a medio armar de cada chat |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -318,9 +325,11 @@ generan texto, porque todos escribían el número con `f"{n}"`.
   hora y con ella la franja, y "las nueve y cuarenta y cinco" ya se entiende.
 - Vive en la **raíz del paquete**, no en `voice/`. Es una utilidad de idioma, no del parlante:
   `agenda/` y `weather.py` la usan, y `voice/` es el subpaquete de un dispositivo.
-- ⚠️ **El título del evento y el texto de `/decir` van literales.** Solo se verbaliza lo que
-  generamos nosotros. Un anuncio de agenda tiene que decir exactamente lo que dice el
-  calendario; reescribirlo sería peor que leer mal un número.
+- ⚠️ **El título del evento va literal.** Solo se verbaliza lo que generamos nosotros. Un
+  anuncio de agenda tiene que decir exactamente lo que dice el calendario; reescribirlo sería
+  peor que leer mal un número.
+- **El texto de `/decir` ya no va literal**: pasa por `correct.py`, que arregla cómo está
+  escrito sin cambiar las palabras. Ver **Corrección de lo que escribe una persona**.
 
 Hay test que verifica que **ningún dígito** sobrevive en el texto que arma la agenda, el clima,
 el resumen de la mañana, el aviso del monitor ni el de Seq.
@@ -339,11 +348,12 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
 - 🔴 **El original siempre gana.** Sin clave, sin red, con timeout o con una respuesta
   sospechosa, se dice el texto que ya había. Esto es decoración sobre un camino que tiene que
   funcionar: nadie puede quedarse sin aviso porque un modelo estaba lento.
-- 🔴 **`/decir` es lo único que va literal.** Todo lo demás que la casa dice pasa por el
-  pulidor: agenda, clima, avisos de evento, el mensaje de un timer o una alarma, los avisos
-  del monitor, el resumen de Seq, el aviso de lluvia, la línea de servicios caídos del
-  resumen y lo que entra por la API. La decisión es del dueño de la casa y reemplaza la
-  regla anterior, que dejaba afuera todo lo escrito por una persona.
+- 🔴 **`/decir` es lo único que no pasa por el pulidor.** Todo lo demás que la casa dice sí:
+  agenda, clima, avisos de evento, el mensaje de un timer o una alarma, los avisos del
+  monitor, el resumen de Seq, el aviso de lluvia, la línea de servicios caídos del resumen y
+  lo que entra por la API. Lo de `/decir` **no es que vaya literal**: va por `correct.py`,
+  que es otra cosa —corrige la escritura, no puede cambiar una palabra—. Las dos decisiones
+  son del dueño de la casa.
 - ⚠️ Consecuencia de lo anterior: **el mensaje de un timer se reescribe.** "sacá la pizza"
   puede volver como "es hora de sacar la pizza". La validación protege los datos duros, no
   impide esa licencia. Si molesta, el cambio es sacar `polish` del `Announcer`.
@@ -389,6 +399,60 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
   No agregar un llamador nuevo que lo invoque desde el event loop.
 - ⚠️ La API también pule, así que un aviso urgente puede tardar hasta el timeout de seis
   segundos más de lo que tardaba. El original igual sale: es demora, no pérdida.
+
+### Corrección de lo que escribe una persona
+
+`correct.py` le arregla la ortografía a lo que alguien escribió en `/decir`, antes de
+sintetizarlo. **No es el pulidor**: el pulidor reescribe lo que generamos nosotros; acá las
+palabras son de una persona y tienen que seguir siendo suyas.
+
+- 🔴 **Reemplaza la regla anterior de que `/decir` iba literal.** Es decisión del dueño de la
+  casa, pedida con un ejemplo: "dile a Diego es hoa de comer" tiene que sonar "Diego, es hora
+  de cenar". Lo que se conserva es *qué* dijo, no *cómo* lo tipeó.
+- 🔴 **Tres licencias, y solo tres.** Un dígito puede crecer hasta las palabras que lo dicen
+  (`1 minuto` → `un minuto`, que es el bug de Piper que originó todo); una palabra a una letra
+  de la que volvió es la misma palabra; y una comida sigue al reloj. Cualquier otra cosa
+  —una palabra que aparece, una que se va, una oración dada vuelta— es una reescritura, y se
+  descarta.
+- 🔴 **La comida es la única palabra que puede volver siendo otra.** `MEAL_WORDS` es el
+  vocabulario cerrado, y por eso el corrector conoce la hora: "es hora de comer" a las nueve y
+  media de la noche es "es hora de cenar". Todas significan lo mismo dicho a otra hora, así
+  que lo que cambia es *cuándo*, y el cuándo la casa ya lo sabe.
+- ⚠️ **Las palabras cortas no se corrigen por parecido.** `no` y `yo` están a una letra, igual
+  que `sin` y `con`: ahí una corrección invierte el sentido. `RISKY` las deja afuera, y con
+  ellas se dice lo que se escribió.
+- **La hora entra en la clave del cache**, como el ritmo en el de la síntesis: la misma frase
+  al mediodía y a la noche es otra corrección, y servir la de antes diría la comida
+  equivocada.
+- 🔴 **El original siempre gana**, igual que en el pulido: sin clave, sin red, con timeout o
+  con una respuesta que no pasa la validación, se dice lo que la persona escribió.
+- **En horario de descanso no se corrige.** No se habla, así que no hay nada que arreglar ni
+  por qué esperar seis segundos.
+- **La respuesta del chat muestra lo que salió por el parlante**, no lo que se tipeó:
+  `Ya le avisé: «Diego, es hora de cenar»`. Una corrección rara se ve en el acto.
+- ⚠️ `Router._faithful()` no cambia. La corrección es posterior al ruteo, así que la garantía
+  de que lo dicho salió del mensaje de la persona sigue en pie: lo que cambia es la
+  ortografía, no el origen.
+
+### Llamar a la casa
+
+`/llamar a cenar` es lo contrario de `/decir`, y nació de un mensaje que salía mal:
+"llamar a todos a cenar" **no trae las palabras que hay que decir**, trae la intención. El
+router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía hacer era mandar
+"a cenar" a secas al parlante.
+
+- 🔴 **La frase la genera la casa**, así que es texto nuestro: pasa por el **pulidor**, no por
+  el corrector, y `Router._faithful()` no le aplica porque no hay a qué serle fiel. Ese es
+  todo el criterio: si las palabras son de una persona, se corrigen; si son nuestras, se pulen.
+- **Un llamado es para toda la casa** salvo que alguien nombre un equipo. Llamar a cenar a un
+  solo parlante no es lo que quiere decir "llamar".
+- **La comida sale del reloj**, con el mismo `meal_verb()` que usa el corrector: "a comer" a
+  la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
+- ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
+  comportamiento medido (dieciséis de dieciséis). **Hay que volver a medir contra el endpoint
+  real**: un ejemplo nuevo puede correrle la atención al modelo en los otros comandos.
+- ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
+  ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
 ## Preguntas
 
@@ -500,7 +564,10 @@ existen ya saben rechazar un argumento malo.
 
 - **Ejecuta y avisa qué entendió; no pide confirmación.** Es decisión del dueño de la casa.
   La respuesta arranca con `Entendí: /timer 10m sacá la pizza` para que una lectura errada se
-  vea, y `/cancelar` es el deshacer.
+  vea, y `/cancelar` es el deshacer. Lo único que se pregunta antes es un dato que falta —ver
+  **Conversación**—, y eso no es confirmar: es no inventarlo.
+- **Un llamado es la excepción, y por eso es un comando aparte.** "llamar a todos a cenar" no
+  contiene la frase a decir; `llamar` la genera. Ver **Llamar a la casa**.
 - 🔴 **Lo que la casa va a decir con voz propia tiene que salir del mensaje.** Un modelo al
   que se le pide extraer un texto lo mejora de paso. `Router._faithful()` compara el payload
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
@@ -530,10 +597,53 @@ existen ya saben rechazar un argumento malo.
 - ⚠️ Sin `LLM_API_KEY` no hay intérprete: un mensaje suelto contesta que los comandos están
   en `/ayuda`.
 
+## Conversación
+
+Un mensaje al que le falta un dato obligatorio **no es un error, es media orden**: el bot
+pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qué falta,
+`pending.py` guarda el hilo, `Commands.free_text()` los junta.
+
+- **Solo se pregunta lo que falta.** Un mensaje completo se ejecuta de una y avisa qué
+  entendió, igual que antes: la decisión de no pedir confirmación sigue en pie. Es decisión
+  del dueño de la casa, tomada junto con la de preguntar.
+- 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
+  prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
+  prompt del router **está medido** (dieciséis de dieciséis) y un segundo prompt es un segundo
+  comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
+  contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
+- 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
+  comando contesta con el error de su parser. Volver a preguntar lo mismo es un loop, y el
+  parser lo explica mejor que la segunda pregunta.
+- **Interrumpe un comando completo, no uno a medias.** "dame el clima" en medio de una alarma
+  es un comando nuevo; algo dicho a medias es casi siempre el dato que faltaba. Se avisa que
+  lo que estaba a medio armar se dejó.
+- **`olvidalo` y sus variantes cortan sin pagar el modelo.** ⚠️ **`cancelá` no está en esa
+  lista** a propósito: `/cancelar` lleva un número y usar la misma palabra para tirar un
+  borrador se leería como cancelar una alarma ya puesta.
+- **Vence a los diez minutos** (`pending.TTL`). Sin vencimiento, un "sí" de la nada contesta
+  una pregunta de hace media hora y la alarma que sale de ahí no es de nadie.
+- **Se guarda en SQLite, no en memoria**, por lo mismo que el silencio a pedido: un reinicio
+  en medio de "¿a qué hora?" dejaría la respuesta sin a dónde volver.
+- 🔴 **La repetición de una alarma se pregunta aunque el parser no la exija.** `/alarma 7:30
+  arriba` es válido y agenda una sola vez; el pedido del dueño es que pregunte los días en vez
+  de elegirlos en silencio. Es la única pregunta que no sale de una validación.
+- ⚠️ **La forma de una alarma se mira en dos lados**, `slots._alarm()` y `Commands.alarm()`.
+  Si se separan, el bot pregunta por algo que ya tenía o ejecuta algo que no puede.
+  `tests/bot/test_conversation.py` los ata: lo que `slots` llama incompleto, el comando de
+  verdad tiene que rechazarlo.
+- 🔴 **Las preguntas van al chat, nunca al parlante**, así que son la excepción a la regla de
+  los dígitos: "¿Cuál cancelo? El número sale en /lista" se lee, no se dice.
+- ⚠️ **La fidelidad de `decir` pasa a medirse contra el hilo entero.** La respuesta llega en el
+  mensaje de después; comparando solo contra el último renglón, "que bajen a comer" no
+  estaría y la casa se quedaría sin decir algo que la persona sí escribió.
+- **Sin `Conversation` cableada, todo se comporta como antes**: un comando incompleto sale con
+  el error del parser. La conversación es una pieza opcional del constructor, como el resto.
+
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 26 nombres y `COMMAND_MENU` solo 17: la diferencia son **alias**
-(`help`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`). Funcionan,
+`ALL_COMMANDS` tiene 28 nombres y `COMMAND_MENU` solo 18: la diferencia son **alias**
+(`help`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`,
+`llama`). Funcionan,
 pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie. Hay test que
 impide que la ayuda ofrezca un comando que no existe.
 

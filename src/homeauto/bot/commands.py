@@ -16,7 +16,10 @@ from typing import Callable
 from homeauto.agenda.ical import CalendarError
 from homeauto.ask import AskError
 from homeauto.config import Config
-from homeauto.route import RouteError
+from homeauto import slots, summon
+from homeauto.correct import as_written
+from homeauto.polish import as_is
+from homeauto.route import Decision, RouteError
 from homeauto.schedule.store import DAILY, ONCE, WEEKLY
 from homeauto.quiet import Hush
 from homeauto.timespec import (
@@ -52,6 +55,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /decir en comedor <texto> — lo dice en ese equipo
 /decir en comedor,recamara <texto> — en varios
 /decir en todos <texto> — en toda la casa
+/llamar a cenar — llama a la casa; sin nada, a la comida que toque
 /timer 10m sacá la pizza — avisa dentro de un rato
 /alarma 7:30 arriba — avisa a esa hora
 /alarma diaria 7:30 arriba — todos los días
@@ -72,7 +76,10 @@ HELP = """Hola. Manejo los equipos de casa.
 La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, 5.30, mañana 8:00.
 Una hora que ya pasó se entiende como la de mañana.
 Los días de una alarma van adelante de la hora: lun-vie, mar,jue, finde, sab.
-Cualquier comando acepta «en <equipo>» adelante para mandarlo a otro lado."""
+Cualquier comando acepta «en <equipo>» adelante para mandarlo a otro lado.
+
+También me hablás sin barra: «creá una alarma» y te pregunto lo que falte.
+«olvidalo» deja lo que estábamos armando."""
 
 
 def format_when(when: datetime, now: datetime) -> str:
@@ -99,6 +106,9 @@ class Commands:
         quiet=None,
         asker=None,
         router=None,
+        conversation=None,
+        correct=as_written,
+        polish=as_is,
         clock: Callable[[], datetime] = datetime.now,
     ):
         self.config = config
@@ -111,6 +121,9 @@ class Commands:
         self.quiet = quiet
         self.asker = asker
         self.router = router
+        self.conversation = conversation
+        self.correct = correct
+        self.polish = polish
         self.clock = clock
 
     # --- permisos y destino ------------------------------------------------
@@ -165,8 +178,14 @@ class Commands:
         # A single unknown word is just the message: "/decir en casa hace frío".
         return None
 
-    def _split_target(self, chat_id: int, text: str) -> tuple[list[str], str]:
-        """Pull a leading «en <equipos>» off the text, if it names real ones."""
+    def _split_target(
+        self, chat_id: int, text: str, default: list[str] | None = None
+    ) -> tuple[list[str], str]:
+        """Pull a leading «en <equipos>» off the text, if it names real ones.
+
+        `default` overrides where it goes when nobody named a room: a call to
+        dinner is for the house, not for whatever speaker this chat last used.
+        """
         text = text.strip()
         head, _, rest = text.partition(" ")
         if head.lower() == TARGET_WORD:
@@ -175,7 +194,7 @@ class Commands:
                 aliases = self._parse_aliases(match.group(1))
                 if aliases:
                     return aliases, (match.group(2) or "").strip()
-        return self._default_aliases(chat_id), text
+        return (default or self._default_aliases(chat_id)), text
 
     def _broadcast(self, aliases: list[str], action) -> dict[str, str | None]:
         """Run the action on every device at once.
@@ -230,11 +249,50 @@ class Commands:
         if resting:
             return f"{resting}\n\nDecía: «{message}»"
 
-        results = self._broadcast(aliases, lambda speaker: speaker.say(message))
-        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        # 🔴 Corrected, not reworded: the words stay the person's. What changes
+        # is how they are spelled, so Piper reads them right — and the reply
+        # shows what actually came out of the speaker, not what was typed.
+        spoken = self.correct(message)
+        results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
+        summary = self._summary(results, "Ya le avisé", "No pude decirlo en ninguno:")
         if all(problem is None for problem in results.values()):
-            summary += f": «{message}»"
+            summary += f": «{spoken}»"
         return summary + self._enrollment_hint(chat_id)
+
+    def call(self, chat_id: int, text: str = "") -> str:
+        """Call the house to something. The sentence is the house's own.
+
+        🔴 The other side of `/decir`. There the words are somebody's and may
+        not change; here the person gave an intention —"llamar a todos a
+        cenar"— and never wrote what to say. So this generates the sentence,
+        which makes it our text: it goes through the polisher like the weather,
+        and it is the reason the router's fidelity check does not apply to it.
+        """
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        try:
+            # A call is for the whole house unless somebody names a room:
+            # calling one speaker to dinner is not what "a todos" means.
+            aliases, what = self._split_target(
+                chat_id, text, default=list(self.speakers.aliases)
+            )
+        except TargetError as exc:
+            return str(exc)
+
+        spoken = summon.phrase(what, self.clock())
+
+        resting = self._resting()
+        if resting:
+            return f"{resting}\n\nDecía: «{spoken}»"
+
+        spoken = self.polish(spoken)
+        results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
+        summary = self._summary(results, "Ya le avisé", "No pude decirlo en ninguno:")
+        if all(problem is None for problem in results.values()):
+            summary += f": «{spoken}»"
+        return summary
 
     def volume(self, chat_id: int, text: str) -> str:
         denial = self._denial(chat_id)
@@ -337,6 +395,7 @@ class Commands:
         """
         return {
             "decir": self.say,
+            "llamar": self.call,
             "timer": self.timer,
             "alarma": self.alarm,
             "lista": lambda chat_id, _text="": self.list(chat_id),
@@ -357,8 +416,10 @@ class Commands:
     def free_text(self, chat_id: int, text: str) -> str:
         """Run whatever a message without a slash was asking for.
 
-        It runs it and says what it understood, instead of asking first: the
-        owner's call. A wrong read is undone by hand, and /cancelar exists.
+        A message that carries everything runs on the spot and says what it
+        understood, without asking first: the owner's call, and /cancelar is the
+        undo. What is new is the other half — a message missing an obligatory
+        datum is not an error to report, it is a question to ask.
         """
         denial = self._denial(chat_id)
         if denial:
@@ -367,19 +428,92 @@ class Commands:
         if self.router is None:
             return "No entiendo mensajes sueltos. Los comandos están en /ayuda."
 
+        pending = self.conversation.get(chat_id) if self.conversation else None
+        if pending and self.conversation.dropped(text):
+            self.conversation.forget(chat_id)
+            return f"Listo, lo dejo. No quedó ningún /{pending.command} armado."
+
         try:
             decision = self.router.route(text)
         except RouteError as exc:
             # 🔴 Not a question. Sending "apagá la tele" out to a web search
             # would answer something nobody asked, slowly and confidently.
-            return str(exc)
+            if not pending:
+                return str(exc)
+            # Mid-conversation it is almost never a command: "a las siete" on
+            # its own is not one either. Let the thread decide.
+            decision = Decision(None)
 
+        note = ""
+        if pending:
+            if self._interrupts(pending, decision):
+                self.conversation.forget(chat_id)
+                note = f"Dejo a medio armar el /{pending.command}.\n\n"
+                pending = None
+            else:
+                decision = self._continue(pending, text)
+                if decision is None:
+                    return "No te entendí. Probá con /ayuda."
+
+        # With a pending one this is never None: `_continue` only ever returns
+        # the command being built, and only dispatchable commands get stored.
         run = None if decision.is_question else self._dispatch().get(decision.command)
         if run is None:
-            return self.ask(chat_id, text)
+            return note + self.ask(chat_id, text)
 
+        asked = pending.asked if pending else ()
+        thread = f"{pending.thread}\n{text}" if pending else text
+        question = self._still_missing(decision, asked)
+        if question:
+            self.conversation.remember(chat_id, decision.command, thread, asked + (question.name,))
+            return note + question.question
+
+        if self.conversation:
+            self.conversation.forget(chat_id)
         understood = f"/{decision.command} {decision.argument}".strip()
-        return f"Entendí: {understood}\n\n{run(chat_id, decision.argument)}"
+        return f"{note}Entendí: {understood}\n\n{run(chat_id, decision.argument)}"
+
+    def _interrupts(self, pending, decision) -> bool:
+        """Whether this message is a new order rather than the answer asked for.
+
+        Only a *complete* different command interrupts. Something half said is
+        far more likely to be the missing datum arriving than a second thing
+        being asked for.
+        """
+        if decision.is_question or decision.command == pending.command:
+            return False
+        if decision.command not in self._dispatch():
+            return False
+        return slots.missing(decision.command, decision.argument) is None
+
+    def _continue(self, pending, text: str):
+        """Re-read the whole thread, so the answer joins what came before.
+
+        The thread goes through the same prompt as a single message —the one
+        that was measured— instead of a second one that merges an answer into an
+        argument. It costs one more call per turn and keeps one prompt to trust.
+        """
+        try:
+            decision = self.router.route(f"{pending.thread}\n{text}")
+        except RouteError:
+            return None
+        if decision.is_question or decision.command != pending.command:
+            # The thread confused it. Stay on what was being built rather than
+            # sending half a conversation out to a web search.
+            return Decision(pending.command, "")
+        return decision
+
+    def _still_missing(self, decision, asked: tuple[str, ...]):
+        """The datum to ask for, or None when it is time to run.
+
+        A slot already asked for is never asked again: if the answer did not
+        carry it, asking twice is a loop, and the command's own parser says it
+        better than a second question would.
+        """
+        if not self.conversation:
+            return None
+        slot = slots.missing(decision.command, decision.argument)
+        return slot if slot and slot.name not in asked else None
 
     def agenda_command(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)
@@ -575,7 +709,7 @@ class Commands:
 
         head, _, tail = rest.strip().partition(" ")
         prefix = f"{TARGET_WORD} {','.join(aliases)} "
-        if head.lower() in ("diaria", "diario", "daily"):
+        if head.lower() in slots.DAILY_WORDS:
             return self._schedule(chat_id, prefix + tail, DAILY, "Alarma todos los días")
 
         days = parse_weekdays(head)

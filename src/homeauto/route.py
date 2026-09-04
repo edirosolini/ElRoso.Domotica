@@ -28,7 +28,7 @@ NONE_WORDS = {"ninguno", "ninguna", "nada", "none", ""}
 # Only these can be reached without a slash. The model can answer anything, and
 # anything outside this list is treated as a question instead of guessed at.
 ROUTABLE = (
-    "decir", "timer", "alarma", "lista", "cancelar", "silencio", "hablar",
+    "decir", "llamar", "timer", "alarma", "lista", "cancelar", "silencio", "hablar",
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar",
 )
@@ -46,6 +46,9 @@ qué comando quiso usar la persona.
 
 Comandos y qué lleva cada uno:
 - decir: el texto a decir en voz alta, tal cual lo escribió la persona
+- llamar: convocar a la casa a algo, así: "a cenar"; sin argumento, a la comida que toque.
+  Va acá cuando la persona pide llamar, avisar o convocar a alguien A algo, sin escribir
+  la frase que hay que decir
 - timer: una duración y el mensaje, así: "10m sacá la pizza"
 - alarma: una hora y el mensaje, así: "7:30 arriba"; para repetir, "diaria 7:30 arriba"
   o los días adelante, "lun-vie 5:30 arriba"
@@ -84,6 +87,14 @@ Mensaje: decile a todos que la comida está lista
 COMANDO: decir
 ARGUMENTO: en todos la comida está lista
 
+Mensaje: llamar a todos a cenar
+COMANDO: llamar
+ARGUMENTO: en todos a cenar
+
+Mensaje: llamá a los chicos a comer
+COMANDO: llamar
+ARGUMENTO: a comer
+
 Mensaje: avisá en el comedor que salgo en cinco minutos
 COMANDO: decir
 ARGUMENTO: en comedor que salgo en cinco minutos
@@ -117,6 +128,16 @@ class Decision:
     @property
     def is_question(self) -> bool:
         return self.command is None
+
+
+def strip_target(argument: str) -> str:
+    """The argument without the «en <equipo>» head the router itself builds.
+
+    Whoever reads what a command actually carries — the fidelity check here, the
+    missing-datum check in `slots` — has to drop it first, or targeting reads as
+    part of the message.
+    """
+    return _TARGET_PREFIX.sub("", argument.strip())
 
 
 def _clean(text: str) -> str:
@@ -187,7 +208,7 @@ class Router:
         The «en <equipo>» head is dropped first: that part is targeting the
         router adds, not words anybody typed.
         """
-        payload = _TARGET_PREFIX.sub("", argument.strip())
+        payload = strip_target(argument)
         if not payload:
             return False
         return _normalize(payload) in _normalize(message)

@@ -129,3 +129,24 @@ def test_the_target_prefix_may_be_added_to_what_is_said():
 
     assert decision.command == "decir"
     assert decision.argument == "en comedor la comida está lista"
+
+
+def test_the_words_of_a_thread_are_also_the_words_of_the_person():
+    """🔴 En una conversación, lo fiel se mide contra el hilo entero.
+
+    La respuesta llega en el mensaje de después: si la fidelidad se midiera
+    contra el último renglón, «que bajen a comer» no estaría y la casa se
+    quedaría sin decir algo que la persona sí escribió.
+    """
+    router = Router(model_saying("COMANDO: decir\nARGUMENTO: que bajen a comer"))
+
+    decision = router.route("quiero que digas algo\nque bajen a comer")
+
+    assert decision.command == "decir"
+    assert decision.argument == "que bajen a comer"
+
+
+def test_what_nobody_wrote_in_the_thread_is_still_invented():
+    router = Router(model_saying("COMANDO: decir\nARGUMENTO: la cena está lista"))
+
+    assert router.route("quiero que digas algo\nque bajen a comer").is_question
