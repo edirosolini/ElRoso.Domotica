@@ -750,8 +750,8 @@ abajo en ese orden a propósito.
   `--length-scale` y `--sentence-silence` con un default que respira, y las cuatro perillas
   se mueven por entorno (`DOMOTICA_LENGTH_SCALE`, `DOMOTICA_SENTENCE_SILENCE`,
   `DOMOTICA_NOISE_SCALE`, `DOMOTICA_NOISE_W`).
-- **El primer arreglo del ritmo se quedó corto y el default subió otra vez**, a `1.30` y
-  `0.90`. El que lo destapó fue el resumen de la mañana, que es lo más largo que dice la
+- **El primer arreglo del ritmo se quedó corto y el default subió otra vez**, a `1.40` y
+  `1.10`, en dos pasos: primero a `1.30` y `0.90`, y de nuevo tras escuchar el resumen. El que lo destapó fue el resumen de la mañana, que es lo más largo que dice la
   casa: tres bloques seguidos sin respirar se escuchan como uno solo. Es **una sola
   velocidad para toda la casa**, por decisión del dueño, y se mueve por entorno sin
   desplegar. ⚠️ Cambiarla deja huérfano en `/var/lib/domotica/cache` lo sintetizado con

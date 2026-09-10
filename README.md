@@ -434,8 +434,8 @@ aviso de dos frases suene apurado. Se ajusta por entorno, sin tocar código:
 
 | variable | default | qué hace |
 | --- | --- | --- |
-| `DOMOTICA_LENGTH_SCALE` | 1.30 | más alto, más despacio |
-| `DOMOTICA_SENTENCE_SILENCE` | 0.90 | segundos de pausa entre oraciones |
+| `DOMOTICA_LENGTH_SCALE` | 1.40 | más alto, más despacio |
+| `DOMOTICA_SENTENCE_SILENCE` | 1.10 | segundos de pausa entre oraciones |
 | `DOMOTICA_NOISE_SCALE` | — | más bajo, más contenido |
 | `DOMOTICA_NOISE_W` | — | más alto, menos plano |
 

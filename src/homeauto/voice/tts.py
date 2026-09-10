@@ -35,8 +35,11 @@ DEFAULT_MIN_SECONDS = 1.5
 # everything spoken, on purpose — one pace for the house, asked for by its
 # owner. ⚠️ Both are part of the audio cache key, so moving them leaves the
 # clips synthesized with the old pace orphaned in the cache directory.
-DEFAULT_LENGTH_SCALE = 1.30
-DEFAULT_SENTENCE_SILENCE = 0.90
+#
+# 1.30 and 0.90 were still short after listening to the summary out loud twice;
+# these are the values the owner settled on.
+DEFAULT_LENGTH_SCALE = 1.40
+DEFAULT_SENTENCE_SILENCE = 1.10
 
 
 class TtsError(Exception):
