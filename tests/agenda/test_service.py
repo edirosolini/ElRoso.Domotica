@@ -118,3 +118,28 @@ def test_the_briefing_is_polished_too():
 
 def test_without_a_polisher_the_text_is_untouched():
     assert "Dentista" in AgendaService(calendar=with_dentist(), clock=lambda: NOW).spoken("hoy")
+
+
+def test_the_briefing_does_not_name_the_place():
+    """El resumen dice hora y título; `/agenda` sigue diciendo dónde."""
+    class OneEvent:
+        def day(self, when):
+            return [
+                Event(
+                    uid="x@t",
+                    summary="Dentista",
+                    start=datetime(2026, 8, 30, 10, 0, tzinfo=TZ),
+                    end=datetime(2026, 8, 30, 11, 0, tzinfo=TZ),
+                    all_day=False,
+                    calendar="personal",
+                    location="Sanatorio Colegiales",
+                )
+            ]
+
+        def rest_of_day(self, when):
+            return self.day(when)
+
+    service = AgendaService(calendar=OneEvent(), clock=lambda: datetime(2026, 8, 30, 8, 0, tzinfo=TZ))
+
+    assert "Sanatorio" not in service.briefing()
+    assert "Sanatorio" in service.spoken("hoy"), "pedida a mano sí dice dónde"

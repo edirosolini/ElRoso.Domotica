@@ -25,12 +25,12 @@ class AgendaService:
         # terms that have to survive untouched.
         self.polish = polish
 
-    def _say(self, events, label: str) -> str:
+    def _say(self, events, label: str, place: bool = True) -> str:
         # The label travels as an argument on purpose: the briefing job and a
         # /agenda from the chat run in different threads at the same time, and
         # anything kept on self would let one overwrite the other's day.
         return self.polish(
-            describe(events, label=label),
+            describe(events, label=label, place=place),
             must_keep=[event.summary for event in events],
         )
 
@@ -47,5 +47,9 @@ class AgendaService:
         raise ValueError(f"No entiendo '{when}'. Probá con hoy o mañana.")
 
     def briefing(self) -> str:
-        """The whole day, for the morning summary."""
-        return self._say(self.calendar.day(self.clock()), label="hoy")
+        """The whole day, for the morning summary: the hour and the title.
+
+        No place: heard next to everything else the summary says, it was what
+        made it drag. /agenda still answers with it.
+        """
+        return self._say(self.calendar.day(self.clock()), label="hoy", place=False)

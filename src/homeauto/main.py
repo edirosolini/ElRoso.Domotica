@@ -161,10 +161,6 @@ COMMAND_MENU = (
 # keeps the free forecast requests down to a couple dozen.
 RAIN_INTERVAL = 1800
 
-# Rewording five headlines is more text than one sentence, and the summary runs
-# off the event loop: waiting a little longer costs nobody anything.
-NEWS_TIMEOUT = 20
-
 
 def local_ip() -> str:
     """The address this host uses to reach the LAN, so the speaker can call back."""
@@ -361,26 +357,6 @@ def build_asker(config: Config) -> Asker | None:
             search=True,
             timeout=ASK_TIMEOUT,
         )
-    )
-
-
-def build_news_voice(config: Config):
-    """Who puts the headlines into words, or None when there is no key.
-
-    🔴 Without it the news stay written. A headline is made of prices, years
-    and percentages, and there is no way to say one without digits unless
-    something rewrites it first.
-
-    The cheap model, like the router: this is rewording, not finding out. It
-    does get a longer wait than the polisher — five headlines are more text
-    than one sentence, and the summary runs off the event loop anyway.
-    """
-    if not config.polish_enabled:
-        return None
-    return GoogleModel(
-        api_key=config.llm_api_key,
-        model=config.llm_model,
-        timeout=NEWS_TIMEOUT,
     )
 
 
@@ -637,11 +613,7 @@ def main() -> None:
 
     economy = EconomyClient(polish=polish) if config.economy_enabled else None
     news = (
-        NewsClient(
-            config.news_feeds,
-            speak=build_news_voice(config),
-            count=config.news_count,
-        )
+        NewsClient(config.news_feeds, count=config.news_count)
         if config.news_enabled
         else None
     )

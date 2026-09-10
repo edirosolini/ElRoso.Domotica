@@ -1,6 +1,6 @@
-"""Los titulares del día: escritos enteros al chat, hablados sin un dígito."""
+"""Los titulares del día: van enteros al chat y nunca al parlante."""
 
-from homeauto.news import NewsClient, MAX_SPOKEN
+from homeauto.news import NewsClient
 
 INFOBAE = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel>
@@ -77,81 +77,16 @@ def test_titles_arrive_clean():
     assert "Vuelve el tren a Mar del Plata" in titles, "sin espacios de más"
 
 
-def test_the_written_half_keeps_the_digits_and_names_the_source():
+def test_what_goes_to_the_chat_keeps_the_digits_and_names_the_source():
     news = NewsClient(both(), fetch=feeds_of(infobae=INFOBAE, ambito=AMBITO), count=2)
 
-    digest = news.digest()
+    written = news.written()
 
-    assert "12%" in digest.written
-    assert "Infobae" in digest.written or "infobae" in digest.written
-
-
-def test_the_spoken_half_is_what_the_model_gave_back():
-    news = NewsClient(
-        both(),
-        fetch=feeds_of(infobae=INFOBAE, ambito=AMBITO),
-        speak=lambda prompt: "Cerró la paritaria con un aumento del doce por ciento.",
-        count=2,
-    )
-
-    assert news.digest().spoken.startswith("Cerró la paritaria")
+    assert "12%" in written
+    assert "infobae" in written
 
 
-def test_a_spoken_half_with_digits_is_thrown_away():
-    """🔴 Igual que en las preguntas: si la voz no se puede confiar, no se habla.
-
-    Lo escrito nunca se pierde, así que el chat sigue teniendo los titulares.
-    """
-    news = NewsClient(
-        both(),
-        fetch=feeds_of(infobae=INFOBAE, ambito=AMBITO),
-        speak=lambda prompt: "El dólar tocó los 1535 pesos.",
-    )
-
-    digest = news.digest()
-
-    assert digest.spoken == ""
-    assert "1.535" in digest.written
-
-
-def test_a_spoken_half_that_rambles_is_thrown_away():
-    news = NewsClient(
-        both(),
-        fetch=feeds_of(infobae=INFOBAE, ambito=AMBITO),
-        speak=lambda prompt: "muy largo " * MAX_SPOKEN,
-    )
-
-    assert news.digest().spoken == ""
-
-
-def test_without_a_model_there_is_nothing_to_say_out_loud():
-    """Sin clave del modelo los titulares no se pueden decir sin dígitos."""
-    news = NewsClient(both(), fetch=feeds_of(infobae=INFOBAE, ambito=AMBITO))
-
-    digest = news.digest()
-
-    assert digest.spoken == ""
-    assert digest.written
-
-
-def test_a_model_that_breaks_costs_the_voice_and_nothing_more():
-    def broken(prompt):
-        raise RuntimeError("se cayó")
-
-    news = NewsClient(
-        both(), fetch=feeds_of(infobae=INFOBAE, ambito=AMBITO), speak=broken
-    )
-
-    digest = news.digest()
-
-    assert digest.spoken == ""
-    assert digest.written
-
-
-def test_no_feeds_at_all_is_an_empty_digest():
+def test_no_feeds_at_all_is_nothing_written():
     news = NewsClient({}, fetch=feeds_of())
 
-    digest = news.digest()
-
-    assert digest.written == ""
-    assert digest.spoken == ""
+    assert news.written() == ""

@@ -27,7 +27,7 @@ Domotica/
 │   ├── pending.py       # la conversación a medio armar de cada chat
 │   ├── weather.py       # clima por Open-Meteo y los avisos del cielo
 │   ├── economy.py       # dólar, riesgo país e inflación, en palabras
-│   ├── news.py          # titulares por RSS: escritos al chat, dichos en palabras
+│   ├── news.py          # titulares por RSS, solo para el chat
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── api.py           # endpoint HTTP para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
@@ -230,12 +230,13 @@ hablado, a la hora de `BRIEFING_AT`.
   resumen: un calendario que no contesta no te puede costar el clima. Es la misma postura
   que dentro de `agenda/`, donde un calendario roto no tapa a los otros.
 - 🔴 **Desde las noticias, el resumen tiene dos mitades.** `speech()` devuelve `spoken` y
-  `written`, la misma separación de `seq.Summary` y `ask.Answer`: los titulares se dicen en
-  palabras y se escriben tal como los publicó el medio. `text()` sigue existiendo y es la
-  mitad hablada, para no romper a quien solo quiere eso.
-- **Si los titulares no se pueden decir, el resumen dice dónde están.** Nunca se los saltea
-  en silencio: "las noticias te las dejé escritas en el chat" es una línea, y el chat las
-  tiene enteras.
+  `written`, la misma separación de `seq.Summary` y `ask.Answer`. Acá la diferencia son los
+  titulares, que **solo van al chat**. `text()` sigue existiendo y es la mitad hablada, para
+  no romper a quien solo quiere eso.
+- 🔴 **La agenda del resumen no dice el lugar**, solo la hora y el título. Escuchado junto al
+  clima, la economía y lo que esté caído, "en Sanatorio Colegiales" era lo que lo hacía
+  arrastrarse. `/agenda`, que se pide a propósito, lo sigue diciendo: es el argumento `place`
+  de `speech.describe()`.
 - **No depende de la agenda.** El job del resumen se agenda aunque no haya ningún calendario
   configurado. Por eso está fuera de `schedule_calendar_jobs()`.
 - **De los servicios solo se nombran los caídos.** Escuchar "todo en orden" cada mañana
@@ -569,12 +570,11 @@ como los calendarios y los Seq) y arma los titulares del resumen.
 - 🔴 **RSS y no un modelo contestando "qué pasó hoy".** De cada línea se sabe qué medio la
   publicó, y eso es lo que la hace verificable. El modelo entra después y solo para cambiar
   cómo suena, nunca para decidir qué pasó.
-- 🔴 **Lo escrito y lo hablado son textos distintos**, como en `ask.py` y en `seq.Summary`.
-  Un titular está hecho de precios, años y porcentajes: al chat va tal cual, al parlante va
-  reescrito en palabras y validado sin un solo dígito. Si la reescritura no pasa, no se dice
-  nada y el chat sigue teniéndolos: se descarta entero, nunca se recorta.
-- 🔴 **Sin `LLM_API_KEY` los titulares no se hablan.** No es una degradación elegante que se
-  pueda inventar: no hay forma de leer "$1.535" en voz alta sin reescribirlo primero.
+- 🔴 **Los titulares no se dicen nunca: van solo al chat.** Decisión del dueño, tomada
+  después de escucharlos: son lo más largo del resumen y lo único que no se puede accionar,
+  y están hechos de precios, años y porcentajes. Por eso este módulo **no habla con ningún
+  modelo**: poner un titular en palabras era un prompt, una validación y un timeout enteros
+  para decir en voz alta algo que se lee mejor.
 - **Los medios toman turnos.** Los cinco primeros de un solo diario son su portada, no las
   noticias del día. Un medio caído deja su turno vacío y los otros siguen.
 - 🔴 **Se leen los bytes, nunca `response.text`.** Ámbito contesta sin charset en el header:
@@ -583,9 +583,6 @@ como los calendarios y los Seq) y arma los titulares del resumen.
 - ⚠️ **Algunos medios contestan 403 sin `User-Agent`.** Clarín es uno. Verificado el
   2026-09-10: Infobae (`arc/outboundfeeds/rss/`), Ámbito y La Nación andan; los RSS de
   Página 12, Perfil y Télam están muertos.
-- **El modelo es el barato, con más tiempo.** Poner un titular en palabras no es buscar nada,
-  así que va el de `LLM_MODEL`; el timeout sube a veinte segundos porque cinco titulares son
-  más texto que una frase, y el resumen corre fuera del event loop igual.
 
 ## Horario de descanso
 

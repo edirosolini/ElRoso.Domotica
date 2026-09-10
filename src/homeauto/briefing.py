@@ -7,11 +7,10 @@ calendar does not hide the others inside the agenda.
 Everything spoken here is synthesized, so it carries no digits: the sources
 already speak in words and this module only adds names and connectors.
 
-🔴 The news are the one source whose written half is worth more than what is
-said: a headline is full of prices and percentages. `speech()` returns both —
-the chat gets the headlines as published, the speaker gets them in words — and
-when they cannot be said at all, the summary points at the chat instead of
-going silent about them.
+🔴 The news are the one source that is **never spoken**: five headlines are the
+longest part of the summary and the one you cannot act on, and they are made of
+prices and percentages. `speech()` returns both halves — what the house says,
+and the copy the chat keeps, which is the same text with the headlines under it.
 """
 
 from __future__ import annotations
@@ -25,7 +24,6 @@ from homeauto.polish import as_is
 log = logging.getLogger(__name__)
 
 NOTHING = "No tengo nada para el resumen de hoy."
-NEWS_IN_CHAT = "Las noticias de hoy te las dejé escritas en el chat."
 
 
 @dataclass(frozen=True)
@@ -62,8 +60,7 @@ class Briefing:
     def speech(self) -> Summary:
         """The spoken summary and the copy the chat keeps.
 
-        They only differ when there are news: the headlines go to the chat as
-        the outlets published them, digits included.
+        They differ by the headlines, which only ever go to the chat.
         """
         parts = [
             said
@@ -75,20 +72,12 @@ class Briefing:
             )
             if said
         ]
-        digest = self._safe_digest()
-        spoken = list(parts)
-        if digest is not None and digest.written:
-            spoken.append(digest.spoken or NEWS_IN_CHAT)
+        said = " ".join(parts) if parts else NOTHING
 
-        said = " ".join(spoken) if spoken else NOTHING
-        if digest is None or not digest.written:
+        headlines = self._safe_news()
+        if not headlines:
             return Summary(spoken=said, written=said)
-
-        # The written half keeps the summary and adds the headlines under it,
-        # so the chat is never a worse copy of what was heard.
-        heard = " ".join(parts) if parts else ""
-        written = f"{heard}\n\n{digest.written}" if heard else digest.written
-        return Summary(spoken=said, written=written)
+        return Summary(spoken=said, written=f"{said}\n\n{headlines}")
 
     @staticmethod
     def _safe(source: Callable[[], str]) -> str:
@@ -108,15 +97,15 @@ class Briefing:
     def _money(self) -> str:
         return self.economy.spoken() if self.economy is not None else ""
 
-    def _safe_digest(self):
-        """The headlines, or None when there are none to be had."""
+    def _safe_news(self) -> str:
+        """The headlines for the chat, or nothing. Never part of what is said."""
         if self.news is None:
-            return None
+            return ""
         try:
-            return self.news.digest()
+            return self.news.written()
         except Exception:
             log.exception("no pude traer las noticias")
-            return None
+            return ""
 
     def _trouble(self) -> str:
         """Only what is down. Silence is the good news, and keeps this short."""

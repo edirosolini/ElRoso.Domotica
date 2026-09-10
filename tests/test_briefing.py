@@ -139,14 +139,11 @@ class FakeEconomy:
 
 
 class FakeNews:
-    def __init__(self, spoken="Cerró la paritaria con un aumento del doce por ciento.",
-                 written="· Cerró la paritaria con un aumento del 12% (infobae)"):
-        from homeauto.news import Digest
+    def __init__(self, written="· Cerró la paritaria con un aumento del 12% (infobae)"):
+        self.text = written
 
-        self.result = Digest(written=written, spoken=spoken)
-
-    def digest(self):
-        return self.result
+    def written(self):
+        return self.text
 
 
 def test_the_economy_is_one_more_source_of_the_summary():
@@ -168,25 +165,31 @@ def test_a_broken_economy_leaves_a_hole_and_nothing_more():
     assert "veinte grados" in briefing.text()
 
 
-def test_the_news_are_said_and_left_written():
+def test_the_news_only_ever_go_to_the_chat():
+    """🔴 Decisión del dueño: son lo más largo del resumen y lo único que no se
+    puede accionar, y están hechas de cifras. Se leen, no se escuchan."""
     briefing = Briefing(weather=FakeWeather(), news=FakeNews())
 
     summary = briefing.speech()
 
-    assert "doce por ciento" in summary.spoken
+    assert "12%" not in summary.spoken
+    assert "paritaria" not in summary.spoken
+    assert "veinte grados" in summary.spoken
     assert "12%" in summary.written
     assert "veinte grados" in summary.written, "lo escrito también lleva el resumen"
 
 
-def test_news_that_cannot_be_spoken_are_pointed_at_instead():
-    """🔴 La respuesta nunca se pierde: si no se puede decir, se dice dónde está."""
-    briefing = Briefing(weather=FakeWeather(), news=FakeNews(spoken=""))
+def test_news_that_cannot_be_fetched_cost_nothing():
+    class BrokenNews:
+        def written(self):
+            raise RuntimeError("el feed no contesta")
+
+    briefing = Briefing(weather=FakeWeather(), news=BrokenNews())
 
     summary = briefing.speech()
 
-    assert "12%" not in summary.spoken, "ni un dígito al parlante"
-    assert "escritas" in summary.spoken or "escrito" in summary.spoken
-    assert "12%" in summary.written
+    assert "veinte grados" in summary.spoken
+    assert summary.written == summary.spoken
 
 
 def test_without_news_the_summary_is_what_it_always_was():

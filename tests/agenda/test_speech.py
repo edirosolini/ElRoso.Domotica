@@ -98,3 +98,16 @@ def test_it_reads_as_a_finished_sentence():
     assert text.endswith(".")
     assert "None" not in text
     assert "mañana" in text.lower()
+
+
+def test_the_summary_leaves_the_place_out():
+    """En el resumen de la mañana el lugar sobra: es lo que más lo alargaba.
+
+    Pedido del dueño, escuchándolo: la hora y el título alcanzan. En `/agenda`,
+    que se pide a propósito, el lugar sigue estando.
+    """
+    events = [event(10, 0, "Dentista", location="Sanatorio Colegiales")]
+
+    assert "Sanatorio" not in describe(events, label="hoy", place=False)
+    assert "Dentista" in describe(events, label="hoy", place=False)
+    assert "diez de la mañana" in describe(events, label="hoy", place=False)

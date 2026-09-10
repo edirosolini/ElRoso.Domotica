@@ -11,16 +11,21 @@ def _clock(event: Event) -> str:
     return f"a {clock(event.start.hour, event.start.minute)}"
 
 
-def _one(event: Event) -> str:
+def _one(event: Event, place: bool = True) -> str:
     when = "todo el día" if event.all_day else _clock(event)
     text = f"{when.capitalize()}, {event.summary}"
-    if event.location:
+    if place and event.location:
         text += f", en {event.location}"
     return text + "."
 
 
-def describe(events: list[Event], label: str) -> str:
-    """One or two sentences, written to be heard rather than read."""
+def describe(events: list[Event], label: str, place: bool = True) -> str:
+    """One or two sentences, written to be heard rather than read.
+
+    `place` is off in the morning summary. Heard next to the weather, the
+    economy and whatever is down, "en Sanatorio Colegiales" was what made it
+    drag; asked for on purpose with /agenda, where it is on, it is the answer.
+    """
     if not events:
         return f"No tenés nada agendado {label}."
 
@@ -31,4 +36,4 @@ def describe(events: list[Event], label: str) -> str:
     # "cosa" is feminine: a bare digit here came out as "tenés uno cosa".
     things = "cosa" if count == 1 else "cosas"
     heading = f"{label.capitalize()} tenés {number(count, FEMININE)} {things}."
-    return " ".join([heading] + [_one(event) for event in ordered])
+    return " ".join([heading] + [_one(event, place) for event in ordered])

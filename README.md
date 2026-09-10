@@ -270,9 +270,10 @@ dígito.
 
 **Noticias** (una clave `NEWS_RSS_<MEDIO>` por medio): los titulares salen del RSS de los
 medios configurados, tomando turnos entre ellos — cinco titulares de un solo diario son su
-portada, no las noticias del día. Van **enteros al chat**, con sus cifras, y se dicen en voz
-alta reescritos en palabras por el modelo de `LLM_API_KEY`. Sin clave, o si la reescritura
-trae un dígito, la casa dice que te los dejó escritos: el chat siempre los tiene.
+portada, no las noticias del día. **Solo van al chat**, enteros y con sus cifras: son lo más
+largo del resumen y lo único que no se puede accionar, así que se leen en vez de escucharse.
+
+De la agenda, el resumen dice la hora y el título; el lugar queda para `/agenda`.
 
 ## Avisos del cielo
 

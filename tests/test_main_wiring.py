@@ -524,28 +524,6 @@ def test_the_feeds_reach_the_briefing(wired, tmp_path, monkeypatch):
     assert news.count == 3
 
 
-def test_without_a_key_the_headlines_stay_written(wired, tmp_path, monkeypatch):
-    """Sin modelo no hay forma de decir un titular sin dígitos."""
-    seen = briefing_built(monkeypatch)
-
-    run_main(monkeypatch, config_file(tmp_path, "NEWS_RSS_INFOBAE=https://infobae/rss\n"))
-
-    assert seen["news"].speak is None
-
-
-def test_with_a_key_the_headlines_can_be_spoken(wired, tmp_path, monkeypatch):
-    seen = briefing_built(monkeypatch)
-
-    run_main(
-        monkeypatch,
-        config_file(tmp_path, "NEWS_RSS_INFOBAE=https://infobae/rss\nLLM_API_KEY=una-clave\n"),
-    )
-
-    speak = seen["news"].speak
-    assert speak is not None and callable(speak), "un doble que no se puede llamar no prueba nada"
-    assert speak.search is False, "poner un titular en palabras no es buscar"
-
-
 def test_the_other_warnings_of_the_sky_are_scheduled(wired, tmp_path, monkeypatch):
     """Calor, frío, viento y tormenta: no dependen de configurar nada."""
     run_main(monkeypatch, config_file(tmp_path))
