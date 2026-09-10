@@ -255,6 +255,41 @@ original: nadie se queda sin aviso porque el modelo estaba lento.
 
 ⚠️ **`/decir` y los timers no pasan por acá.** Lo que escribís vos se dice tal cual.
 
+## El resumen de la mañana
+
+A la hora de `BRIEFING_AT` la casa dice, en un solo texto: qué hay en la agenda, cómo está el
+cielo, los tres números de la economía, qué servicios están caídos y los titulares del día.
+
+**Las fuentes son independientes**: la que no contesta deja un hueco, nunca cancela el
+resumen. Un calendario caído no te puede costar el clima.
+
+**Economía** (`ECONOMY=off` la apaga): dólar oficial, riesgo país e inflación del último mes
+publicado. Sale de dolarapi y argentinadatos — gratis, sin cuenta y sin API key, igual que el
+clima. Un número que no se pueda decir en palabras se calla: al parlante nunca le llega un
+dígito.
+
+**Noticias** (una clave `NEWS_RSS_<MEDIO>` por medio): los titulares salen del RSS de los
+medios configurados, tomando turnos entre ellos — cinco titulares de un solo diario son su
+portada, no las noticias del día. Van **enteros al chat**, con sus cifras, y se dicen en voz
+alta reescritos en palabras por el modelo de `LLM_API_KEY`. Sin clave, o si la reescritura
+trae un dígito, la casa dice que te los dejó escritos: el chat siempre los tiene.
+
+## Avisos del cielo
+
+Además del resumen, la casa avisa sola cuando algo del pronóstico lo amerita. Cada aviso sale
+**una vez por día** y ninguno le come el turno a otro:
+
+| aviso | cuándo |
+| --- | --- |
+| lluvia | 60% o más de probabilidad en las próximas 6 horas |
+| tormenta | tormenta pronosticada en las próximas 6 horas |
+| viento | ráfagas de 50 km/h o más en las próximas 6 horas |
+| calor | máxima del día de 33° o más |
+| frío | mínima del día de 3° o menos |
+
+El calor y el frío se avisan **entre las 7 y las 11**: son sobre el día entero y a las cuatro
+de la mañana no le sirven a nadie. Los umbrales son constantes del código, no configuración.
+
 ## Vigilancia de servicios
 
 Dos señales que cubren agujeros distintos:
@@ -373,6 +408,10 @@ SEQ_COOLDOWN_MINUTES=15             # el enfriamiento es de cada instancia
 LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado
 LLM_MODEL=gemini-3.1-flash-lite
 ASK_MODEL=gemini-3.7-flash     # el que contesta /preguntar; NO hereda de LLM_MODEL
+ECONOMY=on                     # dólar, riesgo país e inflación en el resumen
+NEWS_RSS_INFOBAE=https://www.infobae.com/arc/outboundfeeds/rss/?outputType=xml
+NEWS_RSS_AMBITO=https://www.ambito.com/rss/pages/home.xml   # una clave por medio
+NEWS_COUNT=5                   # cuántos titulares, hasta diez
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un
@@ -394,8 +433,8 @@ aviso de dos frases suene apurado. Se ajusta por entorno, sin tocar código:
 
 | variable | default | qué hace |
 | --- | --- | --- |
-| `DOMOTICA_LENGTH_SCALE` | 1.15 | más alto, más despacio |
-| `DOMOTICA_SENTENCE_SILENCE` | 0.45 | segundos de pausa entre oraciones |
+| `DOMOTICA_LENGTH_SCALE` | 1.30 | más alto, más despacio |
+| `DOMOTICA_SENTENCE_SILENCE` | 0.90 | segundos de pausa entre oraciones |
 | `DOMOTICA_NOISE_SCALE` | — | más bajo, más contenido |
 | `DOMOTICA_NOISE_W` | — | más alto, menos plano |
 

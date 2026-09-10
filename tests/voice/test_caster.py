@@ -288,3 +288,82 @@ def test_the_wait_for_the_end_follows_the_length_of_the_audio():
     assert caster._finish_deadline(None) == 120
     # Y el tope manda incluso si el wav dice cualquier cosa.
     assert caster._finish_deadline(9999) == 120
+
+
+# --- el equipo se mudó de IP ------------------------------------------------
+
+
+def moving_discovery(first, second):
+    """El mismo UUID, dos objetos: el de antes y el del equipo ya mudado."""
+    devices = [first, second]
+
+    def discover(timeout=None):
+        discover.calls.append(timeout)
+        return [devices[min(len(discover.calls) - 1, len(devices) - 1)]]
+
+    discover.calls = []
+    return discover
+
+
+def test_a_device_that_moved_is_looked_up_again():
+    """🔴 El objeto resuelto se queda con la dirección que tenía al descubrirse.
+
+    Los equipos son DHCP: el Nest saltó de .22 a .20 mientras el servicio le
+    seguía hablando a .22, y el aviso no salió por ningún lado. Un fallo de
+    conexión tiene que mandar a buscarlo de nuevo, no a esperar un reinicio.
+    """
+    moved = FakeDevice()
+    stale = FakeDevice()
+
+    def dead_socket(url, mime):
+        raise OSError("Chromecast 192.168.68.22:8009 is connecting...")
+
+    stale.media_controller.play_media = dead_socket
+    caster = Caster(DEVICE_UUID, discover=moving_discovery(stale, moved), discovery_timeout=0)
+
+    caster.play("http://192.168.68.10:8765/aviso.wav")
+
+    assert moved.media_controller.played == [("http://192.168.68.10:8765/aviso.wav", "audio/wav")]
+    assert moved.waited == 1, "el equipo nuevo se conectó"
+
+
+def test_the_second_try_failing_is_reported_as_a_cast_error():
+    """Si tampoco está donde dice el descubrimiento, sale el error de siempre."""
+    def dead(url, mime):
+        raise OSError("sigue sin contestar")
+
+    first, second = FakeDevice(), FakeDevice()
+    first.media_controller.play_media = dead
+    second.media_controller.play_media = dead
+    caster = Caster(DEVICE_UUID, discover=moving_discovery(first, second), discovery_timeout=0)
+
+    with pytest.raises(CastError, match="no pude hablarle"):
+        caster.play("http://192.168.68.10:8765/aviso.wav")
+
+
+def test_the_volume_also_survives_a_move():
+    moved = FakeDevice()
+    stale = FakeDevice()
+
+    def dead_volume(level):
+        raise OSError("no contesta")
+
+    stale.set_volume = dead_volume
+    caster = Caster(DEVICE_UUID, discover=moving_discovery(stale, moved), discovery_timeout=0)
+
+    caster.set_volume(55)
+
+    assert moved.volumes == [pytest.approx(0.55)]
+
+
+def test_a_working_device_is_never_looked_up_twice():
+    """El redescubrimiento es la excepción: cuesta veinte segundos de mDNS."""
+    device = FakeDevice()
+    discover = discovery_of(device)
+    caster = Caster(DEVICE_UUID, discover=discover, discovery_timeout=0)
+
+    caster.play("http://x/1.wav")
+    caster.set_volume(70)
+    caster.play("http://x/2.wav")
+
+    assert len(discover.calls) == 1

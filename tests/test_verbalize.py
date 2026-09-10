@@ -2,7 +2,7 @@
 
 import pytest
 
-from homeauto.verbalize import clock, number
+from homeauto.verbalize import FEMININE, clock, decimal, number
 
 
 @pytest.mark.parametrize(
@@ -86,12 +86,67 @@ def test_no_digit_survives():
 def test_a_number_too_big_to_say_is_rejected():
     """Mejor fallar que colar un dígito en el audio sin que nadie lo note."""
     with pytest.raises(ValueError):
-        number(1000)
+        number(1_000_000)
     with pytest.raises(ValueError):
-        number(-1000)
+        number(-1_000_000)
 
 
 @pytest.mark.parametrize("hour, minute", [(24, 0), (-1, 0), (0, 60), (0, -1)])
 def test_an_impossible_time_is_rejected(hour, minute):
     with pytest.raises(ValueError):
         clock(hour, minute)
+
+
+# --- miles y decimales ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value, said",
+    [
+        (1000, "mil"),
+        (1001, "mil un"),
+        (1535, "mil quinientos treinta y cinco"),
+        (1521, "mil quinientos veintiún"),
+        (2000, "dos mil"),
+        (15000, "quince mil"),
+        (21000, "veintiún mil"),
+        (100000, "cien mil"),
+        (999999, "novecientos noventa y nueve mil novecientos noventa y nueve"),
+    ],
+)
+def test_thousands_are_said_as_words(value, said):
+    """🔴 El dólar no entra en tres cifras.
+
+    `number(1545)` tiraba ValueError, así que ninguna cifra de plata podía
+    llegar al parlante: es lo que frenaba el resumen económico.
+    """
+    assert number(value) == said
+
+
+def test_a_thousand_agrees_with_what_it_counts():
+    assert number(1200, FEMININE) == "mil doscientas"
+    assert number(21000, FEMININE) == "veintiún mil", "el mil manda, y mil es masculino"
+
+
+def test_past_the_millions_it_still_refuses():
+    with pytest.raises(ValueError):
+        number(1_000_000)
+
+
+@pytest.mark.parametrize(
+    "value, said",
+    [
+        (2.1, "dos coma uno"),
+        (0.5, "cero coma cinco"),
+        (-1.4, "menos uno coma cuatro"),
+        (12.35, "doce coma treinta y cinco"),
+        (3.0, "tres"),
+    ],
+)
+def test_decimals_are_said_with_the_comma(value, said):
+    """La inflación es un decimal, y "2,1" se lee "dos uno" sin la coma."""
+    assert decimal(value) == said
+
+
+def test_a_decimal_counts_things_too():
+    assert decimal(1.5, FEMININE) == "una coma cinco"

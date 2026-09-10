@@ -32,11 +32,30 @@ _HUNDREDS = {
     6: "seiscientos", 7: "setecientos", 8: "ochocientos", 9: "novecientos",
 }
 
-MAXIMUM = 999
+# Money is what pushed this past three digits: a dollar at one thousand five
+# hundred could not be said at all, so no economic figure could reach the
+# speaker. Millions stay out — nothing this house says counts that high, and a
+# number nobody checks is a number that will be read wrong.
+MAXIMUM = 999_999
+
+
+def _apocopate(word: str) -> str:
+    """"veintiuno" -> "veintiún": the form a number takes before a noun."""
+    if word.endswith("veintiuno"):
+        return f"{word[:-len('veintiuno')]}veintiún"
+    if word.endswith("uno"):
+        return f"{word[:-len('uno')]}un"
+    return word
 
 
 def _cardinal(value: int) -> str:
-    """0-999 in plain masculine, before any agreement is applied."""
+    """0-999999 in plain masculine, before any agreement is applied."""
+    if value >= 1000:
+        thousands, rest = divmod(value, 1000)
+        # "un mil" is not Spanish, and the count before "mil" is always
+        # apocopated: "veintiún mil", never "veintiuno mil".
+        head = "mil" if thousands == 1 else f"{_apocopate(_cardinal(thousands))} mil"
+        return head if rest == 0 else f"{head} {_cardinal(rest)}"
     if value < 30:
         return _UNITS[value]
     if value < 100:
@@ -61,17 +80,48 @@ def number(value: int, gender: str = MASCULINE) -> str:
 
     word = _cardinal(value)
     if gender == FEMININE:
-        if word.endswith("veintiuno"):
-            word = f"{word[:-len('veintiuno')]}veintiuna"
-        elif word.endswith("uno"):
-            word = f"{word[:-len('uno')]}una"
-        return word.replace("cientos", "cientas")
+        # Only what comes after the last "mil" agrees: "mil doscientas cosas",
+        # but "veintiún mil", because there the noun being counted is "mil".
+        head, separator, tail = word.rpartition("mil")
+        if separator:
+            return f"{head}{separator}{_feminine(tail)}"
+        return _feminine(word)
 
+    return _apocopate(word)
+
+
+def _feminine(word: str) -> str:
     if word.endswith("veintiuno"):
-        return f"{word[:-len('veintiuno')]}veintiún"
-    if word.endswith("uno"):
-        return f"{word[:-len('uno')]}un"
-    return word
+        word = f"{word[:-len('veintiuno')]}veintiuna"
+    elif word.endswith("uno"):
+        word = f"{word[:-len('uno')]}una"
+    return word.replace("cientos", "cientas")
+
+
+def decimal(value: float, gender: str = MASCULINE) -> str:
+    """A number with a fraction, the way it is read: "dos coma uno".
+
+    Written as digits, "2,1" reaches Piper as two separate numbers with the
+    comma swallowed. Inflation is the reason this exists.
+    """
+    whole = int(abs(value))
+    fraction = round(abs(value) - whole, 4)
+    if not fraction:
+        return number(whole if value >= 0 else -whole, gender)
+
+    # Neither half is apocopated: the noun comes after the whole figure, so it
+    # is "uno coma cuatro por ciento" and never "un coma cuatro".
+    digits = f"{fraction:.10f}".split(".")[1].rstrip("0")
+    said = f"{_bare(whole, gender)} coma {_bare(int(digits), gender)}"
+    return f"menos {said}" if value < 0 else said
+
+
+def _bare(value: int, gender: str) -> str:
+    """The plain cardinal — "uno", not "un" — agreeing when it has to."""
+    if abs(value) > MAXIMUM:
+        raise ValueError(f"fuera de rango para decir en voz alta: {value}")
+    word = _cardinal(abs(value))
+    return _feminine(word) if gender == FEMININE else word
 
 
 def _part_of_day(hour: int, minute: int) -> str:
@@ -121,6 +171,9 @@ _FEMININE_FORMS = ("veintiuna",)
 _APOCOPATED = ("veintiún",)
 _PARTS_OF_DAY = ("madrugada", "mañana", "tarde", "noche", "mediodía")
 _FRACTIONS = ("cuarto", "media")
+# "mil" multiplies and "coma" splits: dropping either moves a figure by orders
+# of magnitude. Money and inflation brought both into what the house says.
+_MAGNITUDES = ("mil", "coma")
 
 DATA_WORDS = frozenset(
     _UNITS
@@ -132,6 +185,7 @@ DATA_WORDS = frozenset(
     + _APOCOPATED
     + _PARTS_OF_DAY
     + _FRACTIONS
+    + _MAGNITUDES
     + ("menos",)
 )
 

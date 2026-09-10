@@ -79,6 +79,12 @@ DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
 # seguridad es peor que ninguna.
 DEFAULT_ASK_MODEL = "gemini-3.7-flash"
 
+# Noticias del resumen: una clave por medio, como los calendarios y los Seq.
+# Cinco titulares dichos ya son casi un minuto de parlante.
+NEWS_PREFIX = "NEWS_RSS_"
+DEFAULT_NEWS_COUNT = 5
+MAX_NEWS_COUNT = 10
+
 
 def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float:
     raw = raw.strip()
@@ -139,6 +145,39 @@ def _parse_calendars(pairs: dict[str, str]) -> dict[str, str]:
             key = "CALENDAR_URL" if alias == "agenda" else f"{CALENDAR_PREFIX}{alias.upper()}"
             raise ConfigError(f"{key} tiene que ser una URL http(s)")
     return calendars
+
+
+def _parse_news(pairs: dict[str, str]) -> dict[str, str]:
+    """One key per outlet, for the same reason as the calendars."""
+    feeds: dict[str, str] = {}
+    for key, value in pairs.items():
+        if not key.startswith(NEWS_PREFIX):
+            continue
+        url = value.strip()
+        if not url:
+            continue
+        if not url.startswith(("http://", "https://")):
+            raise ConfigError(f"{key} tiene que ser una URL http(s)")
+        feeds[key[len(NEWS_PREFIX):].strip().lower()] = url
+    return feeds
+
+
+def _parse_news_count(pairs: dict[str, str]) -> int:
+    raw = pairs.get("NEWS_COUNT", "").strip()
+    if not raw:
+        return DEFAULT_NEWS_COUNT
+    try:
+        count = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"NEWS_COUNT no es un número: {raw}") from exc
+    if not 1 <= count <= MAX_NEWS_COUNT:
+        raise ConfigError(f"NEWS_COUNT fuera de rango (1 a {MAX_NEWS_COUNT}): {count}")
+    return count
+
+
+def _parse_economy(pairs: dict[str, str]) -> bool:
+    """On unless it is turned off: it needs no key and no account."""
+    return pairs.get("ECONOMY", "").strip().lower() not in ("off", "no", "0")
 
 
 def _parse_briefing(pairs: dict[str, str]) -> clock_time | None:
@@ -334,6 +373,9 @@ class Config:
     # its time. It never inherits LLM_MODEL — the cheap model that polishes every
     # announcement does not reliably search, and would answer from memory.
     ask_model: str = DEFAULT_ASK_MODEL
+    news_feeds: dict[str, str] = field(default_factory=dict)
+    news_count: int = DEFAULT_NEWS_COUNT
+    economy: bool = True
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -388,6 +430,9 @@ class Config:
             llm_api_key=pairs.get("LLM_API_KEY", "").strip(),
             llm_model=pairs.get("LLM_MODEL", "").strip() or DEFAULT_LLM_MODEL,
             ask_model=pairs.get("ASK_MODEL", "").strip() or DEFAULT_ASK_MODEL,
+            news_feeds=_parse_news(pairs),
+            news_count=_parse_news_count(pairs),
+            economy=_parse_economy(pairs),
         )
 
     @property
@@ -407,6 +452,14 @@ class Config:
     def polish_enabled(self) -> bool:
         """Sin clave, apagado. La redacción sin pulir se entiende igual."""
         return bool(self.llm_api_key)
+
+    @property
+    def news_enabled(self) -> bool:
+        return bool(self.news_feeds)
+
+    @property
+    def economy_enabled(self) -> bool:
+        return self.economy
 
     @property
     def seq_enabled(self) -> bool:

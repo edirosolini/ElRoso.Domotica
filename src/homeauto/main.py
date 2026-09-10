@@ -25,6 +25,8 @@ from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.briefing import Briefing
+from homeauto.economy import EconomyClient
+from homeauto.news import NewsClient
 from homeauto.config import Config
 from homeauto.correct import as_written
 from homeauto.correct import build as build_correction
@@ -52,7 +54,7 @@ from homeauto.watch.monitor import Monitor
 from homeauto.watch.seq import SeqClient
 from homeauto.watch.seq_watcher import SeqWatcher
 from homeauto.watch.status import StatusStore
-from homeauto.weather import RainWatcher, WeatherClient
+from homeauto.weather import RainWatcher, WeatherClient, WeatherWatcher
 
 CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
 PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
@@ -159,6 +161,10 @@ COMMAND_MENU = (
 # keeps the free forecast requests down to a couple dozen.
 RAIN_INTERVAL = 1800
 
+# Rewording five headlines is more text than one sentence, and the summary runs
+# off the event loop: waiting a little longer costs nobody anything.
+NEWS_TIMEOUT = 20
+
 
 def local_ip() -> str:
     """The address this host uses to reach the LAN, so the speaker can call back."""
@@ -251,7 +257,11 @@ def schedule_briefing(app, config, briefing, announce) -> None:
     moment = clock_time(config.briefing_at.hour, config.briefing_at.minute, tzinfo=local_timezone())
 
     async def say_briefing(_context):
-        await asyncio.to_thread(lambda: announce(briefing.text()))
+        def speak() -> None:
+            summary = briefing.speech()
+            announce(summary.spoken, summary.written)
+
+        await asyncio.to_thread(speak)
 
     app.job_queue.run_daily(say_briefing, time=moment, name="briefing")
     log.info("resumen diario a las %s", moment.strftime("%H:%M"))
@@ -293,11 +303,16 @@ def _alert(house: HouseVoice, text: str, urgent: bool, detail: str = "") -> None
         house.tell_everyone(f"{'🚨' if urgent else '⚠️'} {written}")
 
 
-def _announce(house: HouseVoice, text: str) -> None:
-    """Say it out loud when allowed, and always leave it written in the chat."""
-    result = house.announce(text)
+def _announce(house: HouseVoice, text: str, written: str | None = None) -> None:
+    """Say it out loud when allowed, and always leave it written in the chat.
+
+    `written` carries more than what is said when the source has both halves:
+    the morning summary speaks the headlines in words and writes them as the
+    outlets published them, digits and all.
+    """
+    result = house.announce(text, written=written)
     if result["spoken"]:
-        house.tell_everyone(f"🔔 {text}")
+        house.tell_everyone(f"🔔 {written or text}")
 
 
 def build_polisher(config: Config):
@@ -346,6 +361,26 @@ def build_asker(config: Config) -> Asker | None:
             search=True,
             timeout=ASK_TIMEOUT,
         )
+    )
+
+
+def build_news_voice(config: Config):
+    """Who puts the headlines into words, or None when there is no key.
+
+    🔴 Without it the news stay written. A headline is made of prices, years
+    and percentages, and there is no way to say one without digits unless
+    something rewrites it first.
+
+    The cheap model, like the router: this is rewording, not finding out. It
+    does get a longer wait than the polisher — five headlines are more text
+    than one sentence, and the summary runs off the event loop anyway.
+    """
+    if not config.polish_enabled:
+        return None
+    return GoogleModel(
+        api_key=config.llm_api_key,
+        model=config.llm_model,
+        timeout=NEWS_TIMEOUT,
     )
 
 
@@ -600,11 +635,31 @@ def main() -> None:
     if watcher is not None:
         schedule_calendar_jobs(app, watcher)
 
+    economy = EconomyClient(polish=polish) if config.economy_enabled else None
+    news = (
+        NewsClient(
+            config.news_feeds,
+            speak=build_news_voice(config),
+            count=config.news_count,
+        )
+        if config.news_enabled
+        else None
+    )
+    if news is not None:
+        log.info("titulares de: %s", ", ".join(config.news_feeds))
+
     schedule_briefing(
         app,
         config,
-        Briefing(agenda=agenda, weather=weather, monitor=monitor, polish=polish),
-        lambda text: _announce(house, text),
+        Briefing(
+            agenda=agenda,
+            weather=weather,
+            monitor=monitor,
+            economy=economy,
+            news=news,
+            polish=polish,
+        ),
+        lambda text, written=None: _announce(house, text, written),
     )
 
     rain = RainWatcher(
@@ -618,6 +673,20 @@ def main() -> None:
         await asyncio.to_thread(rain.check)
 
     app.job_queue.run_repeating(check_rain, interval=RAIN_INTERVAL, first=90, name="rain-watch")
+
+    # The other four warnings of the sky. Its own job and its own marks: the
+    # rain has history in the deployed database and is left alone.
+    sky = WeatherWatcher(
+        weather=weather,
+        announce=lambda text: _announce(house, text),
+        marks=Marks(db_path),
+        polish=polish,
+    )
+
+    async def check_sky(_context):
+        await asyncio.to_thread(sky.check)
+
+    app.job_queue.run_repeating(check_sky, interval=RAIN_INTERVAL, first=120, name="sky-watch")
 
     if monitor is not None:
         async def check_services(_context):

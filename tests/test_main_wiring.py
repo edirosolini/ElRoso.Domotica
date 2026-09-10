@@ -467,3 +467,87 @@ def test_the_wired_corrector_refuses_a_rewrite(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
 
     assert seen["correct"]("hola") == "hola"
+
+
+# --- economía y noticias en el resumen --------------------------------------
+
+
+def briefing_built(monkeypatch):
+    """Lo que main() le pasó al resumen de la mañana."""
+    seen = {}
+    original = main.Briefing.__init__
+
+    def spy(self, *args, **kwargs):
+        seen.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Briefing, "__init__", spy)
+    return seen
+
+
+def test_the_economy_reaches_the_briefing(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path, "BRIEFING_AT=08:00\n"))
+
+    assert seen["economy"] is not None
+    assert seen["economy"].spoken, "el doble tiene que poder usarse como lo real"
+
+
+def test_the_economy_can_be_turned_off(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path, "ECONOMY=off\n"))
+
+    assert seen["economy"] is None
+
+
+def test_without_feeds_there_are_no_news(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["news"] is None
+
+
+def test_the_feeds_reach_the_briefing(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(
+        monkeypatch,
+        config_file(tmp_path, "NEWS_RSS_INFOBAE=https://infobae/rss\nNEWS_COUNT=3\n"),
+    )
+
+    news = seen["news"]
+    assert news is not None
+    assert news.feeds == {"infobae": "https://infobae/rss"}
+    assert news.count == 3
+
+
+def test_without_a_key_the_headlines_stay_written(wired, tmp_path, monkeypatch):
+    """Sin modelo no hay forma de decir un titular sin dígitos."""
+    seen = briefing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path, "NEWS_RSS_INFOBAE=https://infobae/rss\n"))
+
+    assert seen["news"].speak is None
+
+
+def test_with_a_key_the_headlines_can_be_spoken(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(
+        monkeypatch,
+        config_file(tmp_path, "NEWS_RSS_INFOBAE=https://infobae/rss\nLLM_API_KEY=una-clave\n"),
+    )
+
+    speak = seen["news"].speak
+    assert speak is not None and callable(speak), "un doble que no se puede llamar no prueba nada"
+    assert speak.search is False, "poner un titular en palabras no es buscar"
+
+
+def test_the_other_warnings_of_the_sky_are_scheduled(wired, tmp_path, monkeypatch):
+    """Calor, frío, viento y tormenta: no dependen de configurar nada."""
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert "sky-watch" in wired.job_queue.repeating

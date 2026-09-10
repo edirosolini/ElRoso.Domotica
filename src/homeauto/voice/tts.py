@@ -28,8 +28,15 @@ DEFAULT_MIN_SECONDS = 1.5
 # and the whole thing is heard as if it were sped up. These two are the smallest
 # change that fixes it; the other two knobs stay unset so the voice model keeps
 # deciding them.
-DEFAULT_LENGTH_SCALE = 1.15
-DEFAULT_SENTENCE_SILENCE = 0.45
+#
+# The first fix was still read as rushed on the morning summary, which is the
+# longest thing the house says: slower words and a longer breath between
+# sentences are what make a three-part text land as three parts. It applies to
+# everything spoken, on purpose — one pace for the house, asked for by its
+# owner. ⚠️ Both are part of the audio cache key, so moving them leaves the
+# clips synthesized with the old pace orphaned in the cache directory.
+DEFAULT_LENGTH_SCALE = 1.30
+DEFAULT_SENTENCE_SILENCE = 0.90
 
 
 class TtsError(Exception):

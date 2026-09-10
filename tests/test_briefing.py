@@ -125,3 +125,85 @@ def test_what_the_sources_already_polished_is_not_polished_again():
     )
 
     assert briefing.text() == "Hoy tenés dentista a las diez. Ahora hay veinte grados, despejado."
+
+
+# --- economía y noticias ----------------------------------------------------
+
+
+class FakeEconomy:
+    def __init__(self, text="El dólar oficial está a mil quinientos pesos."):
+        self.text = text
+
+    def spoken(self):
+        return self.text
+
+
+class FakeNews:
+    def __init__(self, spoken="Cerró la paritaria con un aumento del doce por ciento.",
+                 written="· Cerró la paritaria con un aumento del 12% (infobae)"):
+        from homeauto.news import Digest
+
+        self.result = Digest(written=written, spoken=spoken)
+
+    def digest(self):
+        return self.result
+
+
+def test_the_economy_is_one_more_source_of_the_summary():
+    briefing = Briefing(weather=FakeWeather(), economy=FakeEconomy())
+
+    said = briefing.text()
+
+    assert "veinte grados" in said
+    assert "mil quinientos pesos" in said
+
+
+def test_a_broken_economy_leaves_a_hole_and_nothing_more():
+    class BrokenEconomy:
+        def spoken(self):
+            raise RuntimeError("dolarapi no contesta")
+
+    briefing = Briefing(weather=FakeWeather(), economy=BrokenEconomy())
+
+    assert "veinte grados" in briefing.text()
+
+
+def test_the_news_are_said_and_left_written():
+    briefing = Briefing(weather=FakeWeather(), news=FakeNews())
+
+    summary = briefing.speech()
+
+    assert "doce por ciento" in summary.spoken
+    assert "12%" in summary.written
+    assert "veinte grados" in summary.written, "lo escrito también lleva el resumen"
+
+
+def test_news_that_cannot_be_spoken_are_pointed_at_instead():
+    """🔴 La respuesta nunca se pierde: si no se puede decir, se dice dónde está."""
+    briefing = Briefing(weather=FakeWeather(), news=FakeNews(spoken=""))
+
+    summary = briefing.speech()
+
+    assert "12%" not in summary.spoken, "ni un dígito al parlante"
+    assert "escritas" in summary.spoken or "escrito" in summary.spoken
+    assert "12%" in summary.written
+
+
+def test_without_news_the_summary_is_what_it_always_was():
+    briefing = Briefing(weather=FakeWeather())
+
+    summary = briefing.speech()
+
+    assert summary.spoken == summary.written == briefing.text()
+
+
+def test_nothing_spoken_in_the_summary_carries_a_digit():
+    briefing = Briefing(
+        agenda=FakeAgenda(),
+        weather=FakeWeather(),
+        economy=FakeEconomy(),
+        news=FakeNews(),
+        monitor=FakeMonitor(vpn=False),
+    )
+
+    assert not any(character.isdigit() for character in briefing.speech().spoken)

@@ -99,8 +99,36 @@ class Caster:
         """Drop the cached device so the next call rediscovers it."""
         self._device = None
 
+    def _perform(self, action: Callable[[object], object]):
+        """Do something on the device, looking it up again if it moved.
+
+        🔴 The resolved object keeps the address the device had when it was
+        found, and these devices are DHCP. The Nest jumped from `.22` to `.20`
+        while the service went on talking to `.22`: the announcement reached
+        Telegram and came out of no speaker, with `is connecting...` as the only
+        line in the log. Rediscovery is the expensive path — twenty seconds of
+        mDNS — so it only happens after a failure, never on the way in.
+
+        ⚠️ A retry can repeat an announcement that did sound. That is the same
+        trade the watchers make: a warning said twice is cheaper than one lost.
+        """
+        try:
+            return action(self._resolve())
+        except CastError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - cualquier fallo de conexión
+            log.warning("%s no contestó (%s): lo busco de nuevo", self.device_uuid, exc)
+            self.forget()
+
+        try:
+            return action(self._resolve())
+        except CastError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise CastError(f"no pude hablarle al equipo: {exc}") from exc
+
     def device_name(self) -> str:
-        return self._resolve().cast_info.friendly_name
+        return self._perform(lambda device: device.cast_info.friendly_name)
 
     def _take_over(self, device) -> None:
         """Make room for our own playback.
@@ -199,7 +227,18 @@ class Caster:
         a warning into nothing. It is put back afterwards, including when the
         audio fails, so an alert never leaves the speakers loud for good.
         """
-        device = self._resolve()
+        self._perform(
+            lambda device: self._play_on(device, url, timeout, min_volume, expected_seconds)
+        )
+
+    def _play_on(
+        self,
+        device,
+        url: str,
+        timeout: float,
+        min_volume: int | None,
+        expected_seconds: float | None,
+    ) -> None:
         self._take_over(device)
         previous = self._raise_volume(device, min_volume)
 
@@ -217,10 +256,10 @@ class Caster:
     def set_volume(self, percent: int) -> None:
         if not 0 <= percent <= 100:
             raise CastError("El volumen tiene que estar entre 0 y 100")
-        self._resolve().set_volume(percent / 100)
+        self._perform(lambda device: device.set_volume(percent / 100))
 
     def stop(self) -> None:
-        self._resolve().media_controller.stop()
+        self._perform(lambda device: device.media_controller.stop())
 
     def turn_off(self) -> None:
         """Close whatever app is running and leave the device idle.
@@ -229,7 +268,9 @@ class Caster:
         the device stops showing anything, and a TV set to sleep on loss of
         signal follows on its own through HDMI-CEC.
         """
-        device = self._resolve()
-        if getattr(device, "app_id", None) is None:
-            return
-        device.quit_app()
+        def close(device) -> None:
+            if getattr(device, "app_id", None) is None:
+                return
+            device.quit_app()
+
+        self._perform(close)

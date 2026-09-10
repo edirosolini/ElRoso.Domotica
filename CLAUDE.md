@@ -25,7 +25,9 @@ Domotica/
 │   ├── route.py         # interpreta un mensaje sin barra y lo manda al comando
 │   ├── slots.py         # qué dato le falta a un comando para poder ejecutarse
 │   ├── pending.py       # la conversación a medio armar de cada chat
-│   ├── weather.py       # clima por Open-Meteo y aviso de lluvia
+│   ├── weather.py       # clima por Open-Meteo y los avisos del cielo
+│   ├── economy.py       # dólar, riesgo país e inflación, en palabras
+│   ├── news.py          # titulares por RSS: escritos al chat, dichos en palabras
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── api.py           # endpoint HTTP para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
@@ -200,14 +202,40 @@ configuración regional es correcta y no es la causa de las fallas del Asistente
   `RAIN_ALERT_CHANCE`. Si algún día hay que tocarlos desde el contenedor, ahí sí van a
   `Config`.
 
+## Los otros avisos del cielo
+
+`weather.WeatherWatcher` avisa de calor, frío, viento y tormenta. Misma forma que
+`RainWatcher` —una vez por día, y lo que no se pudo decir no se marca— con una diferencia:
+
+- 🔴 **Cada aviso lleva su propia marca.** Con una compartida, un día de calor se comería el
+  aviso de las ráfagas que voltean las plantas, y nadie se enteraría de por qué. Es el mismo
+  motivo por el que cada Seq tiene las suyas.
+- 🔴 **La lluvia sigue en su watcher aparte.** Su marca ya está en la base desplegada y su
+  umbral tiene historia; absorberla sería reescribir estado que ya existe para no ganar nada.
+  El precio es una consulta más por vuelta a una API gratuita y sin clave.
+- **El calor y el frío esperan a que alguien esté despierto** (`DAY_ALERT_FROM` /
+  `DAY_ALERT_TO`, de 7 a 11). Son sobre el día entero: a las cuatro de la mañana la máxima no
+  le sirve a nadie, y en horario de descanso terminaría en el chat, que es donde un aviso se
+  vuelve ruido. El viento y la tormenta son sobre las próximas horas y salen cuando se ven.
+- **Un solo pedido contesta las cuatro reglas.** `hours_ahead()` devuelve la ventana con
+  lluvia, ráfaga y código de cielo juntos; pedir el pronóstico una vez por regla sería pegarle
+  cuatro veces a un servicio que nos deja entrar gratis.
+
 ## Resumen de la mañana
 
-`briefing.py` junta agenda, clima y servicios caídos en un solo texto hablado, a la hora de
-`BRIEFING_AT`.
+`briefing.py` junta agenda, clima, economía, servicios caídos y titulares en un solo texto
+hablado, a la hora de `BRIEFING_AT`.
 
-- **Las tres fuentes son independientes.** Una que falla deja un hueco, no cancela el
+- **Las cinco fuentes son independientes.** Una que falla deja un hueco, no cancela el
   resumen: un calendario que no contesta no te puede costar el clima. Es la misma postura
   que dentro de `agenda/`, donde un calendario roto no tapa a los otros.
+- 🔴 **Desde las noticias, el resumen tiene dos mitades.** `speech()` devuelve `spoken` y
+  `written`, la misma separación de `seq.Summary` y `ask.Answer`: los titulares se dicen en
+  palabras y se escriben tal como los publicó el medio. `text()` sigue existiendo y es la
+  mitad hablada, para no romper a quien solo quiere eso.
+- **Si los titulares no se pueden decir, el resumen dice dónde están.** Nunca se los saltea
+  en silencio: "las noticias te las dejé escritas en el chat" es una línea, y el chat las
+  tiene enteras.
 - **No depende de la agenda.** El job del resumen se agenda aunque no haya ningún calendario
   configurado. Por eso está fuera de `schedule_calendar_jobs()`.
 - **De los servicios solo se nombran los caídos.** Escuchar "todo en orden" cada mañana
@@ -507,6 +535,58 @@ que la casa dice que no generó ella ni escribió una persona: viene de afuera.
   un solo alias desconocido se trata como texto, "en qué año nació Messi" se contesta sin
   intentar hablarle a un equipo llamado "qué".
 
+## Economía
+
+`economy.py` dice tres números a la mañana: dólar oficial, riesgo país e inflación del último
+mes publicado. Salen de dolarapi y argentinadatos, gratis y sin cuenta, la misma postura que
+Open-Meteo: nada de lo que la casa dice todos los días depende de la clave de alguien.
+
+- 🔴 **Los tres son independientes entre sí**, no solo del resto del resumen. El dólar caído
+  no cuesta la inflación.
+- 🔴 **Un número que no se puede decir en palabras se calla.** `verbalize` levanta `ValueError`
+  pasado su rango y esa negativa termina acá: dejarla pasar pondría un dígito frente a Piper,
+  que es exactamente lo que este módulo viene a evitar. Si algún día el dólar pasa el millón,
+  la casa se queda callada en vez de leer mal.
+- **Se pule**, como el clima y la agenda, con el nombre de cada cifra en `must_keep`.
+- ⚠️ El dólar se dice al precio de **venta**, que es lo que cuesta comprar uno.
+
+**`verbalize` llegó hasta acá por esto.** Antes cortaba en novecientos noventa y nueve, así
+que ninguna cifra de plata podía sonar: `number(1545)` era un `ValueError`. Ahora llega al
+millón y hay `decimal()` para la inflación —"dos coma uno"—, porque escrito con coma el
+sintetizador dice dos números sueltos y se come el signo.
+
+- **`mil` y `coma` son palabras-dato.** Entraron a `DATA_WORDS` con las cifras: perder un
+  "mil" mueve un precio tres órdenes de magnitud, y perder la coma lo convierte en otro
+  número. Es la misma protección que ya tenían los momentos del día.
+- ⚠️ **En un decimal ninguna mitad se apocopa**: es "uno coma cuatro por ciento", nunca "un
+  coma cuatro". El sustantivo va después de toda la cifra, no pegado al primer número.
+
+## Noticias
+
+`news.py` lee el RSS de los medios configurados (`NEWS_RSS_<MEDIO>`, una clave por medio,
+como los calendarios y los Seq) y arma los titulares del resumen.
+
+- 🔴 **RSS y no un modelo contestando "qué pasó hoy".** De cada línea se sabe qué medio la
+  publicó, y eso es lo que la hace verificable. El modelo entra después y solo para cambiar
+  cómo suena, nunca para decidir qué pasó.
+- 🔴 **Lo escrito y lo hablado son textos distintos**, como en `ask.py` y en `seq.Summary`.
+  Un titular está hecho de precios, años y porcentajes: al chat va tal cual, al parlante va
+  reescrito en palabras y validado sin un solo dígito. Si la reescritura no pasa, no se dice
+  nada y el chat sigue teniéndolos: se descarta entero, nunca se recorta.
+- 🔴 **Sin `LLM_API_KEY` los titulares no se hablan.** No es una degradación elegante que se
+  pueda inventar: no hay forma de leer "$1.535" en voz alta sin reescribirlo primero.
+- **Los medios toman turnos.** Los cinco primeros de un solo diario son su portada, no las
+  noticias del día. Un medio caído deja su turno vacío y los otros siguen.
+- 🔴 **Se leen los bytes, nunca `response.text`.** Ámbito contesta sin charset en el header:
+  requests adivina latin-1 y "Envíos" llega al chat como "EnvÃ­os". El XML declara su
+  encoding, y entregarle los bytes al parser es lo que permite creerle.
+- ⚠️ **Algunos medios contestan 403 sin `User-Agent`.** Clarín es uno. Verificado el
+  2026-09-10: Infobae (`arc/outboundfeeds/rss/`), Ámbito y La Nación andan; los RSS de
+  Página 12, Perfil y Télam están muertos.
+- **El modelo es el barato, con más tiempo.** Poner un titular en palabras no es buscar nada,
+  así que va el de `LLM_MODEL`; el timeout sube a veinte segundos porque cinco titulares son
+  más texto que una frase, y el resumen corre fuera del event loop igual.
+
 ## Horario de descanso
 
 De 23:00 a 07:00 (`QUIET_FROM`/`QUIET_TO`) **nada se dice en voz alta**: el aviso va solo a
@@ -673,6 +753,12 @@ abajo en ese orden a propósito.
   `--length-scale` y `--sentence-silence` con un default que respira, y las cuatro perillas
   se mueven por entorno (`DOMOTICA_LENGTH_SCALE`, `DOMOTICA_SENTENCE_SILENCE`,
   `DOMOTICA_NOISE_SCALE`, `DOMOTICA_NOISE_W`).
+- **El primer arreglo del ritmo se quedó corto y el default subió otra vez**, a `1.30` y
+  `0.90`. El que lo destapó fue el resumen de la mañana, que es lo más largo que dice la
+  casa: tres bloques seguidos sin respirar se escuchan como uno solo. Es **una sola
+  velocidad para toda la casa**, por decisión del dueño, y se mueve por entorno sin
+  desplegar. ⚠️ Cambiarla deja huérfano en `/var/lib/domotica/cache` lo sintetizado con
+  el ritmo viejo: el ritmo es parte de la clave.
 - 🔴 **El ritmo va en la clave del cache, igual que la voz, y por el mismo motivo.**
   `build_synth()` arma el runner y el `VoiceSynth` juntos para que los dos usen el mismo
   `pacing`: si se separan, se sintetiza con un ritmo y se reusa audio hecho con otro.
@@ -687,6 +773,19 @@ abajo en ese orden a propósito.
   lo sostiene.
 - 🔴 **Los dispositivos Google se resuelven por UUID, nunca por IP.** Son DHCP y se mueven:
   el Nest ya saltó de `.13` a `.20` solo. Los UUID están en `CAST_DEVICES`.
+- 🔴 **Resolver por UUID no alcanza: el objeto resuelto se queda con la IP de ese momento.**
+  `Caster` cachea el dispositivo —descubrir cuesta veinte segundos de mDNS— y el 2026-09-10
+  se vio el precio: el servicio venía de un arranque del 4 de septiembre hablándole a
+  `192.168.68.22` mientras el Nest ya estaba en `.20`, y el log solo decía
+  `Chromecast 192.168.68.22:8009 is connecting...`. El aviso llegaba a Telegram y no salía
+  por ningún parlante. Ahora un fallo manda a redescubrir y reintentar una vez
+  (`Caster._perform`). ⚠️ Un reintento puede repetir un anuncio que sí sonó: es el mismo
+  canje que hacen los watchers, un aviso dicho dos veces sale más barato que uno perdido.
+- ⚠️ **DHCP recicla direcciones, así que la IP vieja puede ser otro equipo.** Si el televisor
+  toma la que tenía el parlante, el anuncio sale por el televisor **sin ningún error**: la
+  conexión funciona, solo que contra el equipo equivocado. El redescubrimiento no lo cubre
+  porque no hay falla que lo dispare; lo que lo cubre es que el equipo tenga IP fija en el
+  router, o reiniciar el servicio.
 - **Los equipos con pantalla solo aparecen en el descubrimiento si están encendidos.** Un
   Google TV apagado no existe para mDNS. No es un error: es que no está.
 - 🔴 **La app que está corriendo es dueña de la sesión de medios.** Con YouTube abierto en
