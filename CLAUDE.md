@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 # Domótica — El Roso
 
 Automatización de la casa, manejada por **Telegram**. Hoy hace hablar al parlante;
