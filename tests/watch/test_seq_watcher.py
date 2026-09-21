@@ -52,7 +52,7 @@ def test_errors_are_announced(tmp_path):
     watcher.check()
 
     assert len(said) == 1
-    assert said[0][0] == "Hay un error nuevo en Seq."
+    assert said[0][0] == "Hay un error nuevo, en Seq."
     # La cita del log se escribe, no se dice.
     assert "Se cayó la base" in said[0][1]
 
@@ -128,7 +128,7 @@ def test_an_aliased_watcher_says_which_seq_it_is(tmp_path):
 
     watcher.check()
 
-    assert said[0][0] == "Hay un error nuevo en Seq de hosting."
+    assert said[0][0] == "Hay un error nuevo, en Seq de hosting."
 
 
 def test_what_it_says_carries_no_digits(tmp_path):
@@ -188,7 +188,7 @@ def test_a_multi_word_alias_is_spoken_with_spaces(tmp_path):
 
     watcher.check()
 
-    assert said[0][0] == "Hay un error nuevo en Seq de hosting externo."
+    assert said[0][0] == "Hay un error nuevo, en Seq de hosting externo."
     assert "_" not in said[0][0]
 
 

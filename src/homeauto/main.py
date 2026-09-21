@@ -732,6 +732,9 @@ def main() -> None:
             monitor=monitor,
             economy=economy,
             news=news,
+            # Los mismos clientes que vigilan de día: de madrugada el aviso
+            # solo va al chat, así que a la mañana se recuerda.
+            seq=[watcher.client for watcher in seq_watchers],
             polish=polish,
         ),
         lambda text, written=None: _announce(house, text, written),

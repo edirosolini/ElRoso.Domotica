@@ -239,6 +239,11 @@ hablado, a la hora de `BRIEFING_AT`.
   configurado. Por eso está fuera de `schedule_calendar_jobs()`.
 - **De los servicios solo se nombran los caídos.** Escuchar "todo en orden" cada mañana
   enseña a no escuchar; el estado completo está en `/estado`.
+- 🔴 **Los errores de la noche se recuerdan acá**, y es la razón de que de madrugada no
+  despierten a nadie. Se piden a los mismos clientes que vigilan de día, de las últimas doce
+  horas (`NIGHT_HOURS`). Sin "Atención, producción" adelante: el fuego ya pasó, esto lo
+  recuerda —para eso `summarize()` acepta `lead=False`—. Una noche tranquila no dice nada,
+  igual que los servicios en orden.
 - El texto se sintetiza, así que **no lleva dígitos**: las fuentes ya hablan en palabras y
   este módulo solo agrega nombres y conectores. Hay test que lo verifica.
 
@@ -313,6 +318,21 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
 - **La recuperación nunca es urgente.** Nadie se despierta por una buena noticia.
 - Un campo desconocido en `checks.json` **hace fallar el arranque**. Un typo silencioso en
   `urgent` significaría que nunca te despierta.
+- 🔴 **El aviso dice el ambiente y la aplicación, y salen del evento.** "Hay dos errores en Seq
+  de vps" no dice si hay que salir corriendo: un mismo servidor corre varias apps y varios
+  ambientes. `EnvironmentName` y `ApplicationName` ya venían en los eventos —verificado contra
+  la instancia real—, así que no hay nada que configurar y un servicio nuevo se nombra solo.
+- **Producción encabeza**, aunque staging tenga más errores, y arranca con "Atención,
+  producción". Con más de dos grupos se nombran los dos primeros y el resto se resume.
+- ⚠️ **El nombre de la app se limpia para hablar.** `Staging-Facturador.Backend` se decía
+  "staging guion facturador punto backend": se le saca el prefijo del ambiente y los puntos.
+  Escrito va el nombre real, que es el que sirve para buscar en Seq.
+- ⚠️ **`Staging` se dice "pruebas"** y `Production`, "producción". El valor crudo va al chat;
+  el mapa está en `SPOKEN_ENVIRONMENTS` y lo que no figura se dice tal cual.
+- **Un evento sin esas propiedades no se pinta como staging**: sale como `❔ sin identificar`.
+  Decir "pruebas" de algo que no sabemos sería mentir hacia el lado tranquilo.
+- 🔴 **Ningún error de Seq despierta.** Decisión del dueño: en horario de descanso van solo al
+  chat, y el resumen de la mañana los recuerda. Ver **Resumen de la mañana**.
 - ⚠️ Los nombres de campo que devuelve la API de Seq se verificaron contra la instancia real
   recién al cargar la clave; el parser acepta variantes igual, por las dudas.
 
