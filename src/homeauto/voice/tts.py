@@ -16,6 +16,8 @@ import wave
 from pathlib import Path
 from typing import Callable, Protocol
 
+from homeauto.voice import chime as chime_audio
+
 log = logging.getLogger(__name__)
 
 # A clip shorter than this never reaches the PLAYING state on a Chromecast
@@ -179,12 +181,13 @@ class VoiceSynth:
         # file: the first to finish renamed it and the rest blew up.
         self._lock = threading.Lock()
 
-    def say(self, text: str) -> Path:
+    def say(self, text: str, chime: bool = False) -> Path:
+        """`chime` puts the alarm beeps in front. It is part of the cache key."""
         text = text.strip()
         if not text:
             raise TtsError("El texto está vacío")
 
-        cached = self.cache_dir / f"{self._key(text)}.wav"
+        cached = self.cache_dir / f"{self._key(text, chime)}.wav"
         if cached.is_file():
             return cached
 
@@ -198,12 +201,14 @@ class VoiceSynth:
             pending = cached.with_suffix(f".{threading.get_ident():x}.partial")
             try:
                 self.runner(text, pending)
+                if chime:
+                    chime_audio.prepend(pending)
                 _pad_to_minimum(pending, self.min_seconds)
                 pending.replace(cached)
             finally:
                 pending.unlink(missing_ok=True)
         return cached
 
-    def _key(self, text: str) -> str:
-        seed = f"{self.voice}\x00{self.pacing}\x00{text}"
+    def _key(self, text: str, chime: bool = False) -> str:
+        seed = f"{self.voice}\x00{self.pacing}\x00{'chime' if chime else ''}\x00{text}"
         return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]

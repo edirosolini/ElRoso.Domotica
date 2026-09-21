@@ -10,10 +10,12 @@ class FakeSynth:
     def __init__(self, cache_dir: Path):
         self.cache_dir = cache_dir
         self.said = []
+        self.chimes = []
 
-    def say(self, text):
+    def say(self, text, chime=False):
         self.said.append(text)
-        path = self.cache_dir / f"{abs(hash(text))}.wav"
+        self.chimes.append(chime)
+        path = self.cache_dir / f"{abs(hash(text))}-{chime}.wav"
         # Un wav de verdad, de un segundo: el Speaker le lee la duración para
         # saber cuánto esperar, y con basura adentro el test no probaría eso.
         with wave.open(str(path), "wb") as target:
@@ -144,3 +146,12 @@ def test_the_length_of_the_audio_travels_with_it(speaker):
     spk.say("la cena está lista")
 
     assert caster.played[-1][2] == pytest.approx(1.0)
+
+
+def test_the_chime_is_asked_of_the_synth(speaker):
+    spk, synth, _, _ = speaker
+
+    spk.say("arriba", chime=True)
+    spk.say("hola")
+
+    assert synth.chimes == [True, False]

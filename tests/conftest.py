@@ -22,14 +22,16 @@ class FakeSpeaker:
     def __init__(self, name="parlante", fail=None):
         self.name = name
         self.said = []
+        self.chimes = []
         self.volumes = []
         self.stopped = 0
         self.fail = fail
 
-    def say(self, text):
+    def say(self, text, chime=False):
         if self.fail:
             raise self.fail
         self.said.append(text)
+        self.chimes.append(chime)
 
     def set_volume(self, percent):
         if self.fail:
