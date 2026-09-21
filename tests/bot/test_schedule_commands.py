@@ -94,6 +94,12 @@ def test_list_numbers_the_jobs(cmd):
         assert str(job.id) in reply
 
 
+def test_list_points_at_how_to_cancel(cmd):
+    cmd.timer(OWNER, "10m pizza")
+
+    assert "/cancelar" in cmd.list(OWNER)
+
+
 def test_list_does_not_leak_other_chats(cmd):
     cmd.reminders.add(STRANGER, NOW + timedelta(hours=1), "secreto ajeno")
 

@@ -132,28 +132,17 @@ ALL_COMMANDS = (
     + ASK_COMMANDS
 )
 
-# What Telegram offers when you type "/". Without registering this the commands
-# work but are invisible: you have to know them by heart. Only the primary name
-# of each one goes here; the aliases would just clutter the menu.
+# What Telegram offers when you type "/". Short on purpose: the rest still works
+# typed and stays listed in `HELP`, the full catalogue.
 COMMAND_MENU = (
     ("decir", "Decirlo en voz alta ahora"),
     ("llamar", "Llamar a la casa — /llamar a cenar"),
-    ("timer", "Avisar dentro de un rato — /timer 10m sacá la pizza"),
     ("alarma", "Avisar a una hora — /alarma 7:30 arriba"),
-    ("lista", "Ver lo que está programado"),
-    ("cancelar", "Cancelar por número — /cancelar 3"),
+    ("lista", "Ver y cancelar lo que está programado"),
     ("silencio", "No hablar por un rato — /silencio 2h"),
-    ("hablar", "Cancelar el silencio y volver a hablar"),
-    ("volumen", "Cambiar el volumen, de 0 a 100"),
-    ("parar", "Cortar lo que esté sonando"),
-    ("apagar", "Cerrar la app y dejar el equipo en reposo"),
-    ("clima", "Decir el pronóstico en voz alta"),
     ("preguntar", "Averiguar algo y contestarlo en voz alta"),
-    ("agenda", "Qué queda hoy — /agenda mañana para el día siguiente"),
-    ("estado", "Cómo están los servicios que vigilo"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
-    ("usar", "Cambiar el equipo por defecto — /usar tv"),
-    ("ayuda", "Cómo se usa"),
+    ("ayuda", "Todos los comandos y cómo se usan"),
 )
 
 
