@@ -582,6 +582,21 @@ como los calendarios y los Seq) y arma los titulares del resumen.
   2026-09-10: Infobae (`arc/outboundfeeds/rss/`), Ámbito y La Nación andan; los RSS de
   Página 12, Perfil y Télam están muertos.
 
+## Sonido de alarma
+
+Una alarma, un timer y un aviso **urgente** suenan antes de hablar: `voice/chime.py` arma tres
+beeps y los pega adelante del wav de Piper.
+
+- 🔴 **Va en el mismo wav, no en un segundo cast.** Dos clips son dos conexiones, dos esperas
+  y dos confirmaciones de que sonó, con la app ajena pudiendo meterse en el medio.
+- **El sonido se genera, no se despliega.** `wave` de la stdlib, con el formato del wav de la
+  voz: nada que copiar al CT y nada que resamplear, que ahí no hay ffmpeg.
+- 🔴 **El chime va en la clave del cache**, como la voz y el ritmo. Sin eso, la primera alarma
+  que dice una frase deja esa frase con beeps para siempre, también desde `/decir`.
+- **Suena lo que interrumpe**: alarmas y timers (`Announcer`) y todo `announce(urgent=True)`
+  —monitor y API—. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
+  descanso no se habla, así que tampoco suena.
+
 ## Horario de descanso
 
 De 23:00 a 07:00 (`QUIET_FROM`/`QUIET_TO`) **nada se dice en voz alta**: el aviso va solo a

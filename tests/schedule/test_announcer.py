@@ -32,6 +32,14 @@ def test_says_it_out_loud():
     assert speaker.said == ["arriba"]
 
 
+def test_an_alarm_sounds_before_it_speaks():
+    announcer, speaker, _ = build()
+
+    announcer(JOB)
+
+    assert speaker.chimes == [True]
+
+
 def test_also_writes_to_the_chat():
     announcer, _, sent = build()
 

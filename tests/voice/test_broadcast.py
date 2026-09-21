@@ -42,3 +42,12 @@ def test_what_is_spoken_never_carries_the_written_detail():
     house.announce("vpn-vps no responde", written="vpn-vps no responde\nHTTP 503 en 1.24s")
 
     assert speaker.said == ["vpn-vps no responde"]
+
+
+def test_an_urgent_announcement_sounds_before_it_speaks():
+    house, speaker, _ = build()
+
+    house.announce("producción caída", urgent=True)
+    house.announce("veinte grados")
+
+    assert speaker.chimes == [True, False]

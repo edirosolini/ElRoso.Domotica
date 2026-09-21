@@ -164,3 +164,25 @@ def test_the_same_voice_still_reuses_the_cache(tmp_path):
 
     assert first.say("hola") == second.say("hola")
     assert len(piper.calls) == 1
+
+
+def test_the_chime_version_is_longer_and_cached_apart(synth):
+    piper = FakePiper(seconds=3.0)
+    voice = synth(piper)
+
+    plain = voice.say("arriba")
+    beeped = voice.say("arriba", chime=True)
+
+    assert beeped != plain
+    assert duration_of(beeped) > duration_of(plain)
+
+
+def test_the_chime_version_is_reused_like_any_other(synth):
+    piper = FakePiper(seconds=3.0)
+    voice = synth(piper)
+
+    first = voice.say("arriba", chime=True)
+    again = voice.say("arriba", chime=True)
+
+    assert first == again
+    assert len(piper.calls) == 1

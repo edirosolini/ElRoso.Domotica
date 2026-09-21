@@ -60,7 +60,8 @@ class HouseVoice:
         problems = []
         for alias in targets:
             try:
-                self.speakers.get(alias).say(text)
+                # Only what is urgent sounds before speaking.
+                self.speakers.get(alias).say(text, chime=urgent)
             except Exception as exc:  # noqa: BLE001 - se reporta al llamador
                 log.warning("no pude hablar en %s: %s", alias, exc)
                 problems.append(f"{alias}: {exc}")

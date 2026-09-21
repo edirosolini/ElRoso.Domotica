@@ -30,14 +30,16 @@ class Speaker:
             self.media_server.start()
             self._serving = True
 
-    def say(self, text: str) -> Path:
+    def say(self, text: str, chime: bool = False) -> Path:
         """Synthesize, publish and play. Returns the audio file used.
 
         The floor is applied here, and not by whoever asks for the phrase,
         because there are five different callers and every one of them wants
         the same thing: to be heard.
+
+        `chime` prefixes the alarm beeps, in the same clip and the same cast.
         """
-        path = self.synth.say(text)
+        path = self.synth.say(text, chime=chime)
         self._ensure_serving()
         self.caster.play(
             self.media_server.url_for(path.name),

@@ -52,7 +52,7 @@ class Announcer:
             problems = []
             for alias in job.devices or [self.fallback]:
                 try:
-                    self.speakers.get(alias).say(message)
+                    self.speakers.get(alias).say(message, chime=True)
                 except DEVICE_ERRORS as exc:
                     problems.append(f"{alias}: {exc}")
                     log.warning("el job %s no sonó en %s: %s", job.id, alias, exc)
