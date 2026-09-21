@@ -716,11 +716,21 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 28 nombres y `COMMAND_MENU` solo 18: la diferencia son **alias**
-(`help`, `recordar`, `tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`,
-`llama`). Funcionan,
-pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie. Hay test que
-impide que la ayuda ofrezca un comando que no existe.
+`ALL_COMMANDS` tiene 28 nombres: 18 comandos y 10 **alias** (`help`, `recordar`, `tiempo`,
+`donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`). Los alias funcionan pero no
+van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
+
+🔴 **El menú de Telegram tiene 8, no los 18.** Con los 18, la lista que sale al escribir `/`
+era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
+argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
+`parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`— **siguen andando escritos** y se
+alcanzan sin barra por el router.
+
+- **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
+  va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
+  ata las dos mitades.
+- **`/lista` nombra a `/cancelar`.** Es la única salida del menú que deja a otro comando sin
+  puerta: quien ve sus alarmas ahí mismo lee cómo borrarlas.
 
 ## Cableado
 

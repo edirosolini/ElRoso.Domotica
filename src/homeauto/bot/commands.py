@@ -739,6 +739,8 @@ class Commands:
             f"{self._repetition(job)} — {job.message}"
             for job in jobs
         ]
+        # /cancelar is out of the "/" menu.
+        lines.append("\nCancelá con /cancelar <número>")
         return "\n".join(lines)
 
     @staticmethod

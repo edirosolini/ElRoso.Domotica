@@ -1,12 +1,26 @@
 """The '/' menu in Telegram only exists if the bot registers its commands.
 
 Without setMyCommands everything works but is invisible: you have to know the
-commands by heart.
+commands by heart. The menu is the short list; `HELP` is the whole catalogue.
 """
 
 import re
 
+from homeauto.bot.commands import HELP
 from homeauto.main import ALL_COMMANDS, COMMAND_MENU
+
+# Out of the menu on purpose: they still work typed and stay listed in HELP.
+OUT_OF_MENU = (
+    "timer",
+    "cancelar",
+    "volumen",
+    "parar",
+    "apagar",
+    "clima",
+    "agenda",
+    "estado",
+    "usar",
+)
 
 VALID = re.compile(r"^[a-z0-9_]{1,32}$")
 
@@ -38,5 +52,15 @@ def test_every_entry_has_a_usable_description():
 
 def test_the_commands_people_use_are_in_the_menu():
     names = {name for name, _ in COMMAND_MENU}
-    for essential in ("decir", "timer", "alarma", "lista", "cancelar", "volumen", "parar"):
+    for essential in ("decir", "alarma", "lista", "silencio", "ayuda"):
         assert essential in names, f"/{essential} no aparecería en el menú"
+
+
+def test_the_menu_stays_short():
+    assert len(COMMAND_MENU) <= 10, "el menú vuelve a ser una lista que nadie lee"
+
+
+def test_what_left_the_menu_is_still_offered_somewhere():
+    for name in OUT_OF_MENU:
+        assert name in ALL_COMMANDS, f"/{name} dejó de existir"
+        assert f"/{name}" in HELP, f"/{name} no está en el menú ni en la ayuda"
