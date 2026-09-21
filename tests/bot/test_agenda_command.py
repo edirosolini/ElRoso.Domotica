@@ -39,10 +39,19 @@ def build(agenda=None, now=BY_DAY, quiet=None, **speakers):
     return commands, speakers
 
 
-def test_it_says_the_agenda_out_loud():
+def test_it_answers_in_writing_without_touching_the_speaker():
     cmd, spk = build()
 
     reply = cmd.agenda_command(OWNER, "")
+
+    assert spk["parlante"].said == [], "el parlante se pide, no es el default"
+    assert "cena" in reply
+
+
+def test_it_says_the_agenda_out_loud_when_it_is_asked_for():
+    cmd, spk = build()
+
+    reply = cmd.agenda_command(OWNER, "por el parlante")
 
     assert spk["parlante"].said == ["Hoy tenés 1 cosa. A las 18, cena."]
     assert "cena" in reply
@@ -61,7 +70,7 @@ def test_it_can_go_to_another_device():
     parlante, comedor = FakeSpeaker("parlante"), FakeSpeaker("comedor")
     cmd, _ = build(parlante=parlante, comedor=comedor)
 
-    cmd.agenda_command(OWNER, "en comedor")
+    cmd.agenda_command(OWNER, "en comedor por el parlante")
 
     assert comedor.said and not parlante.said
 
@@ -71,7 +80,7 @@ def test_the_target_does_not_eat_the_day_word():
     parlante, comedor = FakeSpeaker("parlante"), FakeSpeaker("comedor")
     cmd, _ = build(agenda=agenda, parlante=parlante, comedor=comedor)
 
-    cmd.agenda_command(OWNER, "en comedor mañana")
+    cmd.agenda_command(OWNER, "en comedor mañana por el parlante")
 
     assert agenda.asked == ["mañana"]
     assert comedor.said
@@ -98,7 +107,7 @@ def test_a_calendar_failure_is_explained_and_nothing_is_said():
 def test_at_night_it_only_writes():
     cmd, spk = build(now=AT_NIGHT, quiet=NIGHT)
 
-    reply = cmd.agenda_command(OWNER, "")
+    reply = cmd.agenda_command(OWNER, "por el parlante")
 
     assert spk["parlante"].said == []
     assert "cena" in reply

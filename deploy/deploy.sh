@@ -20,6 +20,8 @@ ssh "root@${PVE}" bash -s <<REMOTE
 set -euo pipefail
 pct push ${CTID} /tmp/domotica.tar.gz /tmp/domotica.tar.gz
 pct exec ${CTID} -- bash -lc '
+  # Telegram solo muestra burbuja de nota de voz para OGG/Opus.
+  dpkg -s opus-tools >/dev/null 2>&1 || { apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y opus-tools; }
   rm -rf /opt/domotica/src
   tar -xzf /tmp/domotica.tar.gz -C /opt/domotica
   # Las dependencias cambian con las features; instalarlas acá evita

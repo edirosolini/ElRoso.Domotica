@@ -9,7 +9,7 @@ import uuid
 
 import pytest
 
-from homeauto import main
+from homeauto import main, polish
 
 
 class FakeJobQueue:
@@ -63,7 +63,7 @@ class FakeBuilder:
 def wired(tmp_path, monkeypatch):
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
-    monkeypatch.setattr(main, "build_speakers", lambda config: _FakeRegistry())
+    monkeypatch.setattr(main, "build_speakers", lambda config, synth=None: _FakeRegistry())
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
     return app
@@ -287,7 +287,7 @@ def test_the_polisher_reaches_everything_the_house_says(tmp_path, monkeypatch):
     """Todo lo que genera el servicio pasa por el mismo pulidor. Menos /decir."""
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
-    monkeypatch.setattr(main, "build_speakers", lambda config: _FakeRegistry())
+    monkeypatch.setattr(main, "build_speakers", lambda config, synth=None: _FakeRegistry())
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
 
@@ -337,7 +337,7 @@ def test_the_commands_get_both_the_polisher_and_the_corrector(tmp_path, monkeypa
     """
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
-    monkeypatch.setattr(main, "build_speakers", lambda config: _FakeRegistry())
+    monkeypatch.setattr(main, "build_speakers", lambda config, synth=None: _FakeRegistry())
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(
@@ -529,3 +529,62 @@ def test_the_other_warnings_of_the_sky_are_scheduled(wired, tmp_path, monkeypatc
     run_main(monkeypatch, config_file(tmp_path))
 
     assert "sky-watch" in wired.job_queue.repeating
+
+
+def test_without_a_key_nobody_listens_to_an_audio(wired, tmp_path, monkeypatch):
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["transcribe"] = kwargs.get("transcribe")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["transcribe"] is None
+
+
+def test_the_transcriber_is_wired_with_the_cheap_model(wired, tmp_path, monkeypatch):
+    """Transcribir no es averiguar: el que escucha es el rápido, sin búsqueda."""
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["transcribe"] = kwargs.get("transcribe")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    path = config_file(tmp_path, "LLM_API_KEY=una-clave\nLLM_MODEL=barato\nASK_MODEL=caro\n")
+    run_main(monkeypatch, path)
+
+    transcribe = seen["transcribe"]
+    assert transcribe is not None
+    assert callable(transcribe), "el doble tiene que poder usarse como lo real"
+    assert transcribe.model.model == "barato"
+    assert transcribe.model.search is False
+    # 🔴 Subir el audio tarda más que pedir una reescritura: con los seis
+    # segundos del pulidor, una nota de voz de unos pocos segundos ya da
+    # timeout. Medido contra el endpoint real.
+    assert transcribe.model.timeout == main.LISTEN_TIMEOUT > polish.TIMEOUT
+
+
+def test_a_voice_note_has_a_handler(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    assert len([h for h in wired.handlers if type(h).__name__ == "MessageHandler"]) >= 2
+
+
+def test_the_voicemail_is_wired_and_usable(wired, tmp_path, monkeypatch):
+    """El doble tiene que servir para lo que sirve el real: se lo llama."""
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["voicemail"] = kwargs.get("voicemail")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert callable(seen["voicemail"])
