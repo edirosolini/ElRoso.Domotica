@@ -29,10 +29,19 @@ def build(weather=None, **speakers):
     return commands, speakers
 
 
-def test_it_says_the_forecast_out_loud():
+def test_it_answers_in_writing_without_touching_the_speaker():
     cmd, spk = build()
 
     reply = cmd.weather(OWNER, "")
+
+    assert spk["parlante"].said == [], "el parlante se pide, no es el default"
+    assert "14" in reply
+
+
+def test_it_says_the_forecast_out_loud_when_it_is_asked_for():
+    cmd, spk = build()
+
+    reply = cmd.weather(OWNER, "por el parlante")
 
     assert spk["parlante"].said == ["Ahora hay 14 grados, despejado."]
     assert "14" in reply
@@ -42,7 +51,7 @@ def test_it_goes_to_the_device_you_asked_for():
     parlante, comedor = FakeSpeaker("parlante"), FakeSpeaker("comedor")
     cmd, _ = build(parlante=parlante, comedor=comedor)
 
-    cmd.weather(OWNER, "en comedor")
+    cmd.weather(OWNER, "en comedor por el parlante")
 
     assert comedor.said and not parlante.said
 
@@ -51,7 +60,7 @@ def test_it_can_be_announced_everywhere():
     parlante, comedor = FakeSpeaker("parlante"), FakeSpeaker("comedor")
     cmd, _ = build(parlante=parlante, comedor=comedor)
 
-    cmd.weather(OWNER, "en todos")
+    cmd.weather(OWNER, "en todos por el parlante")
 
     assert parlante.said and comedor.said
 
@@ -60,7 +69,7 @@ def test_the_forecast_is_fetched_once_for_all_devices():
     weather = FakeWeather()
     cmd, _ = build(weather=weather, parlante=FakeSpeaker("parlante"), comedor=FakeSpeaker("comedor"))
 
-    cmd.weather(OWNER, "en todos")
+    cmd.weather(OWNER, "en todos por el parlante")
 
     assert weather.calls == 1, "una consulta, no una por equipo"
 

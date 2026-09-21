@@ -7,15 +7,21 @@ the other side is holding a phone, not a log viewer.
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import re
+from dataclasses import dataclass
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable
 
 from homeauto.agenda.ical import CalendarError
-from homeauto.ask import AskError
+from homeauto.ask import NOT_SPOKEN, AskError
+from homeauto.aloud import strip_aloud
 from homeauto.config import Config
+from homeauto.listen import ListenError
+from homeauto.voice.voicemail import VoicemailError
 from homeauto import slots, summon
 from homeauto.correct import as_written
 from homeauto.polish import as_is
@@ -49,6 +55,22 @@ _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
 class TargetError(Exception):
     """The devices asked for do not all exist."""
 
+
+# El pedido en curso quiere el parlante. Va en contextvar y no en el objeto:
+# dos mensajes se atienden a la vez.
+_ALOUD = contextvars.ContextVar("aloud", default=False)
+
+# La respuesta sin el «Entendí: /clima», que grabado era el eco del pedido.
+_SPOKEN = contextvars.ContextVar("spoken", default="")
+
+
+@dataclass(frozen=True)
+class Reply:
+    """What goes back to the chat: always the text, sometimes also a voice note."""
+
+    text: str
+    audio: Path | None = None
+
 HELP = """Hola. Manejo los equipos de casa.
 
 /decir <texto> — lo dice ahora
@@ -66,8 +88,8 @@ HELP = """Hola. Manejo los equipos de casa.
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
-/clima — dice el pronóstico en voz alta
-/preguntar <pregunta> — la averigua y la contesta en voz alta
+/clima — el pronóstico
+/preguntar <pregunta> — la averigua y te la contesta
 /agenda — qué te queda hoy · /agenda mañana
 /estado — cómo están los servicios que vigilo
 /equipos — qué equipos tengo y cuál está activo
@@ -77,9 +99,12 @@ La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, 5.30, mañana
 Una hora que ya pasó se entiende como la de mañana.
 Los días de una alarma van adelante de la hora: lun-vie, mar,jue, finde, sab.
 Cualquier comando acepta «en <equipo>» adelante para mandarlo a otro lado.
+Te contesto acá salvo que lo pidas: agregá «por el parlante» o «en voz alta» al final
+y sale por los equipos. /decir y /llamar suenan siempre, y las alarmas también.
 
 También me hablás sin barra: «creá una alarma» y te pregunto lo que falte.
-«olvidalo» deja lo que estábamos armando."""
+«olvidalo» deja lo que estábamos armando.
+Y me mandás una nota de voz: la escucho, hago lo que pidas y te contesto con otro audio."""
 
 
 def format_when(when: datetime, now: datetime) -> str:
@@ -107,6 +132,8 @@ class Commands:
         asker=None,
         router=None,
         conversation=None,
+        transcribe=None,
+        voicemail=None,
         correct=as_written,
         polish=as_is,
         clock: Callable[[], datetime] = datetime.now,
@@ -122,6 +149,8 @@ class Commands:
         self.asker = asker
         self.router = router
         self.conversation = conversation
+        self.transcribe = transcribe
+        self.voicemail = voicemail
         self.correct = correct
         self.polish = polish
         self.clock = clock
@@ -144,6 +173,11 @@ class Commands:
             f"\n\n⚠️ El bot está abierto: cualquiera que lo encuentre puede usarlo."
             f"\nTu chat ID es {chat_id}. Ponelo en ALLOWED_CHAT_IDS y reiniciá el servicio."
         )
+
+    def _wanted_aloud(self, text: str) -> tuple[bool, str]:
+        """Whether the answer was asked for out loud, and the text without the request."""
+        aloud, rest = strip_aloud(text)
+        return aloud or _ALOUD.get(), rest
 
     def _resting(self) -> str | None:
         """The reply to send instead of speaking, or None when it may sound."""
@@ -330,6 +364,7 @@ class Commands:
         if denial:
             return denial
 
+        aloud, text = self._wanted_aloud(text)
         try:
             aliases, _ = self._split_target(chat_id, text)
         except TargetError as exc:
@@ -340,6 +375,9 @@ class Commands:
             spoken = self.weather_client.spoken()
         except WeatherError as exc:
             return str(exc)
+
+        if not aloud:
+            return spoken
 
         resting = self._resting()
         if resting:
@@ -366,6 +404,7 @@ class Commands:
                 "Cargá LLM_API_KEY en el archivo de entorno."
             )
 
+        aloud, text = self._wanted_aloud(text)
         try:
             aliases, question = self._split_target(chat_id, text)
         except TargetError as exc:
@@ -378,6 +417,10 @@ class Commands:
             answer = self.asker.ask(question)
         except AskError as exc:
             return str(exc)
+
+        _SPOKEN.set(answer.spoken)
+        if not aloud:
+            return answer.written
 
         resting = self._resting()
         if resting:
@@ -413,6 +456,40 @@ class Commands:
             "preguntar": self.ask,
         }
 
+    def heard(self, chat_id: int, audio: bytes, mime: str = "audio/ogg") -> Reply:
+        """A voice note: transcribe it, run it, and answer with another one."""
+        denial = self._denial(chat_id)
+        if denial:
+            return Reply(denial)
+
+        if self.transcribe is None:
+            return Reply("No escucho audios. Escribime o usá /ayuda.")
+
+        try:
+            said = self.transcribe(audio, mime)
+        except ListenError as exc:
+            return Reply(f"{exc}. Probá de nuevo o escribime.")
+
+        token = _SPOKEN.set("")
+        try:
+            answer = self.free_text(chat_id, said)
+            spoken = _SPOKEN.get() or answer
+        finally:
+            _SPOKEN.reset(token)
+
+        text = f"🎤 «{said}»\n{answer}"
+        # Piper lee «500 g» como «quinientos ge»: eso se lee, no se escucha. Y
+        # grabar el puntero al chat sin mandar el chat sería una burla.
+        unsayable = any(c.isdigit() for c in spoken) or spoken.strip() == NOT_SPOKEN
+        if self.voicemail is None or unsayable:
+            return Reply(text)
+
+        try:
+            return Reply(text, self.voicemail(spoken))
+        except VoicemailError as exc:
+            log.warning("no pude grabar la respuesta: %s", exc)
+            return Reply(text)
+
     def free_text(self, chat_id: int, text: str) -> str:
         """Run whatever a message without a slash was asking for.
 
@@ -427,6 +504,18 @@ class Commands:
 
         if self.router is None:
             return "No entiendo mensajes sueltos. Los comandos están en /ayuda."
+
+        # Antes de rutear: el router se comería la coletilla al armar el argumento.
+        aloud, text = strip_aloud(text)
+        if aloud:
+            token = _ALOUD.set(True)
+            try:
+                return self._route_and_run(chat_id, text)
+            finally:
+                _ALOUD.reset(token)
+        return self._route_and_run(chat_id, text)
+
+    def _route_and_run(self, chat_id: int, text: str) -> str:
 
         pending = self.conversation.get(chat_id) if self.conversation else None
         if pending and self.conversation.dropped(text):
@@ -471,7 +560,10 @@ class Commands:
         if self.conversation:
             self.conversation.forget(chat_id)
         understood = f"/{decision.command} {decision.argument}".strip()
-        return f"{note}Entendí: {understood}\n\n{run(chat_id, decision.argument)}"
+        answer = run(chat_id, decision.argument)
+        if not _SPOKEN.get():
+            _SPOKEN.set(answer)
+        return f"{note}Entendí: {understood}\n\n{answer}"
 
     def _interrupts(self, pending, decision) -> bool:
         """Whether this message is a new order rather than the answer asked for.
@@ -526,6 +618,7 @@ class Commands:
                 "Cargá la dirección privada en formato iCal en CALENDAR_URL_<nombre>."
             )
 
+        aloud, text = self._wanted_aloud(text)
         try:
             aliases, when = self._split_target(chat_id, text)
         except TargetError as exc:
@@ -537,6 +630,9 @@ class Commands:
             return f"No pude leer el calendario: {exc}"
         except ValueError as exc:
             return str(exc)
+
+        if not aloud:
+            return spoken
 
         resting = self._resting()
         if resting:
@@ -739,7 +835,6 @@ class Commands:
             f"{self._repetition(job)} — {job.message}"
             for job in jobs
         ]
-        # /cancelar is out of the "/" menu.
         lines.append("\nCancelá con /cancelar <número>")
         return "\n".join(lines)
 

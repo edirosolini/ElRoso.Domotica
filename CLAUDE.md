@@ -687,6 +687,106 @@ existen ya saben rechazar un argumento malo.
 - ⚠️ Sin `LLM_API_KEY` no hay intérprete: un mensaje suelto contesta que los comandos están
   en `/ayuda`.
 
+## Notas de voz
+
+Una nota de voz se transcribe y entra por `Commands.free_text()`, el mismo camino del texto
+suelto: router, dato que falta, ejecución. `listen.py` es lo único nuevo.
+
+- 🔴 **Transcribir no es interpretar.** El modelo devuelve las palabras dichas y nada más; qué
+  comando son lo sigue decidiendo el router, con el prompt que ya está medido. Un segundo
+  modelo decidiendo sería un segundo comportamiento que nadie midió.
+- 🔴 **El audio sale de la casa.** Es la primera vez: Piper es offline y a Google solo le
+  viajaba texto generado. Decisión del dueño, tomada contra la alternativa local —
+  faster-whisper entra por poco en los 512 MB del CT y tarda entre cinco y quince segundos
+  en un vCPU, con riesgo de OOM justo cuando alguien habla.
+- **El que escucha es el modelo barato**, `LLM_MODEL`, sin búsqueda, como el router.
+- **Se contesta qué se escuchó y qué se entendió**: `🎤 «...»` y abajo el `Entendí: /...`. Con
+  audio hay dos lugares donde se puede errar, no uno, así que los dos quedan a la vista.
+- **Un audio de más de un minuto se rechaza sin bajarlo** (`MAX_VOICE_SECONDS`). Un comando
+  dicho es una oración.
+- **Lo que no se entiende no se adivina**: el modelo contesta `NADA` y el chat dice que no se
+  entendió. Nunca se rutea una transcripción vacía.
+- ⚠️ **El modelo escribe los números con dígitos.** Medido contra el endpoint real: "a las
+  siete y media" vuelve como "7:30" y "cuarenta" como "40". Al router le viene bien, y en
+  `/decir` lo arregla `correct.py`, que ya tiene la licencia de expandir un dígito a las
+  palabras que lo dicen.
+- ⚠️ El audio viaja en `inline_data` dentro del mismo POST que el prompt, en base64.
+
+## Por dónde sale la respuesta
+
+🔴 **El parlante dejó de ser el destino por defecto: se pide.** Una consulta contesta por
+donde entró y nada más.
+
+| Entra | Sale |
+| --- | --- |
+| texto | texto en el chat |
+| nota de voz | nota de voz, y nada más |
+| cualquiera de los dos, con «por el parlante» al final | además por los equipos |
+
+- **`/decir` y `/llamar` no consultan la regla.** Pedirles que hablen *es* el comando; un
+  `/decir` que no suena no es nada. Los que sí la consultan son los tres que antes hablaban
+  sin que nadie se lo pidiera: `/clima`, `/agenda` y `/preguntar`.
+- 🔴 **Las alarmas, los timers, el resumen de la mañana y los avisos del monitor y de Seq
+  siguen saliendo por el parlante**, siempre, más su copia al chat. Son lo que interrumpe a
+  propósito: nadie pide a las tres de la mañana que la alerta suene.
+- 🔴 **La coletilla se saca antes de rutear.** El router arma el argumento del comando y se la
+  comería, así que `free_text()` la detecta sobre el mensaje entero, la quita y deja puesto un
+  `contextvars.ContextVar`. Va en un contextvar y no en el objeto porque es del pedido: dos
+  mensajes se atienden a la vez. De paso, al modelo le llega el mensaje limpio.
+- ⚠️ **La frase está anclada al final** (`aloud.py`). "El parlante del comedor anda mal" no es
+  un pedido, y por eso no alcanza con buscar la palabra suelta. Se aceptan «por/en el
+  parlante», «los parlantes», «el altavoz» y «en voz alta», con un conector opcional adelante
+  («y decilo», «, reproducilo»).
+- **Un audio se contesta con audio aunque además suene el parlante.** Vuelve por donde entró;
+  que encima se escuche en casa no cambia eso.
+- 🔴 **Se graba la mitad hablada, no la escrita.** Una receta pedida por audio volvió diciendo
+  "quinientos ge de carne" y "un un medio morrón": se estaba grabando `answer.written`, que
+  conserva todos los dígitos a propósito. `ask()` deja su `spoken` —ya validado— para el que
+  grabe, y lo genérico solo se usa si el comando no dejó nada.
+- 🔴 **Un texto con dígitos no se graba: vuelve escrito.** Es la misma regla de siempre, ahora
+  en el segundo camino que llega a Piper. Tampoco se graba el "te lo dejé escrito en el chat"
+  de `ask`: mandar ese audio sin mandar el chat sería una burla.
+- 🔴 **La nota de voz no lee el «Entendí: /clima».** Grabar la respuesta entera le devolvía a
+  la persona su propio pedido leído en voz alta. `_route_and_run()` deja en un contextvar lo
+  que contestó el comando, y eso es lo único que se graba; qué entendió sigue escrito en el
+  chat, que es donde se lee de un vistazo.
+- **`opusenc` es un requisito del contenedor**, no de Python: Telegram solo muestra la burbuja
+  de nota de voz para OGG/Opus. `deploy.sh` instala `opus-tools` si falta. Medido contra la
+  API real: un wav de ochenta kilobytes queda en seis.
+- **El mismo `VoiceSynth` para el parlante y para la nota de voz**, así una frase ya dicha no
+  se sintetiza de nuevo para grabarla.
+- 🔴 **A un audio le vuelve solo el audio.** Decisión del dueño: mandar además el texto era
+  leer dos veces lo mismo. La burbuja de «procesando» se borra al mandar la nota de voz, así
+  que el chat queda con el pedido y la respuesta hablada. Si no se pudo grabar —sin encoder,
+  sin clave— vuelve el texto: la respuesta no se pierde, cambia de forma.
+- ⚠️ **La presencia por WiFi se evaluó y se descartó.** Llegó a estar hecha —`presence.py`,
+  ARP contra la IP del teléfono— y quedó sin función el día que el parlante pasó a pedirse:
+  si solo suena cuando se lo piden, da igual dónde esté el dueño. Si algún día vuelve a hacer
+  falta, el camino es ese y el router de casa es un TP-Link sin SSH.
+
+## Que se note que está trabajando
+
+Un mensaje que tarda —Piper, el modelo, el cast— parecía ignorado. Ahora el bot contesta
+`⏳ Procesando…` apenas llega, y **edita esa misma burbuja** con la respuesta.
+
+- 🔴 **El indicador de Telegram («escribiendo…») no sirve acá.** Fue el primer intento y se
+  midió contra el chat real: ni mandando `sendChatAction` a mano, con `ok: true` de la API, se
+  vio nada en el cliente del dueño. Un mensaje se ve siempre.
+- **Se edita, no se suma.** Una burbuja por pedido: la de espera se convierte en la respuesta.
+  Si editar falla, se manda la respuesta aparte — contestar no es negociable.
+- **La señal no puede costar la respuesta**: si no se pudo avisar, el comando corre igual.
+
+🔴 **Un error se contesta, no se calla.** Una excepción moría en el log como "No error handlers
+are registered" y el mensaje quedaba sin respuesta: desde el teléfono se ve igual que un bot
+colgado. Ahora vuelve `🔴 No pude procesar la solicitud: <qué pasó>`, con el motivo adentro.
+Pasó de verdad: un llamado a varios equipos reventó con "Address already in use" y el chat no
+dijo nada por dos minutos.
+
+- 🔴 **`MediaServer.start()` se llama desde un hilo por equipo.** `_broadcast` habla en
+  paralelo y cada `Speaker` tiene su propio `_serving`, así que en el primer anuncio tras un
+  reinicio los dos veían el servidor apagado, los dos bindeaban el puerto y el segundo moría.
+  Lleva candado con doble chequeo, como el cache de síntesis.
+
 ## Conversación
 
 Un mensaje al que le falta un dato obligatorio **no es un error, es media orden**: el bot

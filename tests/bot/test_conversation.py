@@ -134,7 +134,7 @@ def test_a_complete_message_still_runs_without_asking(tmp_path):
 
     reply = cmd.free_text(OWNER, "dame el clima")
 
-    assert spk["parlante"].said == ["Ahora hay catorce grados."]
+    assert "catorce grados" in reply
     assert "Entendí: /clima" in reply
     assert talk.get(OWNER) is None
 
@@ -147,7 +147,7 @@ def test_another_complete_command_wins_over_what_was_pending(tmp_path):
 
     reply = cmd.free_text(OWNER, "dame el clima")
 
-    assert spk["parlante"].said == ["Ahora hay catorce grados."]
+    assert "catorce grados" in reply
     assert talk.get(OWNER) is None
     assert "alarma" in reply.lower()  # avisa que la dejó a medio armar
 

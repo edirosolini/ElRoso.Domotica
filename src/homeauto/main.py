@@ -30,6 +30,8 @@ from homeauto.news import NewsClient
 from homeauto.config import Config
 from homeauto.correct import as_written
 from homeauto.correct import build as build_correction
+from homeauto.listen import TIMEOUT as LISTEN_TIMEOUT, Transcriber
+from homeauto.voice.voicemail import Voicemail
 from homeauto.polish import GoogleModel, Polisher, as_is
 from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import Hush, HushStore
@@ -145,6 +147,16 @@ COMMAND_MENU = (
     ("ayuda", "Todos los comandos y cómo se usan"),
 )
 
+
+# Un error que no llega al chat se ve igual que un bot colgado.
+BROKEN = "🔴 No pude procesar la solicitud: {reason}"
+
+# El «escribiendo…» de Telegram no se ve en todos los clientes. Esta burbuja
+# se edita después con la respuesta.
+WORKING = "⏳ Procesando…"
+
+# Un comando dicho es una oración; más que esto es un monólogo.
+MAX_VOICE_SECONDS = 60
 
 # Half an hour is enough for a warning that fires at most once a day, and it
 # keeps the free forecast requests down to a couple dozen.
@@ -363,14 +375,36 @@ def build_router(config: Config) -> Router | None:
     )
 
 
-def build_speakers(config: Config) -> SpeakerRegistry:
+def build_transcriber(config: Config) -> Transcriber | None:
+    """Who turns a voice note into words, or None when there is no key.
+
+    The cheap model and no search, like the router: transcribing is not
+    finding out either.
+    """
+    if not config.polish_enabled:
+        return None
+    return Transcriber(
+        model=GoogleModel(
+            api_key=config.llm_api_key,
+            model=config.llm_model,
+            timeout=LISTEN_TIMEOUT,
+        )
+    )
+
+
+def build_voicemail(synth) -> Voicemail:
+    """The same synthesis as the speaker, encoded for the chat."""
+    return Voicemail(synth)
+
+
+def build_speakers(config: Config, synth=None) -> SpeakerRegistry:
     """One Speaker per configured device, sharing synthesis and the media server.
 
     Only the Caster differs: synthesizing the same phrase twice or running two
     HTTP servers would be waste.
     """
     cache_dir = Path(CACHE_DIR)
-    synth = build_synth(cache_dir)
+    synth = synth or build_synth(cache_dir)
     media_server = MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT)
 
     def build(device_uuid) -> Speaker:
@@ -384,6 +418,38 @@ def _argument_text(update: Update) -> str:
     text = (update.message.text or "") if update.message else ""
     _, _, rest = text.partition(" ")
     return rest
+
+
+async def _say_working(message):
+    """The bubble that says the work started, or None if it could not be sent."""
+    try:
+        return await message.reply_text(WORKING)
+    except Exception:  # noqa: BLE001 - la señal no puede costar la respuesta
+        log.warning("no pude avisar que estaba trabajando")
+        return None
+
+
+async def _answer(waiting, message, text: str) -> None:
+    """Turns the «procesando» bubble into the answer, or sends it on its own."""
+    if waiting is None:
+        await message.reply_text(text)
+        return
+    try:
+        await waiting.edit_text(text)
+    except Exception:  # noqa: BLE001 - editar puede fallar, contestar no
+        log.warning("no pude editar el mensaje de espera")
+        await message.reply_text(text)
+
+
+async def _drop(waiting, message, fallback: str) -> None:
+    """Takes the «procesando» bubble away once the voice note is sent."""
+    if waiting is None:
+        return
+    try:
+        await waiting.delete()
+    except Exception:  # noqa: BLE001 - si no se puede borrar, que diga algo
+        log.warning("no pude borrar el mensaje de espera")
+        await _answer(waiting, message, fallback)
 
 
 def register(app: Application, commands: Commands) -> None:
@@ -409,8 +475,13 @@ def register(app: Application, commands: Commands) -> None:
 
             chat_id = update.effective_chat.id
             text = _argument_text(update)
-            answer = await asyncio.to_thread(run_command, chat_id, text)
-            await update.message.reply_text(answer)
+            waiting = await _say_working(update.message)
+            try:
+                answer = await asyncio.to_thread(run_command, chat_id, text)
+            except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
+                log.exception("el comando se rompió")
+                answer = BROKEN.format(reason=exc)
+            await _answer(waiting, update.message, answer)
 
         return callback
 
@@ -438,6 +509,45 @@ def register(app: Application, commands: Commands) -> None:
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
 
+    async def listen(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        """A voice note: download it and run it like a typed message."""
+        if update.message is None or update.effective_chat is None:
+            return
+        voice = getattr(update.message, "voice", None)
+        if voice is None:
+            return
+
+        if voice.duration and voice.duration > MAX_VOICE_SECONDS:
+            await update.message.reply_text(
+                f"Ese audio es muy largo. Mandame uno de hasta {MAX_VOICE_SECONDS} segundos."
+            )
+            return
+
+        waiting = await _say_working(update.message)
+        try:
+            audio = bytes(await (await voice.get_file()).download_as_bytearray())
+            reply = await asyncio.to_thread(
+                commands.heard,
+                update.effective_chat.id,
+                audio,
+                voice.mime_type or "audio/ogg",
+            )
+        except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
+            log.exception("el audio se rompió")
+            await _answer(waiting, update.message, BROKEN.format(reason=exc))
+            return
+
+        if reply.audio is None:
+            await _answer(waiting, update.message, reply.text)
+            return
+
+        # A un audio le alcanza el audio: el texto sería leerlo dos veces.
+        with open(reply.audio, "rb") as recorded:
+            await update.message.reply_voice(recorded)
+        await _drop(waiting, update.message, reply.text)
+
+    app.add_handler(MessageHandler(filters.VOICE, listen))
+
     # Anything without a slash. Registered last, so a real command never
     # reaches the interpreter and never pays for a model call.
     app.add_handler(
@@ -462,7 +572,9 @@ def main() -> None:
     else:
         polish = as_is
         log.info("sin LLM_API_KEY: el texto generado va tal cual")
-    speakers = build_speakers(config)
+    # Un solo VoiceSynth: el parlante y la nota de voz comparten cache.
+    synth = build_synth(Path(CACHE_DIR))
+    speakers = build_speakers(config, synth)
     log.info("equipos configurados: %s", ", ".join(speakers.aliases))
 
     app = Application.builder().token(config.telegram_token).build()
@@ -560,6 +672,8 @@ def main() -> None:
         asker=build_asker(config),
         router=build_router(config),
         conversation=Conversation(PendingStore(db_path)),
+        transcribe=build_transcriber(config),
+        voicemail=build_voicemail(synth),
         correct=build_corrector(config),
         # 🔴 Solo para /llamar, que es texto nuestro. Lo que escribe una
         # persona va por `correct`, que no puede cambiarle una palabra.

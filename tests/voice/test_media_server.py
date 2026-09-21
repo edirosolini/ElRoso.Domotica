@@ -42,3 +42,31 @@ def test_cannot_escape_the_directory(served):
     with pytest.raises(urllib.error.HTTPError) as caught:
         urllib.request.urlopen(f"http://127.0.0.1:{server.port}/../../etc/passwd", timeout=5)
     assert caught.value.code in (403, 404)
+
+
+def test_two_speakers_starting_at_once_do_not_fight_for_the_port(tmp_path):
+    """Sin candado los dos bindeaban y el segundo moría con «Address already in use»."""
+    import threading
+
+    server = MediaServer(tmp_path, advertised_ip="192.168.68.10", port=0)
+    errors = []
+    start = threading.Barrier(4)
+
+    def run():
+        start.wait()
+        try:
+            server.start()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    try:
+        assert errors == []
+        assert server.port != 0
+    finally:
+        server.stop()

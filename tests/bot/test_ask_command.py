@@ -43,7 +43,7 @@ def build(asker="default", quiet=None, **speakers):
 def test_it_answers_out_loud_and_writes_the_full_answer():
     cmd, spk = build()
 
-    reply = cmd.ask(OWNER, "top 10 de los mejores goles de Messi")
+    reply = cmd.ask(OWNER, "top 10 de los mejores goles de Messi por el parlante")
 
     assert spk["parlante"].said == ["El del Getafe encabeza la lista."]
     assert "2007" in reply, "al chat va la respuesta entera, con los números"
@@ -53,7 +53,7 @@ def test_the_question_travels_whole():
     asker = FakeAsker()
     cmd, _ = build(asker=asker)
 
-    cmd.ask(OWNER, "cuántos goles hizo Messi")
+    cmd.ask(OWNER, "cuántos goles hizo Messi por el parlante")
 
     assert asker.asked == ["cuántos goles hizo Messi"]
 
@@ -92,7 +92,7 @@ def test_during_quiet_hours_it_only_writes():
     cmd, spk = build(quiet=QuietHours.parse("23:00", "07:00"))
     cmd.clock = lambda: datetime(2026, 9, 1, 3, 0)
 
-    reply = cmd.ask(OWNER, "algo")
+    reply = cmd.ask(OWNER, "algo por el parlante")
 
     assert spk["parlante"].said == []
     assert "2007" in reply, "la respuesta igual llega escrita"
@@ -104,7 +104,7 @@ def test_an_answer_that_cannot_be_spoken_is_only_written():
     asker = FakeAsker(answer=Answer(spoken=NOT_SPOKEN, written="Messi hizo 672 goles."))
     cmd, spk = build(asker=asker)
 
-    reply = cmd.ask(OWNER, "cuántos goles")
+    reply = cmd.ask(OWNER, "cuántos goles por el parlante")
 
     assert spk["parlante"].said == [NOT_SPOKEN]
     assert "672" in reply
@@ -114,6 +114,6 @@ def test_it_goes_to_the_device_you_asked_for():
     parlante, comedor = FakeSpeaker("parlante"), FakeSpeaker("comedor")
     cmd, _ = build(parlante=parlante, comedor=comedor)
 
-    cmd.ask(OWNER, "en comedor cuántos goles hizo Messi")
+    cmd.ask(OWNER, "en comedor cuántos goles hizo Messi por el parlante")
 
     assert comedor.said and parlante.said == []

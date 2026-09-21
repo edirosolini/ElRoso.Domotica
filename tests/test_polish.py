@@ -328,3 +328,33 @@ def test_searching_does_not_turn_thinking_off():
     GoogleModel(api_key="k", post=post, search=True)("prompt")
 
     assert "generationConfig" not in calls[0]["json"]
+
+
+def test_audio_travels_inline_next_to_the_prompt():
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("poneme una alarma"))
+
+    model = GoogleModel(api_key="k", post=post)
+
+    assert model("transcribí", audio=b"OggS...", mime="audio/ogg") == "poneme una alarma"
+    parts = calls[0]["json"]["contents"][0]["parts"]
+    assert parts[0]["text"] == "transcribí"
+    assert parts[1]["inline_data"]["mime_type"] == "audio/ogg"
+
+
+def test_the_audio_is_base64_and_not_raw_bytes():
+    import base64
+
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    GoogleModel(api_key="k", post=post)("p", audio=b"\x00\x01binario", mime="audio/ogg")
+    data = calls[0]["json"]["contents"][0]["parts"][1]["inline_data"]["data"]
+
+    assert base64.b64decode(data) == b"\x00\x01binario"

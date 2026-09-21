@@ -54,10 +54,20 @@ def build(router=None, asker=None, **speakers):
 
 
 def test_a_plain_message_runs_the_command_it_meant():
-    cmd, spk = build(router=FakeRouter(Decision("clima")))
+    cmd, _ = build(router=FakeRouter(Decision("clima")))
 
     reply = cmd.free_text(OWNER, "cómo viene el tiempo")
 
+    assert "catorce grados" in reply
+
+
+def test_it_only_speaks_when_the_message_asks_for_it():
+    cmd, spk = build(router=FakeRouter(Decision("clima")))
+
+    cmd.free_text(OWNER, "cómo viene el tiempo")
+    assert spk["parlante"].said == []
+
+    cmd.free_text(OWNER, "cómo viene el tiempo por el parlante")
     assert spk["parlante"].said == ["Ahora hay catorce grados."]
 
 

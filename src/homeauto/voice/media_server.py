@@ -26,6 +26,8 @@ class MediaServer:
         self._requested_port = port
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        # Un anuncio a varios equipos llama a start() desde un hilo por equipo.
+        self._lock = threading.Lock()
 
     @property
     def port(self) -> int:
@@ -36,11 +38,16 @@ class MediaServer:
     def start(self) -> None:
         if self._server is not None:
             return
-        self.directory.mkdir(parents=True, exist_ok=True)
-        handler = partial(_QuietHandler, directory=str(self.directory))
-        self._server = ThreadingHTTPServer(("0.0.0.0", self._requested_port), handler)
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
-        self._thread.start()
+
+        with self._lock:
+            if self._server is not None:
+                return
+            self.directory.mkdir(parents=True, exist_ok=True)
+            handler = partial(_QuietHandler, directory=str(self.directory))
+            server = ThreadingHTTPServer(("0.0.0.0", self._requested_port), handler)
+            self._thread = threading.Thread(target=server.serve_forever, daemon=True)
+            self._thread.start()
+            self._server = server
 
     def url_for(self, filename: str) -> str:
         return f"http://{self.advertised_ip}:{self.port}/{filename}"

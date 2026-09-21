@@ -15,6 +15,8 @@ into a timer is said exactly as they wrote it.
 
 from __future__ import annotations
 
+import base64
+
 import logging
 from typing import Callable, Iterable
 
@@ -168,8 +170,13 @@ class GoogleModel:
         """
         return self.search or self.model.startswith("gemma")
 
-    def __call__(self, prompt: str) -> str:
-        body = {"contents": [{"parts": [{"text": prompt}]}]}
+    def __call__(self, prompt: str, audio: bytes | None = None, mime: str = "") -> str:
+        parts = [{"text": prompt}]
+        if audio:
+            parts.append(
+                {"inline_data": {"mime_type": mime, "data": base64.b64encode(audio).decode("ascii")}}
+            )
+        body = {"contents": [{"parts": parts}]}
         if self.search:
             body["tools"] = [{"google_search": {}}]
         # Gemma answers 400 to the switch instead of ignoring it, which would
