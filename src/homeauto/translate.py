@@ -46,6 +46,9 @@ Reglas:
 Texto: {text}"""
 
 _PREFIX = re.compile(r"^(?:al|a|en)\s+([a-záéíóúñ]+)\s+(.+)$", re.IGNORECASE | re.DOTALL)
+# El router lo devuelve atrás —"hola al inglés"— y una persona lo escribe de las
+# dos formas.
+_SUFFIX = re.compile(r"^(.+?)\s+(?:al|a|en)\s+([a-záéíóúñ]+)$", re.IGNORECASE | re.DOTALL)
 
 
 class TranslateError(Exception):
@@ -89,8 +92,18 @@ class Translator:
 
 
 def split_language(text: str) -> tuple[str, str]:
-    """El idioma pedido adelante y el resto, o vacío y el texto entero."""
-    match = _PREFIX.match(text.strip())
+    """El idioma pedido y el resto del texto, o vacío y el texto entero.
+
+    Se acepta adelante y atrás: el router contesta "hola al inglés" y una
+    persona escribe de las dos formas.
+    """
+    clean = text.strip()
+
+    match = _PREFIX.match(clean)
     if match and match.group(1).lower() in LANGUAGES:
         return match.group(1).lower(), match.group(2)
+
+    match = _SUFFIX.match(clean)
+    if match and match.group(2).lower() in LANGUAGES:
+        return match.group(2).lower(), match.group(1)
     return "", text
