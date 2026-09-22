@@ -588,3 +588,19 @@ def test_the_voicemail_is_wired_and_usable(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 
     assert callable(seen["voicemail"])
+
+
+def test_the_briefing_remembers_the_night_errors(wired, tmp_path, monkeypatch):
+    seen = {}
+    original = main.Briefing.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["seq"] = kwargs.get("seq")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Briefing, "__init__", spy)
+    path = config_file(tmp_path, "SEQ_URL_VPS=http://seq\nSEQ_API_KEY_VPS=k\n")
+    run_main(monkeypatch, path)
+
+    assert seen["seq"], "el resumen no tiene con qué recordar la noche"
+    assert all(hasattr(client, "errors_since") for client in seen["seq"])

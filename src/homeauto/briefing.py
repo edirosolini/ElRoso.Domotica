@@ -24,6 +24,8 @@ from homeauto.polish import as_is
 log = logging.getLogger(__name__)
 
 NOTHING = "No tengo nada para el resumen de hoy."
+# Desde cuándo se miran los errores: la noche entera, hasta la hora del resumen.
+NIGHT_HOURS = 12
 
 
 @dataclass(frozen=True)
@@ -42,12 +44,16 @@ class Briefing:
         monitor=None,
         economy=None,
         news=None,
+        seq=(),
         polish: Callable[..., str] = as_is,
     ):
         self.agenda = agenda
         self.weather = weather
         self.monitor = monitor
         self.economy = economy
+        # Los errores de la noche: de madrugada no despiertan a nadie, así que
+        # se recuerdan acá.
+        self.seq = [seq] if hasattr(seq, "errors_since") else list(seq)
         self.news = news
         # Only the trouble line: the agenda and the weather arrive already
         # reworded by their own sources, and polishing twice buys nothing.
@@ -72,12 +78,18 @@ class Briefing:
             )
             if said
         ]
+        night = self._safe_night()
+        if night is not None:
+            parts.append(night.spoken)
         said = " ".join(parts) if parts else NOTHING
 
+        written = said
+        if night is not None:
+            written = f"{written}\n\n{night.detail}"
         headlines = self._safe_news()
-        if not headlines:
-            return Summary(spoken=said, written=said)
-        return Summary(spoken=said, written=f"{said}\n\n{headlines}")
+        if headlines:
+            written = f"{written}\n\n{headlines}"
+        return Summary(spoken=said, written=written)
 
     @staticmethod
     def _safe(source: Callable[[], str]) -> str:
@@ -106,6 +118,28 @@ class Briefing:
         except Exception:
             log.exception("no pude traer las noticias")
             return ""
+
+    def _safe_night(self):
+        """What Seq collected overnight, or None when there is nothing to tell."""
+        from datetime import datetime, timedelta
+
+        from homeauto.watch.seq import summarize
+
+        events = []
+        for client in self.seq:
+            try:
+                events.extend(client.errors_since(datetime.now() - timedelta(hours=NIGHT_HOURS)))
+            except Exception:
+                log.exception("no pude leer los errores de la noche")
+        if not events:
+            return None
+
+        # Sin "Atención, producción": el fuego ya pasó, esto lo recuerda.
+        summary = summarize(events, source="la noche", lead=False)
+        if summary is None:
+            return None
+        spoken = summary.spoken.replace("Hay ", "Anoche hubo ", 1).replace(", en la noche.", ".")
+        return type(summary)(spoken=spoken, detail=summary.detail)
 
     def _trouble(self) -> str:
         """Only what is down. Silence is the good news, and keeps this short."""
