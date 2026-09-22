@@ -2,7 +2,7 @@
 
 import pytest
 
-from homeauto.translate import MAX_TEXT, TranslateError, Translator
+from homeauto.translate import MAX_TEXT, TranslateError, Translator, split_language
 
 
 def model(answer="hello", boom=None, seen=None):
@@ -102,3 +102,40 @@ def test_the_language_is_part_of_the_cache_key():
 
 def test_surrounding_quotes_are_dropped():
     assert Translator(model('"hello"')).translate("hola") == "hello"
+
+
+# --- el idioma también viene atrás -----------------------------------------
+
+
+def test_the_language_is_also_read_at_the_end():
+    """Así lo devuelve el router, medido contra el endpoint: «hola al inglés»."""
+    seen = []
+    Translator(model("bonjour", seen=seen)).translate("hola al francés")
+
+    assert "francés" in seen[0]
+
+
+def test_the_trailing_language_does_not_travel_as_text():
+    seen = []
+    Translator(model(seen=seen)).translate("hola al francés")
+
+    assert "al francés" not in seen[0].split("Texto:")[-1]
+
+
+def test_only_a_known_language_counts_at_the_end():
+    seen = []
+    Translator(model(seen=seen)).translate("quiero ir a casa")
+
+    assert "quiero ir a casa" in seen[0].split("Texto:")[-1]
+
+
+def test_the_front_wins_when_both_look_like_a_language():
+    assert split_language("al alemán hola en italiano") == ("alemán", "hola en italiano")
+
+
+def test_how_do_you_say_something_in_another_language():
+    seen = []
+    Translator(model(seen=seen)).translate("gracias en italiano")
+
+    assert "italiano" in seen[0]
+    assert "gracias" in seen[0].split("Texto:")[-1]
