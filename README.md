@@ -29,7 +29,7 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /usar tv                        cambia el equipo por defecto
 ```
 
-**Horario de descanso.** De **23:00 a 07:00** nada suena en voz alta: el aviso llega igual a
+**Horario de descanso.** De **23:00 a 07:00** por defecto, nada suena en voz alta: el aviso llega igual a
 Telegram, pero los parlantes se quedan callados. Vale para las alarmas y también para un
 `/decir` manual — la regla protege a los que duermen, no a quien está escribiendo. Se cambia
 con `QUIET_FROM` y `QUIET_TO`; poniendo las dos iguales se desactiva.

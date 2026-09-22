@@ -174,6 +174,22 @@ El servicio vive en `/opt/domotica`, la config en `/etc/domotica/domotica.env` (
 propósito: una lista paralela se desactualiza sola y manda a configurar algo que ya no se lee.
 Lo que el archivo acepta se lee en `Config.from_file()`.
 
+🔴 **Los horarios de esta casa no son los defaults del código**, y esa diferencia ya mordió.
+Verificados en el CT el 2026-09-22:
+
+| clave | en el CT | default del código |
+| --- | --- | --- |
+| `QUIET_FROM` | 22:00 | 23:00 |
+| `QUIET_TO` | 05:25 | 07:00 |
+| `BRIEFING_AT` | 08:45 | 08:00 |
+| `CLOSING_AT` | 20:00 | 22:00 |
+
+Son los cuatro valores que deciden **si algo se escucha o solo se escribe**, y por eso son la
+única excepción a la regla de arriba: lo demás se mira en el env, esto se piensa antes de
+elegir una hora. El cierre del día nació con el default en 22:00, que acá es exactamente el
+minuto en que arranca el descanso: habría salido mudo todas las noches, avisando en el chat
+que no lo dijo. Con cualquier hora nueva, mirar primero dónde cae `QUIET_FROM`.
+
 ## Sobre el Asistente de Google
 
 **No se puede tocar.** El Asistente del Nest corre en la nube de Google; desde acá solo se
@@ -226,7 +242,7 @@ configuración regional es correcta y no es la causa de las fallas del Asistente
 ## Resumen de la mañana
 
 `briefing.py` junta agenda, clima, economía, servicios caídos y titulares en un solo texto
-hablado, a la hora de `BRIEFING_AT`.
+hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
 
 - **Las cinco fuentes son independientes.** Una que falla deja un hueco, no cancela el
   resumen: un calendario que no contesta no te puede costar el clima. Es la misma postura
@@ -253,8 +269,8 @@ hablado, a la hora de `BRIEFING_AT`.
 
 ## Cierre del día
 
-`closing.py` es el espejo del resumen a la hora de `CLOSING_AT` (por defecto 22:00): lo
-agendado para **mañana**, el pronóstico de **mañana** y lo que sigue caído.
+`closing.py` es el espejo del resumen a la hora de `CLOSING_AT` (20:00 en el CT, 22:00 por
+defecto): lo agendado para **mañana**, el pronóstico de **mañana** y lo que sigue caído.
 
 - 🔴 **Un cierre vacío no se dice.** Es la única diferencia de forma con el resumen, que
   contesta "No tengo nada para el resumen de hoy": a la mañana ese texto avisa que la casa
@@ -274,8 +290,10 @@ agendado para **mañana**, el pronóstico de **mañana** y lo que sigue caído.
 - 🔴 **La línea de los servicios caídos es una sola**, `watch.monitor.down_line()`, y la usan
   el resumen y el cierre. Estaba escrita dos veces por un rato y esa es exactamente la forma
   en que las dos redacciones se separan sin que nadie lo note.
-- ⚠️ **La hora por defecto es una hora antes del descanso.** Moverla más allá de `QUIET_FROM`
-  la deja solo escrita en el chat: es la regla de siempre, no una falla.
+- 🔴 **La hora se elige mirando `QUIET_FROM`, no el default.** El default son las 22:00, que
+  es la hora exacta en que empieza el descanso de esta casa: el cierre habría salido mudo
+  todas las noches. En el CT quedó a las 20:00. Pasado `QUIET_FROM` el aviso solo se escribe,
+  que es la regla de siempre y no una falla.
 - Fuentes independientes y nada de dígitos, como el resumen. Hay test de las dos cosas.
 
 ## Agenda
@@ -706,8 +724,10 @@ beeps y los pega adelante del wav de Piper.
 
 ## Horario de descanso
 
-De 23:00 a 07:00 (`QUIET_FROM`/`QUIET_TO`) **nada se dice en voz alta**: el aviso va solo a
-Telegram, con el motivo. Aplica a las alarmas y también a `/decir` y `/clima` manuales.
+Entre `QUIET_FROM` y `QUIET_TO` **nada se dice en voz alta**: el aviso va solo a Telegram,
+con el motivo. Aplica a las alarmas y también a `/decir` y `/clima` manuales. El default del
+código es de 23:00 a 07:00; ⚠️ **el CT corre de 22:00 a 05:25**, y lo que manda es el env —
+ver **Dónde corre**.
 
 La decisión de incluir los comandos manuales es deliberada: la regla existe para no despertar
 a nadie, y quien escribe a las 3 AM está despierto pero el resto de la casa no. Si alguna vez
