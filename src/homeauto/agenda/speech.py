@@ -1,4 +1,4 @@
-"""Turning a list of events into something worth hearing out loud."""
+"""Convierte una lista de eventos en algo que valga la pena escuchar."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from homeauto.verbalize import FEMININE, clock, number
 
 
 def _clock(event: Event) -> str:
-    # 🔴 In words, never as digits: the synthesizer reads "21:15" as a number.
+    # En palabras, nunca en dígitos: el sintetizador lee "21:15" como un número.
     return f"a {clock(event.start.hour, event.start.minute)}"
 
 
@@ -20,20 +20,19 @@ def _one(event: Event, place: bool = True) -> str:
 
 
 def describe(events: list[Event], label: str, place: bool = True) -> str:
-    """One or two sentences, written to be heard rather than read.
+    """Una o dos oraciones, escritas para escucharse y no para leerse.
 
-    `place` is off in the morning summary. Heard next to the weather, the
-    economy and whatever is down, "en Sanatorio Colegiales" was what made it
-    drag; asked for on purpose with /agenda, where it is on, it is the answer.
+    `place` va apagado en el resumen de la mañana y encendido en /agenda, que
+    se pide a propósito.
     """
     if not events:
         return f"No tenés nada agendado {label}."
 
-    # All-day things frame the day, so they go first regardless of their hour.
+    # Lo de día completo enmarca el día, así que va primero sin importar la hora.
     ordered = sorted(events, key=lambda event: (not event.all_day, event.start))
 
     count = len(ordered)
-    # "cosa" is feminine: a bare digit here came out as "tenés uno cosa".
+    # "cosa" es femenino, así que el número concuerda con él.
     things = "cosa" if count == 1 else "cosas"
     heading = f"{label.capitalize()} tenés {number(count, FEMININE)} {things}."
     return " ".join([heading] + [_one(event, place) for event in ordered])

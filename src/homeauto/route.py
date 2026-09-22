@@ -1,15 +1,8 @@
-"""Understanding a message that came without a slash.
+"""Interpretar un mensaje que vino sin barra.
 
-The router decides *what* the person asked for; it never does it. `Commands`
-already knows how to run every one of these, and the existing parsers already
-know how to reject a bad argument, so this only has to name the command and
-hand over its text.
-
-🔴 The one thing it is not allowed to touch is what the house will say with its
-own voice. `/decir` carries somebody's words, and a model asked to extract them
-will happily improve them on the way out. So the payload of `decir` is checked
-against the original message: what is not in there was invented, and an invented
-message is worse than not understanding at all.
+El router decide *qué* pidió la persona; nunca lo ejecuta. Solo nombra el
+comando y pasa su texto. El payload de `decir` se compara contra el mensaje
+original: lo que no está ahí fue inventado.
 """
 
 from __future__ import annotations
@@ -25,20 +18,20 @@ COMMAND_TAG = "comando:"
 ARGUMENT_TAG = "argumento:"
 NONE_WORDS = {"ninguno", "ninguna", "nada", "none", ""}
 
-# Only these can be reached without a slash. The model can answer anything, and
-# anything outside this list is treated as a question instead of guessed at.
+# Solo a estos se llega sin barra. El modelo puede contestar cualquier cosa, y
+# lo que esté fuera de esta lista se trata como pregunta en vez de adivinarlo.
 ROUTABLE = (
     "decir", "llamar", "timer", "alarma", "lista", "cancelar", "silencio", "hablar",
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar",
 )
 
-# What the person says goes literally into these, so it cannot be reworded.
+# Lo que dice la persona entra literal en estos, así que no se puede reescribir.
 LITERAL_PAYLOAD = ("decir",)
 
-# A leading «en comedor» / «en comedor,recamara» is targeting, not message: the
-# router builds it, so it is allowed to appear in the argument without being in
-# the original text.
+# Un «en comedor» / «en comedor,recamara» adelante es destino, no mensaje: lo
+# arma el router, así que puede aparecer en el argumento sin estar en el texto
+# original.
 _TARGET_PREFIX = re.compile(r"^en\s+[a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*\s+", re.IGNORECASE)
 
 PROMPT = """Sos el intérprete de un bot de domótica de una casa. Leé el mensaje y decidí
@@ -115,12 +108,12 @@ Mensaje: {message}"""
 
 
 class RouteError(Exception):
-    """The message could not be interpreted at all."""
+    """El mensaje no se pudo interpretar."""
 
 
 @dataclass(frozen=True)
 class Decision:
-    """The command the message meant, or nothing when it is a question."""
+    """El comando que quiso decir el mensaje, o nada si es una pregunta."""
 
     command: str | None
     argument: str = ""
@@ -131,11 +124,11 @@ class Decision:
 
 
 def strip_target(argument: str) -> str:
-    """The argument without the «en <equipo>» head the router itself builds.
+    """El argumento sin el «en <equipo>» que arma el propio router.
 
-    Whoever reads what a command actually carries — the fidelity check here, the
-    missing-datum check in `slots` — has to drop it first, or targeting reads as
-    part of the message.
+    Quien lee lo que un comando lleva de verdad —la fidelidad acá, el dato que
+    falta en `slots`— tiene que sacarlo primero, o el destino se lee como parte
+    del mensaje.
     """
     return _TARGET_PREFIX.sub("", argument.strip())
 
@@ -145,7 +138,7 @@ def _clean(text: str) -> str:
 
 
 def _normalize(text: str) -> str:
-    """Lowercased with runs of whitespace collapsed, for comparing wordings."""
+    """En minúsculas y con los espacios colapsados, para comparar redacciones."""
     return " ".join(text.lower().split())
 
 
@@ -168,8 +161,8 @@ class Router:
         try:
             reply = self.model(self.prompt.format(message=message))
         except Exception as exc:  # noqa: BLE001
-            # Never a silent question: sending "apagá la tele" out to a web
-            # search is a worse answer than saying it was not understood.
+            # Nunca una pregunta silenciosa: mandar "apagá la tele" a buscar en
+            # internet es peor respuesta que decir que no se entendió.
             log.warning("no pude interpretar el mensaje: %s", exc)
             raise RouteError("No te entendí. Probá con /ayuda.") from exc
 
@@ -203,10 +196,10 @@ class Router:
         return command, argument
 
     def _faithful(self, argument: str, message: str) -> bool:
-        """Whether what the house would say really came out of the message.
+        """Si lo que la casa va a decir salió de verdad del mensaje.
 
-        The «en <equipo>» head is dropped first: that part is targeting the
-        router adds, not words anybody typed.
+        El «en <equipo>» de adelante se saca primero: eso es destino que agrega
+        el router, no palabras que alguien escribió.
         """
         payload = strip_target(argument)
         if not payload:

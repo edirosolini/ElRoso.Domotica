@@ -1023,10 +1023,29 @@ abajo en ese orden a propósito.
 
 ## Convenciones
 
-- Mensajes al usuario del bot en **español**; identificadores, logs y comentarios técnicos en inglés.
+- Mensajes al usuario del bot en **español**. Identificadores y logs en **inglés**.
+- 🔴 **Los comentarios y docstrings van en español**, todos. Antes decían inglés y el código
+  terminó con 437 en inglés y 47 en español, varios archivos mezclando los dos adentro.
 - Los tests no tocan hardware real: se mockea `pychromecast` y el subproceso de Piper.
   La verificación con el parlante de verdad es un paso aparte, manual.
 - Nada de tokens ni chat IDs en el repo. Viven en el archivo de entorno del contenedor.
+
+### Qué va en un comentario
+
+Estas reglas vivían fuera del repo y el código se fue llenando de narrativa hasta que hubo
+que podarlo entero. Quedan acá para que no se pierdan de nuevo.
+
+- Un comentario dice **qué hace** el código. Nada más.
+- **Una línea.** Dos solo si el qué no entra en una.
+- **Prohibido**: la historia del bug, las alternativas descartadas, cómo se llegó a la
+  solución, anécdotas de depuración, mediciones, quién decidió qué y por qué.
+- **Prohibido** repetir lo que el código ya dice (`# incrementa el contador`).
+- Comentar solo lo que el código no dice solo. Si es claro, sin comentario.
+- **El porqué va en el commit, el PR o este archivo. Nunca en el código.** Este `CLAUDE.md`
+  es justamente donde vive, y por eso el código no lo repite.
+- Excepción única: una **restricción externa no evidente** que rompe si se toca —bug de
+  librería, límite de una API, orden obligatorio—. Una línea, seca.
+- Docstrings: qué hace, qué recibe, qué devuelve. Sin narrativa.
 
 ## Memoria local
 

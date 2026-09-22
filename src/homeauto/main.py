@@ -1,7 +1,7 @@
-"""Composition root: wires the pieces and runs the Telegram bot.
+"""Composition root: arma las piezas y corre el bot de Telegram.
 
-Deliberately thin. Everything with a decision in it lives in a tested module;
-what is here is assembly and process lifecycle, verified by running it.
+Delgado a propósito. Todo lo que tiene una decisión adentro vive en un módulo
+con tests; acá solo hay cableado y ciclo de vida del proceso.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ MEDIA_PORT = int(os.environ.get("DOMOTICA_MEDIA_PORT", "8765"))
 
 
 def _knob(name: str, default: float | None) -> float | None:
-    """One pacing knob from the environment, or its default."""
+    """Una perilla del ritmo, leída del entorno, o su default."""
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default
@@ -78,7 +78,7 @@ def _knob(name: str, default: float | None) -> float | None:
 
 
 def pacing_from_env() -> dict:
-    """How the house should speak. Moved from the container, not from code."""
+    """Cómo tiene que hablar la casa. Se mueve desde el contenedor, no desde el código."""
     return {
         "length_scale": _knob("DOMOTICA_LENGTH_SCALE", DEFAULT_LENGTH_SCALE),
         "sentence_silence": _knob("DOMOTICA_SENTENCE_SILENCE", DEFAULT_SENTENCE_SILENCE),
@@ -88,11 +88,9 @@ def pacing_from_env() -> dict:
 
 
 def build_synth(cache_dir: Path | str) -> VoiceSynth:
-    """Synthesis with its pacing, and the pacing inside the cache key.
+    """La síntesis con su ritmo, y el ritmo dentro de la clave del cache.
 
-    🔴 The two have to come from the same place. Keyed without it, changing how
-    the house speaks leaves every phrase already said playing at the old pacing,
-    with nothing in the log to explain it.
+    Los dos salen del mismo lugar, o se reusa audio hecho con otro ritmo.
     """
     runner = PiperRunner(PYTHON_BIN, VOICE_PATH, **pacing_from_env())
     return VoiceSynth(
@@ -105,8 +103,8 @@ STATE_DIR = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/domotica"))
 
 log = logging.getLogger("homeauto")
 
-# Telegram only accepts a-z, 0-9 and underscore in command names: no accents.
-# Aliases in Spanish are fine as long as they stay unaccented.
+# Telegram solo acepta a-z, 0-9 y guion bajo en los nombres de comando: sin
+# acentos. Los alias en español valen mientras no los lleven.
 START_COMMANDS = ("start", "help", "ayuda")
 SAY_COMMANDS = ("decir",)
 CALL_COMMANDS = ("llamar", "llama")
@@ -134,8 +132,8 @@ ALL_COMMANDS = (
     + ASK_COMMANDS
 )
 
-# What Telegram offers when you type "/". Short on purpose: the rest still works
-# typed and stays listed in `HELP`, the full catalogue.
+# Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
+# andando escrito y está listado en `HELP`, el catálogo completo.
 COMMAND_MENU = (
     ("decir", "Decirlo en voz alta ahora"),
     ("llamar", "Llamar a la casa — /llamar a cenar"),
@@ -158,23 +156,23 @@ WORKING = "⏳ Procesando…"
 # Un comando dicho es una oración; más que esto es un monólogo.
 MAX_VOICE_SECONDS = 60
 
-# Half an hour is enough for a warning that fires at most once a day, and it
-# keeps the free forecast requests down to a couple dozen.
+# Media hora alcanza para un aviso que sale como mucho una vez por día, y deja
+# los pedidos al pronóstico gratuito en un par de docenas.
 RAIN_INTERVAL = 1800
 
 
 def local_ip() -> str:
-    """The address this host uses to reach the LAN, so the speaker can call back."""
+    """La dirección con la que este host sale a la LAN, para que el parlante vuelva."""
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.connect(("192.168.68.1", 1))  # no packet is sent, just route lookup
         return probe.getsockname()[0]
 
 
 class JobQueueTimer:
-    """Adapts python-telegram-bot's job queue to what Reminders expects.
+    """Adapta la job queue de python-telegram-bot a lo que espera Reminders.
 
-    The announcement blocks (it synthesizes and waits for the speaker), so it
-    runs in a worker thread instead of stalling the bot's event loop.
+    El anuncio bloquea (sintetiza y espera al parlante), así que corre en un
+    hilo aparte en vez de frenar el event loop del bot.
     """
 
     def __init__(self, job_queue):
@@ -186,10 +184,8 @@ class JobQueueTimer:
         async def run(_context):
             await asyncio.to_thread(action)
 
-        # 🔴 APScheduler reads a naive datetime as UTC. We work in local time, so
-        # a naive 23:14 got scheduled at 23:14 UTC — three hours in the past here —
-        # and the timer fired instantly. astimezone() on a naive value reads it as
-        # local and attaches the offset, leaving the wall clock time untouched.
+        # APScheduler lee un datetime naive como UTC y este proyecto trabaja en
+        # hora local. astimezone() le pega el offset sin mover el reloj.
         if when.tzinfo is None:
             when = when.astimezone()
 
@@ -201,10 +197,10 @@ class JobQueueTimer:
 
 
 class ChatNotifier:
-    """Sends a Telegram message from a worker thread.
+    """Manda un mensaje de Telegram desde un hilo aparte.
 
-    Announcements run off the event loop, so the send has to be handed back to
-    it instead of being awaited where there is no loop.
+    Los anuncios corren fuera del event loop, así que el envío se le devuelve
+    a él en vez de esperarlo donde no hay loop.
     """
 
     def __init__(self, bot):
@@ -224,14 +220,14 @@ class ChatNotifier:
 
 
 def local_timezone():
-    """The real zone, not a fixed offset: DST changes matter for a daily job."""
+    """La zona real, no un offset fijo: los cambios de horario importan en un job diario."""
     from tzlocal import get_localzone
 
     return get_localzone()
 
 
 def schedule_calendar_jobs(app, watcher) -> None:
-    """The look-ahead that announces an event before it starts."""
+    """La antelación con la que se anuncia un evento antes de que empiece."""
 
     async def look_ahead(_context):
         await asyncio.to_thread(watcher.check)
@@ -240,13 +236,9 @@ def schedule_calendar_jobs(app, watcher) -> None:
 
 
 def schedule_briefing(app, config, briefing, announce) -> None:
-    """The morning summary.
+    """El resumen de la mañana, agendado haya o no calendarios configurados.
 
-    🔴 The time carries its timezone. APScheduler reads a naive time as UTC,
-    and a briefing meant for 08:00 would land at 05:00.
-
-    It does not depend on the calendar: with no calendar configured the weather
-    and the state of the services are still worth hearing.
+    La hora lleva su zona: APScheduler lee una naive como UTC.
     """
     if config.briefing_at is None:
         return
@@ -265,18 +257,16 @@ def schedule_briefing(app, config, briefing, announce) -> None:
 
 
 def build_post_init(notifier, reminders, api=None):
-    """What has to happen once the loop is running, before serving anyone.
+    """Lo que tiene que pasar con el loop ya corriendo, antes de atender a nadie.
 
-    🔴 `reminders.start()` must run off the loop. Catching up a missed job
-    announces it, and announcing blocks: discovery finds nothing on the loop,
-    and the chat notification deadlocks waiting for the very loop that is
-    sitting there waiting for it.
+    `reminders.start()` corre fuera del loop: recuperar un job perdido lo
+    anuncia, y anunciar bloquea.
     """
 
     async def post_init(app) -> None:
         notifier.bind(asyncio.get_running_loop())
-        # The API needs the notifier bound: outside working hours it answers
-        # through Telegram instead of the speakers.
+        # La API necesita el notificador atado: en horario de descanso contesta
+        # por Telegram en vez de por los parlantes.
         if api is not None:
             api.start()
         await asyncio.to_thread(reminders.start)
@@ -289,10 +279,10 @@ def build_post_init(notifier, reminders, api=None):
 
 
 def _alert(house: HouseVoice, text: str, urgent: bool, detail: str = "") -> None:
-    """Say it if allowed, and always leave it written in the chat.
+    """Lo dice si se puede, y siempre lo deja escrito en el chat.
 
-    The detail is written, never spoken: an HTTP status or a quoted log line
-    is what you need to read and the last thing you want read out loud.
+    El detalle se escribe, nunca se dice: un estado HTTP o la cita de un log es
+    lo que hay que leer y lo último que querés escuchar.
     """
     written = f"{text}\n{detail}" if detail else text
     result = house.announce(text, urgent=urgent, written=written)
@@ -301,11 +291,11 @@ def _alert(house: HouseVoice, text: str, urgent: bool, detail: str = "") -> None
 
 
 def _announce(house: HouseVoice, text: str, written: str | None = None) -> None:
-    """Say it out loud when allowed, and always leave it written in the chat.
+    """Lo dice en voz alta si se puede, y siempre lo deja escrito en el chat.
 
-    `written` carries more than what is said when the source has both halves:
-    the morning summary speaks the headlines in words and writes them as the
-    outlets published them, digits and all.
+    `written` lleva más que lo hablado cuando la fuente tiene las dos mitades:
+    el resumen de la mañana escribe los titulares tal como los publicaron los
+    medios, con dígitos y todo.
     """
     result = house.announce(text, written=written)
     if result["spoken"]:
@@ -313,26 +303,24 @@ def _announce(house: HouseVoice, text: str, written: str | None = None) -> None:
 
 
 def build_polisher(config: Config):
-    """The rewriter for generated wording, or None when there is no key.
+    """El pulidor de lo que generamos, o None si no hay clave.
 
-    Only text this service writes goes through it. What a person typed into
-    /decir goes to `build_corrector` instead, which fixes the spelling and
-    leaves the words alone.
+    Por acá solo pasa texto que escribe este servicio. Lo que una persona tipeó
+    en /decir va por `build_corrector`, que arregla la escritura y no toca las
+    palabras.
     """
-    # The bound method, not the object: everything downstream calls it like the
-    # `as_is` default, and a Polisher is not callable on its own.
+    # El método atado, no el objeto: aguas abajo se lo llama como al default
+    # `as_is`, y un Polisher no es invocable por sí solo.
     return Polisher(
         model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
     ).polish
 
 
 def build_corrector(config: Config):
-    """The speller for what a person typed, or the identity when there is no key.
+    """El corrector de lo que tipeó una persona, o la identidad si no hay clave.
 
-    🔴 A different thing from the polisher, and on purpose: this one may not
-    change a word. It exists because a digit somebody typed is read by Piper as
-    a loose masculine cardinal, and it knows the time because a meal named
-    without saying which one follows the clock.
+    No es el pulidor: este no puede cambiar una palabra. Recibe el reloj porque
+    una comida sigue a la hora.
     """
     if not config.polish_enabled:
         return as_written
@@ -342,12 +330,10 @@ def build_corrector(config: Config):
 
 
 def build_asker(config: Config) -> Asker | None:
-    """Who answers a question, or None when there is no key.
+    """Quién contesta una pregunta, o None si no hay clave.
 
-    🔴 The same client as the polisher, configured the other way round: this one
-    grounds in Google Search and waits far longer for it. Rewording a sentence
-    has nothing to look up and nobody waits for prose; a question does and they
-    do.
+    El mismo cliente que el del pulido, configurado al revés: con búsqueda en
+    Google y con un timeout mucho más largo.
     """
     if not config.polish_enabled:
         return None
@@ -362,11 +348,9 @@ def build_asker(config: Config) -> Asker | None:
 
 
 def build_router(config: Config) -> Router | None:
-    """Who reads a message with no slash, or None when there is no key.
+    """Quién lee un mensaje sin barra, o None si no hay clave.
 
-    🔴 The cheap model, and no search. Interpreting is not finding out: every
-    free-text message pays this call, so it has to be the fast one. Grounding
-    here would put thirty seconds in front of "bajá el volumen".
+    El modelo barato y sin búsqueda: cada mensaje suelto paga esta llamada.
     """
     if not config.polish_enabled:
         return None
@@ -376,10 +360,10 @@ def build_router(config: Config) -> Router | None:
 
 
 def build_transcriber(config: Config) -> Transcriber | None:
-    """Who turns a voice note into words, or None when there is no key.
+    """Quién convierte una nota de voz en palabras, o None si no hay clave.
 
-    The cheap model and no search, like the router: transcribing is not
-    finding out either.
+    El modelo barato y sin búsqueda, como el router: transcribir tampoco es
+    averiguar.
     """
     if not config.polish_enabled:
         return None
@@ -393,15 +377,15 @@ def build_transcriber(config: Config) -> Transcriber | None:
 
 
 def build_voicemail(synth) -> Voicemail:
-    """The same synthesis as the speaker, encoded for the chat."""
+    """La misma síntesis que usa el parlante, codificada para el chat."""
     return Voicemail(synth)
 
 
 def build_speakers(config: Config, synth=None) -> SpeakerRegistry:
-    """One Speaker per configured device, sharing synthesis and the media server.
+    """Un Speaker por equipo configurado, compartiendo síntesis y servidor de audio.
 
-    Only the Caster differs: synthesizing the same phrase twice or running two
-    HTTP servers would be waste.
+    Lo único distinto es el Caster: sintetizar dos veces la misma frase o
+    levantar dos servidores HTTP sería desperdicio.
     """
     cache_dir = Path(CACHE_DIR)
     synth = synth or build_synth(cache_dir)
@@ -414,14 +398,14 @@ def build_speakers(config: Config, synth=None) -> SpeakerRegistry:
 
 
 def _argument_text(update: Update) -> str:
-    """Everything after the command, with the original spacing."""
+    """Todo lo que sigue al comando, con los espacios originales."""
     text = (update.message.text or "") if update.message else ""
     _, _, rest = text.partition(" ")
     return rest
 
 
 async def _say_working(message):
-    """The bubble that says the work started, or None if it could not be sent."""
+    """La burbuja que avisa que arrancó, o None si no se pudo mandar."""
     try:
         return await message.reply_text(WORKING)
     except Exception:  # noqa: BLE001 - la señal no puede costar la respuesta
@@ -430,7 +414,7 @@ async def _say_working(message):
 
 
 async def _answer(waiting, message, text: str) -> None:
-    """Turns the «procesando» bubble into the answer, or sends it on its own."""
+    """Convierte la burbuja de «procesando» en la respuesta, o la manda aparte."""
     if waiting is None:
         await message.reply_text(text)
         return
@@ -442,7 +426,7 @@ async def _answer(waiting, message, text: str) -> None:
 
 
 async def _drop(waiting, message, fallback: str) -> None:
-    """Takes the «procesando» bubble away once the voice note is sent."""
+    """Saca la burbuja de «procesando» cuando ya se mandó la nota de voz."""
     if waiting is None:
         return
     try:
@@ -453,22 +437,16 @@ async def _drop(waiting, message, fallback: str) -> None:
 
 
 def register(app: Application, commands: Commands) -> None:
-    """Wire every command, running the work off the event loop.
+    """Cablea todos los comandos, corriendo el trabajo fuera del event loop.
 
-    🔴 The command work must not run on the loop. Discovery uses zeroconf, which
-    does blocking I/O: called from inside a running asyncio loop it finds
-    nothing and every command answers "no encontré el dispositivo". Piper would
-    also freeze the bot for the length of the synthesis.
+    El descubrimiento (zeroconf) y la síntesis (Piper) bloquean: en el loop no
+    encuentran nada y congelan el bot.
     """
 
     def handler(run_command):
         async def callback(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-            # 🔴 Only a fresh message. With allowed_updates=ALL_TYPES an edit
-            # arrives too, and there `update.message` is None: replying blew up
-            # with AttributeError, and before that the command had already run
-            # with an empty argument, because the text came from the same place.
-            # Ignoring edits is also the right behaviour on its own — fixing a
-            # typo must not set a second alarm.
+            # Solo un mensaje nuevo: con allowed_updates=ALL_TYPES también entra
+            # una edición, y ahí `update.message` viene en None.
             if update.message is None or update.effective_chat is None:
                 log.debug("ignoro un update que no es un mensaje nuevo")
                 return
@@ -510,7 +488,7 @@ def register(app: Application, commands: Commands) -> None:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
 
     async def listen(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-        """A voice note: download it and run it like a typed message."""
+        """Una nota de voz: se baja y se ejecuta como un mensaje escrito."""
         if update.message is None or update.effective_chat is None:
             return
         voice = getattr(update.message, "voice", None)
@@ -548,8 +526,8 @@ def register(app: Application, commands: Commands) -> None:
 
     app.add_handler(MessageHandler(filters.VOICE, listen))
 
-    # Anything without a slash. Registered last, so a real command never
-    # reaches the interpreter and never pays for a model call.
+    # Todo lo que viene sin barra. Se registra último, así un comando de verdad
+    # nunca llega al intérprete ni paga la llamada al modelo.
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handler(commands.free_text))
     )
@@ -560,9 +538,8 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    # 🔴 httpx logs the full request URL at INFO, and the Telegram API carries the
-    # bot token inside the path: at INFO the token ends up in the journal in clear
-    # text, forever. Keep this at WARNING.
+    # httpx loguea la URL completa en INFO y el token de Telegram va en el path,
+    # así que terminaría en el journal en claro.
     for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     config = Config.from_file(CONFIG_PATH)
@@ -581,8 +558,8 @@ def main() -> None:
 
     notifier = ChatNotifier(app.bot)
     db_path = STATE_DIR / "jobs.db"
-    # The quiet window everyone consults: the fixed hours plus whatever
-    # /silencio asked for. Built before its users, like the rest of the file.
+    # El silencio que todos consultan: las horas fijas más lo que haya pedido
+    # /silencio. Se arma antes que sus usuarios, como el resto del archivo.
     hush = Hush(hours=config.quiet_hours, store=HushStore(db_path))
     reminders = Reminders(
         store=Store(db_path),
@@ -620,7 +597,7 @@ def main() -> None:
     try:
         checks = load_checks(config.checks_file)
     except ChecksError as exc:
-        # Bad config is worth failing loudly: a monitor nobody notices is off
+        # Una config rota falla fuerte: un monitor que nadie nota que está apagado
         # is worse than no monitor.
         log.error("no pude leer %s: %s", config.checks_file, exc)
         raise
@@ -635,8 +612,8 @@ def main() -> None:
     else:
         log.info("sin servicios que vigilar en %s", config.checks_file)
 
-    # One watcher per Seq: a VPS cannot report its own death, so each one is
-    # read from here, and each keeps its own marks.
+    # Un watcher por Seq: un VPS no puede avisar de su propia muerte, así que
+    # cada uno se lee desde acá y cada uno lleva sus marcas.
     seq_watchers = [
         SeqWatcher(
             client=SeqClient(base_url=instance.url, api_key=instance.api_key),
@@ -675,8 +652,8 @@ def main() -> None:
         transcribe=build_transcriber(config),
         voicemail=build_voicemail(synth),
         correct=build_corrector(config),
-        # 🔴 Solo para /llamar, que es texto nuestro. Lo que escribe una
-        # persona va por `correct`, que no puede cambiarle una palabra.
+        # Solo para /llamar, que es texto nuestro; lo que escribe una persona
+        # va por `correct`.
         polish=polish,
         clock=datetime.now,
     )
@@ -752,8 +729,8 @@ def main() -> None:
 
     app.job_queue.run_repeating(check_rain, interval=RAIN_INTERVAL, first=90, name="rain-watch")
 
-    # The other four warnings of the sky. Its own job and its own marks: the
-    # rain has history in the deployed database and is left alone.
+    # Los otros cuatro avisos del cielo. Su propio job y sus propias marcas: la
+    # lluvia tiene historia en la base desplegada y se deja como está.
     sky = WeatherWatcher(
         weather=weather,
         announce=lambda text: _announce(house, text),
@@ -775,12 +752,12 @@ def main() -> None:
         )
 
     for index, watcher in enumerate(seq_watchers):
-        # 🔴 The watcher goes in as a default argument. Closing over the loop
-        # variable would leave every job reading the last Seq of the list.
+        # Por argumento por defecto: cerrar sobre la variable del for dejaría
+        # todos los jobs leyendo el último Seq de la lista.
         async def check_seq(_context, seq_watcher=watcher):
             await asyncio.to_thread(seq_watcher.check)
 
-        # Staggered so two instances do not query at the same second.
+        # Escalonado para que dos instancias no consulten en el mismo segundo.
         app.job_queue.run_repeating(
             check_seq,
             interval=config.check_interval,

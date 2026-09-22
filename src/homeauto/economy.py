@@ -1,17 +1,9 @@
-"""The three numbers of the Argentine economy, read out loud.
+"""Los tres números de la economía argentina, dichos en voz alta.
 
-Three public APIs, free and without an account, the same posture as the
-weather: nothing here depends on anybody's key. The dollar comes from
-dolarapi, the country risk and the monthly inflation from argentinadatos.
-
-🔴 The three are independent. One that times out leaves a hole in the morning
-summary, never cancels it — the same rule the briefing already applies to the
-agenda, the sky and the services.
-
-Everything leaves here spelled out in words. A figure this module cannot say —
-past what `verbalize` covers — is dropped rather than spoken with digits: the
-speaker reads "1535" as a loose masculine cardinal, and a wrong number said
-confidently is worse than a number not said.
+El dólar sale de dolarapi; el riesgo país y la inflación del mes, de
+argentinadatos: APIs públicas, gratis y sin cuenta. Los tres son
+independientes. Todo sale de acá en palabras, y una cifra que `verbalize` no
+pueda decir se calla antes que decirla con dígitos.
 """
 
 from __future__ import annotations
@@ -37,11 +29,11 @@ MONTHS = (
 
 
 class EconomyError(Exception):
-    """A figure could not be fetched or understood."""
+    """Una cifra no se pudo traer o entender."""
 
 
 def fetch_json(url: str) -> dict | list:
-    """The real call. Imported lazily so tests never touch the network."""
+    """La llamada real. Se importa tarde para que los tests no toquen la red."""
     import requests
 
     response = requests.get(url, timeout=TIMEOUT)
@@ -66,7 +58,7 @@ class EconomyClient:
             raise EconomyError(f"No pude consultar {url}: {exc}") from exc
 
     def dollar(self) -> int:
-        """The official dollar, at what it costs to buy one."""
+        """El dólar oficial, al precio que cuesta comprar uno."""
         payload = self._get(DOLLAR_URL)
         try:
             return round(float(payload["venta"]))
@@ -81,7 +73,7 @@ class EconomyClient:
             raise EconomyError(f"el riesgo país vino raro: {exc}") from exc
 
     def inflation(self) -> tuple[str, float]:
-        """The last month published, by its name, and how much it was."""
+        """El último mes publicado, por su nombre, y cuánto fue."""
         payload = self._get(INFLATION_URL)
         try:
             last = payload[-1]
@@ -91,7 +83,7 @@ class EconomyClient:
             raise EconomyError(f"la inflación vino rara: {exc}") from exc
 
     def spoken(self) -> str:
-        """One sentence per figure that answered, or nothing at all."""
+        """Una oración por cada cifra que contestó, o nada."""
         parts = [
             said
             for said in (self._dollar_line(), self._risk_line(), self._inflation_line())
@@ -101,8 +93,8 @@ class EconomyClient:
             return ""
 
         text = " ".join(parts)
-        # What the rewrite may not lose: the name of each figure. Which ones
-        # are there depends on who answered, so the list is built from the text.
+        # Lo que el pulido no puede perder: el nombre de cada cifra. Cuáles
+        # hay depende de quién contestó, así que la lista sale del texto.
         keep = tuple(term for term in ("dólar", "riesgo país", "inflación") if term in text)
         return self.polish(text, must_keep=keep)
 
@@ -125,11 +117,10 @@ class EconomyClient:
 
     @staticmethod
     def _line(source: Callable[[], str]) -> str:
-        """A figure that cannot be fetched, understood or said is left out.
+        """Una cifra que no se puede traer, entender o decir se deja afuera.
 
-        🔴 `verbalize` refuses anything past what it can spell out, and that
-        refusal has to end here: letting it through would put a digit in front
-        of Piper, which is the whole reason this module speaks in words.
+        `verbalize` rechaza lo que no puede poner en palabras, y esa negativa
+        termina acá: dejarla pasar pondría un dígito frente a Piper.
         """
         try:
             return source()

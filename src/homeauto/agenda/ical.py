@@ -1,10 +1,7 @@
-"""Reading Google Calendar through its private iCal address.
+"""Lectura de Google Calendar por su dirección privada en formato iCal.
 
-Chosen over the Calendar API on purpose: this is read-only, and the secret URL
-needs no OAuth project, no consent screen and no refresh tokens. The cost is
-that Google caches that URL, so a brand new event can take a while to show up.
-
-The secret URL is a credential: whoever holds it reads the whole calendar.
+Es solo lectura, así que no necesita OAuth. Google cachea esa URL, de modo que
+un evento nuevo tarda en aparecer. La URL es una credencial.
 """
 
 from __future__ import annotations
@@ -22,7 +19,7 @@ CACHE_SECONDS = 300
 
 
 class CalendarError(Exception):
-    """No calendar could be read."""
+    """No se pudo leer ningún calendario."""
 
 
 @dataclass(frozen=True)
@@ -37,12 +34,12 @@ class Event:
 
     @property
     def key(self) -> str:
-        """Stable per occurrence: a weekly event fires many times."""
+        """Estable por ocurrencia: un evento semanal dispara muchas veces."""
         return f"{self.calendar}:{self.uid}:{self.start.isoformat()}"
 
 
 def fetch_url(url: str) -> str:
-    """The real download. Imported lazily so tests never touch the network."""
+    """La descarga real. Se importa tarde para que los tests no toquen la red."""
     import requests
 
     response = requests.get(url, timeout=TIMEOUT)
@@ -78,12 +75,12 @@ class CalendarClient:
         return text
 
     def _to_local(self, value) -> tuple[datetime, bool]:
-        """Normalize whatever the ics carried into an aware local datetime."""
+        """Normaliza lo que traiga el ics a un datetime local con zona."""
         if isinstance(value, datetime):
             if value.tzinfo is None:  # floating time: read it as local
                 return value.replace(tzinfo=self.timezone), False
             return value.astimezone(self.timezone), False
-        # A bare date means an all-day event.
+        # Una fecha sin hora es un evento de día completo.
         return datetime.combine(value, time.min, tzinfo=self.timezone), True
 
     def _events_of(self, alias: str, url: str, start: datetime, end: datetime) -> list[Event]:
@@ -110,7 +107,7 @@ class CalendarClient:
         return found
 
     def between(self, start: datetime, end: datetime) -> list[Event]:
-        """Every occurrence in the window, from every calendar, sorted."""
+        """Todas las ocurrencias de la ventana, de todos los calendarios, ordenadas."""
         events: list[Event] = []
         problems: list[str] = []
 

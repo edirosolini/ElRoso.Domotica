@@ -14,7 +14,7 @@ _ALOUD = re.compile(
 
 
 def strip_aloud(text: str) -> tuple[bool, str]:
-    """True when the message asks for the speaker, plus the message without it."""
+    """True si el mensaje pide el parlante, más el mensaje sin esa coletilla."""
     match = _ALOUD.search(text)
     if not match:
         return False, text

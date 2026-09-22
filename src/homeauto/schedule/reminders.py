@@ -1,7 +1,7 @@
-"""Timers and alarms: what to say, when, and what to do after saying it.
+"""Timers y alarmas: qué decir, cuándo, y qué hacer después de decirlo.
 
-The actual clock lives behind the `timer` interface, so this logic is tested
-without waiting for wall time.
+El reloj de verdad vive detrás de la interfaz `timer`, así que esta lógica se
+prueba sin esperar tiempo real.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ class Reminders:
         self.announce = announce
 
     def start(self, now: datetime | None = None) -> None:
-        """Re-arm everything after a restart, firing whatever was missed."""
+        """Rearma todo tras un reinicio, disparando lo que se haya perdido."""
         now = now or datetime.now()
         for job in self.store.pending():
             if job.when <= now:
@@ -71,7 +71,7 @@ class Reminders:
         try:
             self.announce(job)
         except Exception:
-            # A speaker that is off must not take the schedule down with it.
+            # Un parlante apagado no puede llevarse puesta la agenda.
             log.exception("no se pudo anunciar el job %s", job_id)
 
         next_time = self._next_run(job)
@@ -84,10 +84,10 @@ class Reminders:
 
     @staticmethod
     def _next_run(job: Job) -> datetime | None:
-        """When a repeating job fires again; None if it was a one-shot."""
+        """Cuándo vuelve a disparar un job repetido; None si era de una sola vez."""
         if job.repeat == DAILY:
             return job.when + timedelta(days=1)
         if job.repeat == WEEKLY:
-            # Start from the day after, or it would match today all over again.
+            # Se busca desde el día siguiente, o volvería a caer en el mismo día.
             return next_weekday(job.when + timedelta(days=1), job.weekdays)
         return None

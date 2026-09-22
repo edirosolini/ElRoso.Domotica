@@ -1,8 +1,8 @@
-"""Announcing something to the house, wherever the request came from.
+"""Anunciar algo en la casa, venga el pedido de donde venga.
 
-The rules are the same for a Telegram command, an HTTP call or a calendar
-event, so they live here once: which devices, whether the house is resting,
-and the written copy that always reaches the chat.
+Las reglas son las mismas para un comando de Telegram, una llamada HTTP o un
+evento de agenda, así que viven acá una sola vez: a qué equipos, si la casa
+está en descanso, y la copia escrita que siempre llega al chat.
 """
 
 from __future__ import annotations
@@ -41,15 +41,14 @@ class HouseVoice:
         urgent: bool = False,
         written: str | None = None,
     ) -> dict:
-        """`written` is the chat copy when it carries more than what is said.
+        """`written` es la copia del chat cuando lleva más que lo hablado.
 
-        A monitor alert quotes an HTTP status and a stack trace: useful to read,
-        unlistenable, and full of digits that Piper reads wrong.
+        El aviso del monitor cita un estado HTTP y una traza: sirve leído, es
+        ilegible dicho y está lleno de dígitos que Piper lee mal.
         """
         targets = list(devices or self.default_devices)
 
-        # Urgent wins over the quiet window: production falling over at 3 AM is
-        # exactly what somebody should be woken up for.
+        # Lo urgente es lo único que pasa por encima del horario de descanso.
         if self.resting() and not urgent:
             log.info("aviso en horario de descanso: solo va al chat")
             self.tell_everyone(
@@ -60,7 +59,7 @@ class HouseVoice:
         problems = []
         for alias in targets:
             try:
-                # Only what is urgent sounds before speaking.
+                # Solo lo urgente suena antes de hablar.
                 self.speakers.get(alias).say(text, chime=urgent)
             except Exception as exc:  # noqa: BLE001 - se reporta al llamador
                 log.warning("no pude hablar en %s: %s", alias, exc)

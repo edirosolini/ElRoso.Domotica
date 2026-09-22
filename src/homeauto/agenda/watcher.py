@@ -1,8 +1,8 @@
-"""Warning about an event before it starts.
+"""Aviso de un evento antes de que empiece.
 
-Runs on a loop. What matters is that it never announces the same occurrence
-twice, and never shouts events that already began: after a restart, that would
-be noise instead of a reminder.
+Corre en bucle. Lo que importa es que nunca anuncia dos veces la misma
+ocurrencia, y nunca grita eventos que ya empezaron: tras un reinicio eso sería
+ruido en vez de recordatorio.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ FORGET_AFTER_DAYS = 2
 
 def announcement_for(event: Event, now: datetime) -> str:
     minutes = round((event.start - now).total_seconds() / 60)
-    # In words: "en 1 minuto" was read out as "en uno minuto".
+    # En palabras: Piper lee un dígito como cardinal masculino suelto.
     if minutes <= 0:
         when = "ahora"
     else:
@@ -70,7 +70,7 @@ class EventWatcher:
                     self.polish(announcement_for(event, now), must_keep=[event.summary])
                 )
             except Exception:
-                # Not marked: it gets another chance on the next round.
+                # No se marca: se reintenta en la vuelta siguiente.
                 log.exception("no pude avisar del evento %s", event.summary)
                 continue
             self.seen.mark(event.key, now)

@@ -1,26 +1,16 @@
-"""Fixing how a person wrote something, without changing what they said.
+"""Corregir cómo escribió una persona, sin cambiar lo que dijo.
 
-🔴 This is not the polisher. The polisher rewords what *we* generated; here the
-words are somebody's, so they come back in the same order and mostly the same:
-spelling, accents, punctuation and numbers written out. Everything the model
-gives back is checked word by word against what was typed, and anything it
-invented sends the original to the speaker instead.
+Ortografía, acentos, puntuación y números en palabras. Todo lo que devuelve el
+modelo se compara palabra por palabra con lo tipeado, y cualquier invento manda
+el original al parlante. Tres licencias, y solo tres:
 
-Three licences, and only three:
+- Un dígito puede crecer hasta las palabras que lo dicen.
+- Una palabra a una letra de la que volvió es la misma palabra, salvo las
+  palabras cortas de `RISKY`.
+- Una comida puede volverse otra comida, siguiendo el reloj.
 
-- **Numbers become words.** This is the reason the module exists: Piper reads a
-  digit as a loose masculine cardinal, so "llego en 1 minuto" came out as
-  "llego en uno minuto". A digit may grow into the words that say it.
-- **A typo is a typo.** A word one letter away from what came back is taken as
-  the same word. ⚠️ Short function words are left alone — "no" and "yo" are also
-  one letter apart, and there the correction would flip the meaning.
-- 🔴 **A meal follows the clock.** "es hora de comer" at half past nine at night
-  is "es hora de cenar". It is the one place where a word may be swapped for a
-  different word, it is limited to `MEAL_WORDS`, and it is why this thing knows
-  what time it is. The owner asked for it by example.
-
-Anything else — a word that appears, one that goes missing, a sentence turned
-around — is a rewrite, and a rewrite of somebody's words is not a correction.
+Cualquier otra cosa es una reescritura, y reescribir las palabras de alguien no
+es corregirlas.
 """
 
 from __future__ import annotations
@@ -33,14 +23,14 @@ from typing import Callable, Iterator
 
 log = logging.getLogger(__name__)
 
-# How many words one digit is allowed to become: "veintiuno" is one, "nueve de
-# la noche" is four. Past this it stopped saying a number and started talking.
+# Cuántas palabras puede volverse un dígito: "veintiuno" es una, "nueve de la
+# noche" son cuatro.
 MAX_NUMBER_WORDS = 6
-# Room for punctuation and written-out numbers, not for a second sentence.
+# Lugar para puntuación y números en palabras, no para una segunda oración.
 MAX_GROWTH = 2.2
 
-# What a chat abbreviation stands for. Written without accents: the comparison
-# strips them anyway.
+# Qué significa cada abreviatura de chat. Sin acentos: la comparación los saca
+# igual.
 ABBREVIATIONS = {
     "q": ["que"],
     "k": ["que"],
@@ -60,9 +50,7 @@ ABBREVIATIONS = {
     "min": ["minutos"],
 }
 
-# 🔴 The only vocabulary where one word may become a different one. They all
-# mean the same thing said at another hour, so swapping them changes when, not
-# what — and the hour is a fact the house already knows.
+# El único vocabulario donde una palabra puede volverse otra distinta.
 MEAL_WORDS = frozenset(
     {
         "comer", "comida", "almorzar", "almuerzo", "cenar", "cena",
@@ -70,8 +58,8 @@ MEAL_WORDS = frozenset(
     }
 )
 
-# ⚠️ Never corrected by proximity: every one of these is one letter away from
-# another that means the opposite.
+# Nunca se corrigen por parecido: cada una está a una letra de otra que
+# significa lo contrario.
 RISKY = frozenset(
     {
         "no", "ni", "si", "sin", "con", "mas", "menos", "me", "te", "le", "se",
@@ -79,8 +67,8 @@ RISKY = frozenset(
     }
 )
 
-# When each meal happens, as hour ranges, with what to call it and what it is
-# to do it. The last one wraps past midnight.
+# Cuándo cae cada comida, como rangos de hora, con cómo se llama y qué es
+# hacerla. La última cruza la medianoche.
 MEALS = (
     (5, 11, "el desayuno", "desayunar"),
     (11, 15, "el almuerzo", "almorzar"),
@@ -105,17 +93,17 @@ Mensaje: {text}"""
 
 
 def as_written(text: str) -> str:
-    """The default: say exactly what the person typed."""
+    """Lo de siempre: decir exactamente lo que la persona tipeó."""
     return text
 
 
 def meal_at(moment: datetime) -> str:
-    """Which meal it is time for, in words."""
+    """De qué comida es hora, en palabras."""
     return _meal(moment)[0]
 
 
 def meal_verb(moment: datetime) -> str:
-    """What it is to have that meal: cenar, almorzar, desayunar, merendar."""
+    """Qué es hacer esa comida: cenar, almorzar, desayunar, merendar."""
     return _meal(moment)[1]
 
 
@@ -127,7 +115,7 @@ def _meal(moment: datetime) -> tuple[str, str]:
 
 
 def _plain(word: str) -> str:
-    """Lowercase and without accents, which is what comparing words means here."""
+    """En minúsculas y sin acentos, que es lo que comparar palabras significa acá."""
     stripped = unicodedata.normalize("NFD", word.lower())
     return "".join(char for char in stripped if not unicodedata.combining(char))
 
@@ -137,7 +125,7 @@ def _words(text: str) -> list[str]:
 
 
 def _one_edit_apart(typed: str, fixed: str) -> bool:
-    """Whether one is the other with a letter added, dropped or changed."""
+    """Si una es la otra con una letra agregada, sacada o cambiada."""
     if abs(len(typed) - len(fixed)) > 1:
         return False
     if len(typed) < len(fixed):
@@ -168,11 +156,11 @@ def _same_word(typed: str, fixed: str) -> bool:
 
 
 class CorrectError(Exception):
-    """The model could not be reached or answered something unusable."""
+    """No se pudo llegar al modelo, o contestó algo inservible."""
 
 
 class Corrector:
-    """Somebody's words, spelled the way the speaker should read them."""
+    """Las palabras de alguien, escritas como el parlante tiene que leerlas."""
 
     def __init__(
         self,
@@ -185,8 +173,8 @@ class Corrector:
         self.prompt = prompt
         self.clock = clock
         self.max_growth = max_growth
-        # Same text in, same text out: `VoiceSynth` caches by phrase, and a
-        # different spelling every time would mean synthesizing every time.
+        # Mismo texto, misma salida: `VoiceSynth` cachea por frase, y una
+        # escritura distinta cada vez significaría sintetizar siempre.
         self._cache: dict[str, str] = {}
 
     def correct(self, text: str) -> str:
@@ -194,8 +182,8 @@ class Corrector:
             return text
 
         now = self.clock()
-        # The meal is part of the key: the same sentence at noon and at night
-        # is a different correction, and the cache must not hand over the other.
+        # La comida va en la clave: la misma frase al mediodía y a la noche es
+        # otra corrección, y el cache no puede servir la anterior.
         key = f"{meal_at(now)}\x00{text}"
         if key not in self._cache:
             self._cache[key] = self._ask(text, now)
@@ -219,7 +207,7 @@ class Corrector:
         return answer
 
     def _problem_with(self, text: str, answer: str) -> str:
-        """Why the correction cannot be trusted, or "" when it can."""
+        """Por qué no se puede confiar en la corrección, o "" si se puede."""
         if not answer:
             return "vino vacía"
         if any(character.isdigit() for character in answer):
@@ -231,11 +219,10 @@ class Corrector:
         return ""
 
     def _same_words(self, typed: list[str], fixed: list[str]) -> bool:
-        """Whether the answer is the same words, allowing only the three licences.
+        """Si la respuesta son las mismas palabras, con solo las tres licencias.
 
-        Walked as a set of reachable positions instead of one by one: a digit
-        may stand for any number of words, so where the next word begins is not
-        known until the one after it matches.
+        Se recorre como conjunto de posiciones alcanzables, porque un dígito
+        puede valer por cualquier cantidad de palabras.
         """
         reachable = {0}
         for word in typed:
@@ -249,9 +236,9 @@ class Corrector:
 
     @staticmethod
     def _lengths(word: str, fixed: list[str], start: int) -> Iterator[int]:
-        """Where this typed word could end, given the answer's words."""
+        """Dónde puede terminar esta palabra tipeada, según las palabras de la respuesta."""
         if word.isdigit():
-            # A number in words: whatever it takes to say it, and no digits.
+            # Un número en palabras: lo que haga falta para decirlo, sin dígitos.
             for size in range(1, MAX_NUMBER_WORDS + 1):
                 chunk = fixed[start:start + size]
                 if len(chunk) == size and not any(part.isdigit() for part in chunk):
@@ -273,10 +260,5 @@ class Corrector:
 
 
 def build(model: Callable[[str], str], clock: Callable[[], datetime] = datetime.now):
-    """The callable the rest of the code expects, never the object.
-
-    🔴 A `Corrector` is not callable on its own, and the wiring already shipped
-    that bug once with the polisher: the service started fine and blew up with
-    a TypeError the first time somebody spoke.
-    """
+    """El callable que espera el resto del código, nunca el objeto."""
     return Corrector(model, clock=clock).correct

@@ -1,13 +1,8 @@
-"""The hours when the house sleeps, and the silence someone asks for by hand.
+"""Las horas en que la casa duerme, y el silencio que alguien pide a mano.
 
-Inside the window nothing is said out loud: the message still reaches Telegram,
-so nothing is lost, but the speakers stay quiet. An alarm shouting in a bedroom
-at three in the morning is how a system like this gets unplugged.
-
-A nap and a meeting need the same thing for a couple of hours, so `Hush` adds a
-window on top of the fixed ones. It answers the same questions `QuietHours`
-does, which is why everything that consults the quiet window keeps working
-without knowing that the silence can now be moved.
+Dentro de la ventana no se dice nada en voz alta: el mensaje igual llega a
+Telegram, pero los parlantes se quedan callados. `Hush` agrega una ventana
+encima de las fijas y contesta lo mismo que `QuietHours`.
 """
 
 from __future__ import annotations
@@ -51,7 +46,7 @@ class QuietHours:
         now = moment.time()
         if self.start < self.end:
             return self.start <= now < self.end
-        # The window crosses midnight: 23:00–07:00 is "late today or early tomorrow".
+        # La ventana cruza la medianoche: 23:00–07:00 es "tarde hoy o temprano mañana".
         return now >= self.start or now < self.end
 
 
@@ -64,10 +59,10 @@ CREATE TABLE IF NOT EXISTS hush (
 
 
 class HushStore:
-    """One row: when the silence someone asked for runs out.
+    """Una fila: hasta cuándo dura el silencio que alguien pidió.
 
-    It is stored, not kept in memory, because a restart in the middle of a nap
-    would otherwise bring the house back talking.
+    Se guarda en vez de tenerlo en memoria porque un reinicio en medio de la
+    siesta devolvería la casa hablando.
     """
 
     def __init__(self, db_path: Path | str):
@@ -105,11 +100,11 @@ class HushStore:
 
 
 class Hush:
-    """The resting hours plus a silence asked for by hand.
+    """El horario de descanso más un silencio pedido a mano.
 
-    Deliberately the same shape as `QuietHours`: whoever consults it — the
-    announcer, the commands, the API, the house voice — asks `is_quiet()` and
-    reads `label`, and none of them has to learn about the second rule.
+    Tiene la misma forma que `QuietHours`: quien lo consulta —el anunciador,
+    los comandos, la API, la voz de la casa— pregunta `is_quiet()` y lee
+    `label`, sin enterarse de la segunda regla.
     """
 
     def __init__(self, hours: QuietHours, store: HushStore, clock=datetime.now):
@@ -118,13 +113,13 @@ class Hush:
         self.clock = clock
 
     def until(self, moment: datetime | None = None) -> datetime | None:
-        """When the manual silence ends, or None if there is none running."""
+        """Cuándo termina el silencio pedido a mano, o None si no hay ninguno."""
         moment = moment or self.clock()
         ends = self.store.until()
         if ends is None:
             return None
         if moment >= ends:
-            # Expired: forget it here so nothing downstream has to check twice.
+            # Vencido: se borra acá para que nadie aguas abajo chequee dos veces.
             self.store.clear()
             return None
         return ends
@@ -135,7 +130,7 @@ class Hush:
         return ends
 
     def stop(self) -> bool:
-        """True if there was a silence to cut short."""
+        """True si había un silencio que cortar."""
         if self.until() is None:
             return False
         self.store.clear()

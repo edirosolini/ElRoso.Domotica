@@ -1,9 +1,4 @@
-"""Control of a Google cast device.
-
-The device is looked up by **UUID and never by IP**: these speakers take their
-address from DHCP and do move. `catt` is deliberately not used here — it fails
-to play local files; pychromecast driven directly works.
-"""
+"""Control de un equipo Google cast, resuelto por UUID y nunca por IP."""
 
 from __future__ import annotations
 
@@ -17,32 +12,26 @@ log = logging.getLogger(__name__)
 DISCOVERY_TIMEOUT = 20
 AUDIO_MIME = "audio/wav"
 
-# Google's Default Media Receiver: the app our own playback runs in.
+# El receptor por defecto de Google: la app donde corre nuestro audio.
 MEDIA_RECEIVER_APP_ID = "CC1AD845"
 
 PLAYBACK_TIMEOUT = 20
-# Waiting for the clip to *end* is a different job from waiting for it to
-# start: the briefing runs well past twenty seconds, and cutting the volume
-# back mid-sentence is exactly what the floor was meant to prevent. The real
-# bound is the length of the audio, which we know; this is only the cap for
-# when it could not be read, so a wedged device never holds the thread for good.
+# Tope para esperar un clip cuya duración no se pudo leer.
 FINISH_TIMEOUT = 120
-# Margin over the clip length: the device starts a moment after we ask.
+# Margen sobre la duración: el equipo arranca un instante después de pedirlo.
 FINISH_MARGIN = 5
 SETTLE_AFTER_QUIT = 2
 
 
 class CastError(Exception):
-    """The device could not be reached, or was asked for something invalid."""
+    """No se pudo llegar al equipo, o se le pidió algo inválido."""
 
 
 class _Discovery:
-    """Real mDNS discovery. Imported lazily so tests never touch the network.
+    """Descubrimiento mDNS real. Se importa tarde para que los tests no toquen la red.
 
-    🔴 The zeroconf browser is deliberately kept alive. pychromecast needs it to
-    open the connection to the device: calling `stop_discovery()` before
-    `wait()` leaves the device discoverable but unconnectable, and `wait()` then
-    times out after 20 s with no useful error.
+    El browser de zeroconf se deja vivo: pychromecast lo necesita para abrir la
+    conexión, y pararlo antes de `wait()` deja el equipo inalcanzable.
     """
 
     def __init__(self):
@@ -64,7 +53,7 @@ discover_devices = _Discovery()
 
 
 class Caster:
-    """Plays audio on one cast device, resolved by UUID."""
+    """Reproduce audio en un equipo cast, resuelto por UUID."""
 
     def __init__(
         self,
@@ -96,21 +85,15 @@ class Caster:
         raise CastError(f"No encontré el dispositivo {self.device_uuid}. Vi: {seen}")
 
     def forget(self) -> None:
-        """Drop the cached device so the next call rediscovers it."""
+        """Olvida el equipo cacheado para que la próxima llamada lo redescubra."""
         self._device = None
 
     def _perform(self, action: Callable[[object], object]):
-        """Do something on the device, looking it up again if it moved.
+        """Hace algo en el equipo, buscándolo de nuevo si se movió.
 
-        🔴 The resolved object keeps the address the device had when it was
-        found, and these devices are DHCP. The Nest jumped from `.22` to `.20`
-        while the service went on talking to `.22`: the announcement reached
-        Telegram and came out of no speaker, with `is connecting...` as the only
-        line in the log. Rediscovery is the expensive path — twenty seconds of
-        mDNS — so it only happens after a failure, never on the way in.
-
-        ⚠️ A retry can repeat an announcement that did sound. That is the same
-        trade the watchers make: a warning said twice is cheaper than one lost.
+        El objeto resuelto se queda con la IP que el equipo tenía al encontrarlo,
+        y son DHCP. Redescubrir cuesta veinte segundos de mDNS, así que solo pasa
+        después de un fallo. Un reintento puede repetir un anuncio que sí sonó.
         """
         try:
             return action(self._resolve())
@@ -131,13 +114,11 @@ class Caster:
         return self._perform(lambda device: device.cast_info.friendly_name)
 
     def _take_over(self, device) -> None:
-        """Make room for our own playback.
+        """Hace lugar para nuestro propio audio.
 
-        🔴 Whatever app is running owns the media session. With YouTube open on
-        a Chromecast, a LOAD goes to YouTube, which ignores it: the announcement
-        is silently lost. Quitting the foreign app hands the device back to the
-        default receiver. Our own receiver is left alone — relaunching it would
-        cut short audio that is already playing.
+        La app que está corriendo es dueña de la sesión de medios, así que se
+        desaloja la ajena. El receptor propio se respeta: relanzarlo cortaría el
+        audio en curso.
         """
         current = getattr(device, "app_id", None)
         if current in (None, MEDIA_RECEIVER_APP_ID):
@@ -149,17 +130,10 @@ class Caster:
             time.sleep(self.settle)
 
     def _wait_until_playing(self, controller, url: str, timeout: float) -> None:
-        """Confirm that *this* clip actually started.
+        """Confirma que empezó a sonar *este* clip.
 
-        Reporting success without checking is worse than failing: the person is
-        told the house was warned when nothing came out of the speakers.
-
-        🔴 The device has to name our URL. An empty `content_id` means it has
-        not told us anything yet, never that our audio is loaded: a freshly
-        launched receiver reports BUFFERING with nothing in it, and taking that
-        as good is how a service alert was marked as announced while the
-        speaker stayed silent. Waiting costs a few polls; guessing costs the
-        warning.
+        El equipo tiene que nombrar nuestra URL: un `content_id` vacío significa
+        que todavía no dijo nada, nunca que nuestro audio esté cargado.
         """
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -171,7 +145,7 @@ class Caster:
             if getattr(status, "content_id", None) == url:
                 if status.player_state in ("PLAYING", "BUFFERING"):
                     return
-                # A clip can be over before the first poll: that still counts.
+                # Un clip puede terminar antes del primer sondeo: igual cuenta.
                 if status.idle_reason == "FINISHED":
                     return
             time.sleep(0.2)
@@ -179,8 +153,8 @@ class Caster:
         raise CastError("el audio no empezó a sonar (¿el equipo está ocupado o apagado?)")
 
     def _wait_until_finished(self, controller, url: str, timeout: float) -> None:
-        """Wait for the clip to end. Only used when the volume has to go back:
-        restoring it mid-sentence would drop the tail of the announcement."""
+        """Espera a que el clip termine. Solo se usa cuando hay que devolver el
+        volumen: restaurarlo a mitad de frase se comería el final del anuncio."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             controller.update_status()
@@ -193,9 +167,9 @@ class Caster:
 
     @staticmethod
     def _raise_volume(device, min_volume: int | None) -> float | None:
-        """Lift the volume to the floor, returning what to put back afterwards.
+        """Sube el volumen al piso y devuelve qué hay que restaurar después.
 
-        None means it was already loud enough and nothing has to be restored.
+        None significa que ya estaba suficientemente alto y no hay que tocar nada.
         """
         if min_volume is None:
             return None
@@ -221,11 +195,10 @@ class Caster:
         min_volume: int | None = None,
         expected_seconds: float | None = None,
     ) -> None:
-        """Play the audio, optionally guaranteeing a minimum volume for it.
+        """Reproduce el audio, garantizando un volumen mínimo si se pide.
 
-        The floor is for urgent announcements: a house left at low volume turns
-        a warning into nothing. It is put back afterwards, including when the
-        audio fails, so an alert never leaves the speakers loud for good.
+        El piso existe porque una casa que quedó en volumen bajo convierte un
+        aviso en nada. Se restaura al final, también si el audio falla.
         """
         self._perform(
             lambda device: self._play_on(device, url, timeout, min_volume, expected_seconds)
@@ -262,11 +235,11 @@ class Caster:
         self._perform(lambda device: device.media_controller.stop())
 
     def turn_off(self) -> None:
-        """Close whatever app is running and leave the device idle.
+        """Cierra la app que esté corriendo y deja el equipo en reposo.
 
-        There is no power-off in the cast protocol. This is as far as it goes:
-        the device stops showing anything, and a TV set to sleep on loss of
-        signal follows on its own through HDMI-CEC.
+        No existe apagar por Cast. Esto es lo máximo: el equipo deja de mostrar
+        nada, y un televisor configurado para dormirse al perder señal se apaga
+        solo por HDMI-CEC.
         """
         def close(device) -> None:
             if getattr(device, "app_id", None) is None:

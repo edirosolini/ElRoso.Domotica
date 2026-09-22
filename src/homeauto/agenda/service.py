@@ -1,4 +1,4 @@
-"""Answering "what do I have" in the words a person would use."""
+"""Contesta "qué tengo" con las palabras que usaría una persona."""
 
 from __future__ import annotations
 
@@ -21,14 +21,13 @@ class AgendaService:
     ):
         self.calendar = calendar
         self.clock = clock
-        # Reworded before it is spoken, never re-informed: the titles travel as
-        # terms that have to survive untouched.
+        # Se pule antes de hablarlo, nunca se reescribe el dato: los títulos
+        # viajan como términos que tienen que sobrevivir intactos.
         self.polish = polish
 
     def _say(self, events, label: str, place: bool = True) -> str:
-        # The label travels as an argument on purpose: the briefing job and a
-        # /agenda from the chat run in different threads at the same time, and
-        # anything kept on self would let one overwrite the other's day.
+        # Por argumento, no en self: el job del resumen y un /agenda del chat
+        # corren en hilos distintos al mismo tiempo.
         return self.polish(
             describe(events, label=label, place=place),
             must_keep=[event.summary for event in events],
@@ -39,7 +38,7 @@ class AgendaService:
         now = self.clock()
 
         if word in TODAY_WORDS:
-            # What is left, not what already happened.
+            # Lo que queda, no lo que ya pasó.
             return self._say(self.calendar.rest_of_day(now), label="hoy")
         if word in TOMORROW_WORDS:
             return self._say(self.calendar.day(now + timedelta(days=1)), label="mañana")
@@ -47,9 +46,9 @@ class AgendaService:
         raise ValueError(f"No entiendo '{when}'. Probá con hoy o mañana.")
 
     def briefing(self) -> str:
-        """The whole day, for the morning summary: the hour and the title.
+        """El día entero, para el resumen de la mañana: la hora y el título.
 
-        No place: heard next to everything else the summary says, it was what
-        made it drag. /agenda still answers with it.
+        Sin el lugar: escuchado junto al resto del resumen era lo que lo hacía
+        arrastrarse. /agenda lo sigue diciendo.
         """
         return self._say(self.calendar.day(self.clock()), label="hoy", place=False)

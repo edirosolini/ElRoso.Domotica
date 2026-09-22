@@ -1,17 +1,8 @@
-"""A conversation left half finished, and where it waits.
+"""Una conversación a medio armar, y dónde espera.
 
-When a command comes in without a datum it needs, the bot asks for it — and the
-answer arrives as another message, with nothing tying it to the question. This
-is that thread: the command being built, everything the person has written for
-it, and which data were already asked for.
-
-🔴 It lives in SQLite, not in memory, for the same reason the silence asked for
-by hand does: a restart in the middle of "¿a qué hora?" would leave the answer
-with nowhere to land, and the person would be answering a question the house
-already forgot.
-
-🔴 It expires. Without a deadline, a "sí" tomorrow morning answers a question
-from last night, and the alarm that comes out of it is nobody's.
+El hilo guarda el comando que se está armando, todo lo que la persona escribió
+para él, y qué datos ya se preguntaron. Vive en SQLite para que un reinicio no
+lo pierda, y vence.
 """
 
 from __future__ import annotations
@@ -22,13 +13,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
-# Long enough to walk away from the phone, short enough that a stray "sí" does
-# not land on a question from another moment of the day.
+# Suficiente para dejar el teléfono un rato, poco para que un "sí" suelto no
+# caiga sobre una pregunta de otro momento del día.
 TTL = timedelta(minutes=10)
 
-# Saying it out loud beats waiting ten minutes. «cancelá» is not here on
-# purpose: /cancelar takes a number and dropping a half-built alarm with the
-# same word would read as cancelling a scheduled one.
+# Decirlo es mejor que esperar diez minutos. «cancelá» no está a propósito:
+# /cancelar lleva un número y usar la misma palabra para tirar un borrador se
+# leería como cancelar una alarma ya puesta.
 DROP_WORDS = (
     "olvidalo", "olvídalo", "olvidate", "olvídate", "dejalo", "déjalo",
     "nada", "no importa", "dejá", "deja", "nada que ver",
@@ -47,7 +38,7 @@ CREATE TABLE IF NOT EXISTS pending (
 
 @dataclass(frozen=True)
 class Pending:
-    """The command being built for one chat."""
+    """El comando que se está armando para un chat."""
 
     command: str
     thread: str
@@ -56,7 +47,7 @@ class Pending:
 
 
 class PendingStore:
-    """One row per chat: the seventh table of `jobs.db`, and it owns its schema."""
+    """Una fila por chat: la séptima tabla de `jobs.db`, dueña de su esquema."""
 
     def __init__(self, db_path: Path | str):
         self.db_path = Path(db_path)
@@ -107,11 +98,10 @@ class PendingStore:
 
 
 class Conversation:
-    """The half-built command of each chat, and when it stops counting.
+    """El comando a medio armar de cada chat, y hasta cuándo vale.
 
-    Like `quiet.Hush`, the expiry is resolved on the way out: whoever asks gets
-    either something still valid or nothing, and nobody downstream has to check
-    a second thing.
+    Como `quiet.Hush`, el vencimiento se resuelve al salir: quien pregunta
+    recibe algo válido o nada, y nadie aguas abajo chequea dos cosas.
     """
 
     def __init__(
@@ -141,5 +131,5 @@ class Conversation:
 
     @staticmethod
     def dropped(text: str) -> bool:
-        """Whether the message means «forget it», before paying for the model."""
+        """Si el mensaje significa «olvidalo», antes de pagar la llamada al modelo."""
         return " ".join(text.lower().split()).strip(".!¡") in DROP_WORDS

@@ -1,18 +1,9 @@
-"""The headlines of the day, for the morning summary.
+"""Los titulares del día, para el resumen de la mañana.
 
-Read straight off the RSS of whichever outlets the house is configured with:
-no account, no API key, and the source of every line is known — which is the
-reason this is not a model answering "what happened today".
-
-🔴 **The news are written, never spoken.** Decision of the owner, taken after
-hearing them: five headlines are the longest thing in the summary and the part
-you cannot act on, and they are made of prices, percentages and years — exactly
-what the synthesizer reads wrong. They go to the chat as the outlets published
-them, digits and all, and the speaker says the rest of the summary.
-
-That is also why nothing here talks to a model. Putting a headline into words
-was a whole path — a prompt, a validation, a timeout — that existed only to say
-out loud something that is better read.
+Salen del RSS de los medios configurados: sin cuenta, sin API key, y de cada
+línea se sabe qué medio la publicó. Los titulares se escriben, nunca se dicen:
+van al chat tal como los publicó el medio, con dígitos y todo. Nada de acá
+habla con un modelo.
 """
 
 from __future__ import annotations
@@ -26,7 +17,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_COUNT = 5
 TIMEOUT = 15
-# Some outlets answer 403 to a bare client. Clarín is one of them.
+# Algunos medios contestan 403 sin User-Agent. Clarín es uno.
 USER_AGENT = "Mozilla/5.0 (compatible; domotica/1.0)"
 
 
@@ -37,12 +28,11 @@ class Headline:
 
 
 def fetch_feed(url: str) -> bytes:
-    """The real call. Imported lazily so tests never touch the network.
+    """La llamada real. Se importa tarde para que los tests no toquen la red.
 
-    🔴 The bytes, never `response.text`. Ámbito answers without a charset in
-    the header, so requests guesses latin-1 and "Envíos" reaches the chat as
-    "EnvÃ­os". The XML declares its own encoding: handing the parser the raw
-    bytes is what lets it be believed.
+    Se leen los bytes, nunca `response.text`: hay medios que contestan sin
+    charset en el header y requests adivina latin-1. El XML declara su propio
+    encoding.
     """
     import requests
 
@@ -52,7 +42,7 @@ def fetch_feed(url: str) -> bytes:
 
 
 def _titles(body: bytes | str) -> list[str]:
-    """Every headline in an RSS channel, in the order the outlet published it."""
+    """Todos los titulares de un canal RSS, en el orden en que los publicó el medio."""
     root = ElementTree.fromstring(body)
     found = []
     for item in root.iter("item"):
@@ -75,11 +65,10 @@ class NewsClient:
         self.count = count
 
     def headlines(self) -> list[Headline]:
-        """The first ones of each outlet, taking turns.
+        """Los primeros de cada medio, tomando turnos.
 
-        Taking turns matters: the first five of a single feed are that outlet's
-        front page, not the news of the day. A feed that fails leaves its turn
-        empty — one outlet down is not the summary down.
+        Los cinco primeros de un solo diario son su portada, no las noticias
+        del día. Un medio caído deja su turno vacío y los otros siguen.
         """
         by_source: dict[str, list[str]] = {}
         for alias, url in self.feeds.items():
@@ -98,7 +87,7 @@ class NewsClient:
         return picked
 
     def written(self) -> str:
-        """The headlines as the outlets published them, or nothing at all."""
+        """Los titulares tal como los publicaron los medios, o nada."""
         picked = self.headlines()
         if not picked:
             return ""

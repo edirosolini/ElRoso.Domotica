@@ -1,7 +1,7 @@
-"""Text to speech through Piper, with an on-disk cache.
+"""Síntesis de voz con Piper, con cache en disco.
 
-Synthesis is deterministic for a given text and voice, so the result is cached:
-repeating an announcement costs nothing after the first time.
+La síntesis es determinística para un texto y una voz, así que el resultado se
+cachea: repetir un anuncio no cuesta nada después de la primera vez.
 """
 
 from __future__ import annotations
@@ -20,42 +20,28 @@ from homeauto.voice import chime as chime_audio
 
 log = logging.getLogger(__name__)
 
-# A clip shorter than this never reaches the PLAYING state on a Chromecast
-# device: it finishes before the receiver reports back. Padding with silence
-# is what makes playback observable, and audible.
+# Un Chromecast nunca reporta PLAYING para un clip más corto que esto, así que
+# se los padea con silencio.
 DEFAULT_MIN_SECONDS = 1.5
 
-# 🔴 Piper's own defaults leave **no pause between sentences**, so a two-part
-# announcement runs together: the punchline of a joke lands on top of its setup
-# and the whole thing is heard as if it were sped up. These two are the smallest
-# change that fixes it; the other two knobs stay unset so the voice model keeps
-# deciding them.
-#
-# The first fix was still read as rushed on the morning summary, which is the
-# longest thing the house says: slower words and a longer breath between
-# sentences are what make a three-part text land as three parts. It applies to
-# everything spoken, on purpose — one pace for the house, asked for by its
-# owner. ⚠️ Both are part of the audio cache key, so moving them leaves the
-# clips synthesized with the old pace orphaned in the cache directory.
-#
-# 1.30 and 0.90 were still short after listening to the summary out loud twice;
-# these are the values the owner settled on.
+# Ritmo de habla y pausa entre oraciones. Los dos son parte de la clave del
+# cache: cambiarlos deja huérfano lo sintetizado con el ritmo viejo.
 DEFAULT_LENGTH_SCALE = 1.40
 DEFAULT_SENTENCE_SILENCE = 1.10
 
 
 class TtsError(Exception):
-    """Synthesis failed or was asked for something it cannot say."""
+    """La síntesis falló, o se le pidió algo que no puede decir."""
 
 
 class Runner(Protocol):
-    """Turns text into a wav file at the given path."""
+    """Convierte texto en un wav en la ruta indicada."""
 
     def __call__(self, text: str, out_path: Path) -> None: ...
 
 
 class PiperRunner:
-    """Calls the piper CLI in a subprocess, with the pacing it should speak at."""
+    """Llama al CLI de piper en un subproceso, con el ritmo al que tiene que hablar."""
 
     def __init__(
         self,
@@ -77,12 +63,7 @@ class PiperRunner:
 
     @property
     def pacing(self) -> str:
-        """How this runner speaks, as a string. It belongs in the cache key.
-
-        🔴 Without it, changing the pacing leaves every phrase already said
-        playing in the old one, with nothing in the log to explain it — the
-        same bug the voice itself caused before it was keyed.
-        """
+        """Cómo habla este runner, como string. Va en la clave del cache."""
         return "|".join(
             "" if value is None else f"{value}"
             for value in (self.length_scale, self.sentence_silence,
@@ -90,7 +71,7 @@ class PiperRunner:
         )
 
     def _flags(self) -> list[str]:
-        """Only what was set: the rest stays the voice model's decision."""
+        """Solo lo que se configuró: el resto lo sigue decidiendo el modelo de voz."""
         flags: list[str] = []
         for name, value in (
             ("--length-scale", self.length_scale),
@@ -103,8 +84,8 @@ class PiperRunner:
         return flags
 
     def __call__(self, text: str, out_path: Path) -> None:
-        # onnxruntime cannot set thread affinity inside an unprivileged LXC and
-        # logs an error for it; pinning the thread count keeps the log clean.
+        # onnxruntime no puede fijar afinidad de hilos dentro de un LXC sin
+        # privilegios y loguea un error; fijar la cantidad deja el log limpio.
         env = {**os.environ, "OMP_NUM_THREADS": "1"}
         result = self.run(
             [self.python_bin, "-m", "piper", "-m", self.voice_path, "-f", str(out_path)]
@@ -119,11 +100,7 @@ class PiperRunner:
 
 
 def duration_seconds(path: Path) -> float | None:
-    """How long the clip lasts, or None if the file cannot be read.
-
-    Whoever waits for the audio to end needs a real bound: a fixed timeout is
-    either too short for the morning briefing or too long for one sentence.
-    """
+    """Cuánto dura el clip, o None si el archivo no se puede leer."""
     try:
         with wave.open(str(path), "rb") as source:
             rate = source.getframerate()
@@ -144,7 +121,7 @@ def _pad_to_minimum(path: Path, min_seconds: float) -> None:
     if played >= min_seconds:
         return
 
-    # Round up: truncating leaves the clip one frame short of the minimum.
+    # Se redondea para arriba: truncar deja el clip un frame por debajo del mínimo.
     missing = math.ceil((min_seconds - played) * rate)
     silence = b"\x00" * (missing * width * channels)
 
@@ -156,7 +133,7 @@ def _pad_to_minimum(path: Path, min_seconds: float) -> None:
 
 
 class VoiceSynth:
-    """Produces a playable wav for a phrase, reusing previous work."""
+    """Produce un wav reproducible para una frase, reusando lo ya hecho."""
 
     def __init__(
         self,
@@ -169,20 +146,15 @@ class VoiceSynth:
         self.cache_dir = Path(cache_dir)
         self.runner = runner
         self.min_seconds = min_seconds
-        # Same reason as the voice: it changes the audio, so it changes the key.
+        # El ritmo y la voz cambian el audio, así que van en la clave del cache.
         self.pacing = pacing
-        # 🔴 The voice belongs in the cache key. Keyed on the text alone, every
-        # phrase already said kept playing in the previous voice after a voice
-        # change, with nothing in the logs to show why.
         self.voice = voice
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        # An announcement to several devices asks for the same phrase from
-        # several threads at once. Without this they raced on the same partial
-        # file: the first to finish renamed it and the rest blew up.
+        # Varios equipos piden la misma frase desde varios hilos a la vez.
         self._lock = threading.Lock()
 
     def say(self, text: str, chime: bool = False) -> Path:
-        """`chime` puts the alarm beeps in front. It is part of the cache key."""
+        """`chime` pega adelante los beeps de alarma. Va en la clave del cache."""
         text = text.strip()
         if not text:
             raise TtsError("El texto está vacío")
@@ -192,12 +164,12 @@ class VoiceSynth:
             return cached
 
         with self._lock:
-            # Someone else may have synthesized it while we waited for the lock.
+            # Otro pudo haberla sintetizado mientras esperábamos el candado.
             if cached.is_file():
                 return cached
 
-            # Build aside and move into place, so a failed run never poisons the
-            # cache. The name carries the thread id so two runs never collide.
+            # Se arma aparte y se mueve al lugar: una corrida fallida no puede
+            # envenenar el cache, y el id de hilo evita que dos choquen.
             pending = cached.with_suffix(f".{threading.get_ident():x}.partial")
             try:
                 self.runner(text, pending)

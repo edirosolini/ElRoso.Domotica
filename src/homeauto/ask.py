@@ -1,18 +1,9 @@
-"""Answering a question out loud, without letting a digit reach the speaker.
+"""Contestar una pregunta en voz alta, sin que un dígito llegue al parlante.
 
-A question is the one thing the house says that it did not generate itself: the
-answer comes from a model with search, and search answers are made of years,
-scores and counts. That is exactly what the synthesizer reads wrong.
-
-🔴 So the answer comes back in two halves, the same split `watch.seq.Summary`
-already makes: `written` keeps every digit and goes to the chat, `spoken` says
-the same thing with the numbers in words and is the only half that reaches Piper.
-
-⚠️ Spoken is not a *summary*. Asked to summarize, the model turned a joke into
-reported speech —"el papá le responde que no sabe"— and the joke died. It only
-condenses what is genuinely long, like a top ten.
-When the spoken half cannot be trusted, the house says it left the answer
-written — never the digits, and never nothing.
+La respuesta vuelve en dos mitades: `written` conserva todos los dígitos y va
+al chat, `spoken` dice lo mismo con los números en palabras y es la única que
+llega a Piper. Si la hablada no se puede confiar, la casa dice que dejó la
+respuesta escrita.
 """
 
 from __future__ import annotations
@@ -24,31 +15,22 @@ from typing import Callable
 
 log = logging.getLogger(__name__)
 
-# A top ten said out loud is a minute of speaker. The chat can hold it, the
-# house cannot: past this the spoken half is dropped, not truncated, because
-# half a sentence is worse than a pointer to the chat.
-# A grounded answer goes out to search and back. Measured against the real
-# endpoint, a flash model answering four questions took between 8 and 40
-# seconds, so thirty would have cut off the slowest ones. The six seconds the
-# polisher waits are for a rewrite nobody is waiting on; here somebody asked
-# and is watching the chat.
+# Una respuesta con búsqueda sale a internet y vuelve, así que tiene mucho más
+# que los seis segundos del pulidor.
 ASK_TIMEOUT = 60
 
-# Measured: the answer to "top diez de los mejores goles de Messi" came back
-# between 290 and 355 characters, so a tighter cap would drop a legitimate
-# answer into the chat instead of saying it.
+# Pasado esto la mitad hablada se descarta entera, no se recorta.
 MAX_SPOKEN = 400
 NOT_SPOKEN = "Te lo dejé escrito en el chat."
 
-# Telegram refuses a message past 4096 characters.
+# Telegram rechaza un mensaje de más de 4096 caracteres.
 MAX_WRITTEN = 3500
 
 WRITTEN_TAG = "respuesta:"
 SPOKEN_TAG = "voz:"
 
-# 🔴 The order matters and so does the insistence. With "buscá si hace falta"
-# at the end, the model searched in none of four questions and made up the
-# current temperature. Told first, and told its knowledge is stale, it searches.
+# La orden de buscar va primero y le dice que su información está vieja: al
+# final, el modelo contesta de memoria.
 PROMPT = """Buscá en Google antes de contestar. Hacelo siempre, aunque creas saber la
 respuesta: tu información está vieja y la fecha de hoy no la sabés.
 
@@ -71,19 +53,19 @@ Pregunta: {question}"""
 
 
 class AskError(Exception):
-    """The question could not be answered."""
+    """No se pudo contestar la pregunta."""
 
 
 @dataclass(frozen=True)
 class Answer:
-    """What gets read, and what gets said. They are not the same text."""
+    """Lo que se lee y lo que se dice. No son el mismo texto."""
 
     spoken: str
     written: str
 
 
 def _clean(text: str) -> str:
-    """Drops the markdown a model sprinkles on the labels it was asked for."""
+    """Saca el markdown que un modelo le pone a los rótulos que se le pidieron."""
     return re.sub(r"[*#`]", "", text)
 
 
@@ -108,8 +90,7 @@ class Asker:
             raise AskError("¿Qué querés que pregunte?")
 
         try:
-            # ⚠️ The question travels verbatim. The words are somebody's, like
-            # the text of /decir: rewriting them would answer another question.
+            # La pregunta viaja literal: reescribirla contestaría otra pregunta.
             reply = self.model(self.prompt.format(question=question))
         except Exception as exc:  # noqa: BLE001 - el usuario tiene un teléfono, no un log
             log.warning("no pude contestar la pregunta: %s", exc)
@@ -122,29 +103,28 @@ class Asker:
         return Answer(spoken=self._safe_to_say(spoken), written=written[: self.max_written])
 
     def _split(self, reply: str) -> tuple[str, str]:
-        """The written half and the spoken one, as the model labelled them."""
+        """La mitad escrita y la hablada, como las rotuló el modelo."""
         lowered = reply.lower()
         cut = lowered.find(SPOKEN_TAG)
         start = lowered.find(WRITTEN_TAG)
 
         if cut == -1:
-            # No spoken half: everything is for reading.
+            # Sin mitad hablada: todo es para leer.
             body = reply[start + len(WRITTEN_TAG):] if start != -1 else reply
             return body.strip(), ""
 
         spoken = reply[cut + len(SPOKEN_TAG):].strip()
         if start == -1 or start > cut:
-            # Only the spoken half came back. It is still an answer: write it.
+            # Volvió solo la mitad hablada. Igual es una respuesta: se escribe.
             return spoken, spoken
         return reply[start + len(WRITTEN_TAG):cut].strip(), spoken
 
     def _safe_to_say(self, spoken: str) -> str:
-        """The spoken half, or the pointer to the chat when it cannot be said."""
+        """La mitad hablada, o el puntero al chat cuando no se puede decir."""
         if not spoken:
             return self.fallback
         if any(character.isdigit() for character in spoken):
-            # 🔴 "a las 21" is said "a las veintiuno" and "672 goles",
-            # "seiscientos setenta y dos goles" only if it is written that way.
+            # Piper lee un dígito como cardinal masculino suelto.
             log.info("la voz de la respuesta trae dígitos, la dejo escrita")
             return self.fallback
         if len(spoken) > self.max_spoken:

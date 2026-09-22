@@ -1,9 +1,7 @@
-"""Watching external services without becoming noise.
+"""Vigilancia de servicios externos, sin volverse ruido.
 
-Two rules decide everything here: it only speaks when something *changes*, and
-it waits for a couple of consecutive failures before calling it an outage. A
-monitor that cries at every timeout teaches you to ignore it, which is worse
-than having no monitor at all.
+Solo habla cuando algo *cambia*, y aguanta dos fallos seguidos antes de
+declarar una caída.
 """
 
 from __future__ import annotations
@@ -45,13 +43,10 @@ class Monitor:
         self.polish = polish
 
     def snapshot(self) -> dict[str, Status]:
-        """The state of what is being watched *now*.
+        """El estado de lo que se vigila *ahora*.
 
-        🔴 Filtered by the configured checks, not the whole table. Renaming or
-        dropping a check leaves its old row behind, and nothing ever checks it
-        again: it would sit in `/estado` red forever, a recovery that can never
-        arrive. A monitor showing an outage that no longer exists teaches you
-        to stop reading it.
+        Filtrado por los chequeos configurados, no por la tabla entera: un
+        chequeo renombrado deja una fila que nadie va a volver a chequear.
         """
         watched = {check.name for check in self.checks}
         return {name: state for name, state in self.store.all().items() if name in watched}
@@ -75,8 +70,8 @@ class Monitor:
         return announced
 
     def _say(self, text: str, name: str) -> str:
-        """The spoken half, reworded. The probe detail never gets here: it
-        carries an HTTP status and a duration, and a digit is read wrong."""
+        """La mitad hablada, pulida. El detalle de la sonda no llega acá: lleva
+        un estado HTTP y una duración, y un dígito se lee mal."""
         return self.polish(text, must_keep=(name,))
 
     def _advance(self, check: Check, result, previous: Status | None, now: datetime) -> str | None:
@@ -84,7 +79,7 @@ class Monitor:
         failures = previous.failures if previous else 0
 
         if result.up:
-            # Only worth telling if somebody was told about the outage.
+            # Solo vale contarlo si alguien se enteró de la caída.
             message = None
             if was_alerted:
                 message = self._say(f"{check.name} volvió a responder.", check.name)

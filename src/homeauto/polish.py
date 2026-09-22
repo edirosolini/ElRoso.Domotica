@@ -1,16 +1,8 @@
-"""Rewording what the house is about to say, without letting it change the facts.
+"""Pulir cómo suena lo que la casa va a decir, sin dejar que cambie los datos.
 
-The wording of a generated announcement is where a model helps: it turns
-"Hoy tenés dos cosas. A las nueve y media de la mañana, Dentista." into
-something a person would actually say. The facts are where it hurts, so
-everything it gives back is checked before it is used.
-
-🔴 The original always wins. This is decoration on a path that has to work:
-no key, no network, a slow answer or a suspicious one, and the house says the
-text it already had. Nothing here is allowed to leave anybody unwarned.
-
-Only text *we* generate goes through here. What a person typed into /decir or
-into a timer is said exactly as they wrote it.
+Todo lo que devuelve el modelo se valida antes de usarlo, y el original siempre
+gana: sin clave, sin red, con una respuesta lenta o sospechosa, la casa dice el
+texto que ya tenía. Por acá solo pasa texto que generamos nosotros.
 """
 
 from __future__ import annotations
@@ -24,8 +16,7 @@ from homeauto.verbalize import data_words
 
 log = logging.getLogger(__name__)
 
-# Room to rephrase, not to start narrating. A model that rambles is a model
-# that stopped rewording and started writing.
+# Lugar para reformular, no para narrar.
 MAX_GROWTH = 1.6
 MIN_SHRINK = 0.5
 
@@ -44,12 +35,12 @@ Aviso: {text}"""
 
 
 def as_is(text: str, must_keep: Iterable[str] = ()) -> str:
-    """The default everywhere: say exactly what was generated."""
+    """Lo de siempre: decir exactamente lo que se generó."""
     return text
 
 
 class PolishError(Exception):
-    """The model could not be reached or answered something unusable."""
+    """No se pudo llegar al modelo, o contestó algo inservible."""
 
 
 class Polisher:
@@ -64,8 +55,8 @@ class Polisher:
         self.prompt = prompt
         self.max_growth = max_growth
         self.min_shrink = min_shrink
-        # Same text in, same text out: VoiceSynth caches by phrase, and a
-        # different wording every time would mean synthesizing every time.
+        # Mismo texto, misma salida: VoiceSynth cachea por frase, y una
+        # redacción distinta cada vez significaría sintetizar siempre.
         self._cache: dict[str, str] = {}
 
     def polish(self, text: str, must_keep: Iterable[str] = ()) -> str:
@@ -95,7 +86,7 @@ class Polisher:
         return answer
 
     def _problem_with(self, text: str, answer: str, must_keep: tuple[str, ...]) -> str:
-        """Why the rewrite cannot be trusted, or "" when it can."""
+        """Por qué no se puede confiar en la reescritura, o "" si se puede."""
         if not answer:
             return "vino vacía"
         if any(character.isdigit() for character in answer):
@@ -107,7 +98,7 @@ class Polisher:
         if data_words(answer) != data_words(text):
             return "cambió un número o un momento del día"
 
-        # Case-insensitive: the model lowercases titles, and that loses no fact.
+        # Ignora mayúsculas: el modelo baja los títulos y eso no pierde ningún dato.
         lowered = answer.lower()
         missing = [term for term in must_keep if term and term.lower() not in lowered]
         if missing:
@@ -116,28 +107,25 @@ class Polisher:
 
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-# 🔴 Not Gemma. Gemma 4 reasons before every answer and will not stop: the API
-# rejects both thinkingBudget and thinkingLevel for it. Measured against the
-# real endpoint it took 40 to 79 seconds to reword one sentence, spending
-# thousands of thinking tokens to emit twenty. Flash-Lite with thinking off
-# answers the same thing in under two seconds.
+# Nada de Gemma: razona antes de cada respuesta y la API rechaza los dos
+# switches que lo apagarían, lo que cuesta decenas de segundos por reescritura.
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
-# Nobody waits for prose. Past this the original is better than a late rewrite.
+# Nadie espera una reescritura. Pasado esto, el original es mejor que llegar tarde.
 TIMEOUT = 6
 
 
 def _post(url: str, **kwargs):
-    """The real call. Imported lazily so tests never touch the network."""
+    """La llamada real. Se importa tarde para que los tests no toquen la red."""
     import requests
 
     return requests.post(url, **kwargs)
 
 
 class GoogleModel:
-    """Gemma through the Gemini API: free of charge, and a plain POST.
+    """Gemma por la API de Gemini: gratis y con un POST simple.
 
-    The Gemma models take no system instruction, so the whole prompt travels
-    as the single user turn.
+    Los modelos Gemma no aceptan system instruction, así que el prompt entero
+    viaja como único turno de usuario.
     """
 
     def __init__(
@@ -153,21 +141,16 @@ class GoogleModel:
         self.model = model
         self.post = post
         self.timeout = timeout
-        # Grounding in Google Search. Off for polishing — rewording a sentence
-        # has nothing to look up — and on for answering a question.
+        # Búsqueda en Google. Apagada para pulir y encendida para contestar
+        # una pregunta.
         self.search = search
-        # Rewording a sentence needs no deliberation, and the wait is the whole
-        # cost. Models that refuse to have it turned off take this back to True
-        # so the request stays valid — they are just too slow to be the default.
+        # Los modelos que no dejan apagar el razonamiento vuelven esto a True,
+        # así el pedido sigue siendo válido.
         self.thinking = thinking
 
     def _must_think(self) -> bool:
-        """Deliberation that cannot be turned off.
-
-        Gemma reasons no matter what. A search does too, for a different
-        reason: the criterion to decide *what* to look up is the reasoning,
-        and switching it off leaves the grounding guessing.
-        """
+        """Razonamiento que no se puede apagar: Gemma siempre razona, y una
+        búsqueda necesita el razonamiento para decidir qué buscar."""
         return self.search or self.model.startswith("gemma")
 
     def __call__(self, prompt: str, audio: bytes | None = None, mime: str = "") -> str:
@@ -179,17 +162,15 @@ class GoogleModel:
         body = {"contents": [{"parts": parts}]}
         if self.search:
             body["tools"] = [{"google_search": {}}]
-        # Gemma answers 400 to the switch instead of ignoring it, which would
-        # make every single rewrite fail quietly. Asked without it, it works —
-        # just slowly, because it always reasons first.
+        # Gemma contesta 400 a este switch en vez de ignorarlo.
         if not self.thinking and not self._must_think():
             body["generationConfig"] = {"thinkingConfig": {"thinkingBudget": 0}}
 
         try:
             response = self.post(
                 API_URL.format(model=self.model),
-                # 🔴 In a header, never in the query string: the key would end
-                # up in every log that records the URL.
+                # En un header, nunca en la query string: la clave terminaría
+                # en cualquier log que registre la URL.
                 headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
                 json=body,
                 timeout=self.timeout,
@@ -208,8 +189,8 @@ class GoogleModel:
         except (KeyError, IndexError, TypeError) as exc:
             raise PolishError(f"respuesta inesperada del modelo: {exc}") from exc
 
-        # 🔴 A thinking model returns its reasoning as another part. Joining
-        # them fed hundreds of words of deliberation to the speaker.
+        # Un modelo que razona devuelve el razonamiento en otra parte, marcada
+        # `thought`. Se descarta.
         return "".join(
             part.get("text", "") for part in parts if not part.get("thought")
         ).strip()

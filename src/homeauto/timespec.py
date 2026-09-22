@@ -1,15 +1,15 @@
-"""Parsing of the human time specs accepted by the bot commands.
+"""Parser de las formas de tiempo que aceptan los comandos del bot.
 
-Accepted shapes, always followed by the message:
+Formas aceptadas, siempre seguidas del mensaje:
 
-    10m sacá la pizza      relative duration (h / m / min / s, combinable)
+    10m sacá la pizza      duración relativa (h / m / min / s, combinables)
     1h30m avisar
-    23:15 apagá el horno   clock time, rolls to tomorrow if already passed
-    mañana 8:00 dentista   explicit tomorrow
+    23:15 apagá el horno   hora del reloj, rueda a mañana si ya pasó
+    mañana 8:00 dentista   mañana explícito
 
-Weekly alarms add a day spec in front of the clock ("lun-vie 5:30 arriba").
-It is parsed apart, by `parse_weekdays`, because the days pick which occurrence
-of the hour fires, not the hour itself.
+Las alarmas semanales agregan los días delante de la hora ("lun-vie 5:30
+arriba"). Se parsean aparte, con `parse_weekdays`, porque los días eligen qué
+ocurrencia de la hora dispara, no la hora.
 """
 
 from __future__ import annotations
@@ -19,12 +19,12 @@ from datetime import datetime, timedelta
 
 TOMORROW_WORDS = {"mañana", "manana"}
 
-# "5.30" is how people write it as often as "5:30"; both mean the same thing.
+# "5.30" es como la gente escribe la hora tanto como "5:30"; significan lo mismo.
 _CLOCK_RE = re.compile(r"(\d{1,2})[:.](\d{2})")
 _DURATION_RE = re.compile(r"(?:(\d+)h)?(?:(\d+)min|(\d+)m)?(?:(\d+)s)?", re.IGNORECASE)
 
 
-# ISO weekday numbers (1 = Monday), the same ones `datetime.isoweekday()` uses.
+# Días ISO (1 = lunes), la misma numeración que usa `datetime.isoweekday()`.
 WEEKDAYS = {
     "lun": 1, "lunes": 1,
     "mar": 2, "martes": 2,
@@ -42,13 +42,13 @@ DAY_GROUPS = {
     "semana": (1, 2, 3, 4, 5),
 }
 
-# Short names for the chat. The speaker never says these: a weekly alarm speaks
-# its message, and the days only show up written.
+# Nombres cortos para el chat. El parlante nunca los dice: una alarma semanal
+# dice su mensaje, y los días solo aparecen escritos.
 DAY_NAMES = {1: "lun", 2: "mar", 3: "mié", 4: "jue", 5: "vie", 6: "sáb", 7: "dom"}
 
 
 class TimeSpecError(ValueError):
-    """The text does not describe a moment we know how to schedule."""
+    """El texto no describe un momento que se sepa agendar."""
 
 
 def _split_head(text: str) -> tuple[str, str]:
@@ -84,14 +84,14 @@ def _parse_clock(token: str, now: datetime, *, force_tomorrow: bool) -> datetime
         raise TimeSpecError(f"No entiendo la hora: '{token}'")
 
     when = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    # A clock time that already went by today means the next one, tomorrow.
+    # Una hora que ya pasó hoy significa la próxima, mañana.
     if force_tomorrow or when <= now:
         when += timedelta(days=1)
     return when
 
 
 def parse_schedule(text: str, now: datetime) -> tuple[datetime, str]:
-    """Return when to fire and what to say, or raise TimeSpecError."""
+    """Devuelve cuándo disparar y qué decir, o levanta TimeSpecError."""
     head, rest = _split_head(text.strip())
     if not head:
         raise TimeSpecError("Falta la hora y el mensaje")
@@ -116,16 +116,16 @@ def _expand_range(start: str, end: str) -> tuple[int, ...] | None:
     first, last = WEEKDAYS.get(start), WEEKDAYS.get(end)
     if first is None or last is None:
         return None
-    # "vie-lun" wraps through the weekend, so count forward instead of slicing.
+    # "vie-lun" da la vuelta por el fin de semana: se cuenta hacia adelante.
     length = (last - first) % 7 + 1
     return tuple((first - 1 + step) % 7 + 1 for step in range(length))
 
 
 def parse_weekdays(token: str) -> tuple[int, ...] | None:
-    """Days meant by "lun-vie", "mar,jue" or "finde"; None if this is not one.
+    """Los días que significan "lun-vie", "mar,jue" o "finde"; None si no lo es.
 
-    Returning None instead of raising lets the caller fall back to the other
-    shapes: a token that is not a day spec is probably an hour.
+    Devolver None en vez de levantar deja que el llamador pruebe las otras
+    formas: un token que no son días probablemente sea una hora.
     """
     token = token.strip().lower()
     if not token:
@@ -150,9 +150,9 @@ def parse_weekdays(token: str) -> tuple[int, ...] | None:
 
 
 def next_weekday(when: datetime, days: tuple[int, ...] | list[int]) -> datetime:
-    """The first moment at or after `when` that falls on one of `days`.
+    """El primer momento desde `when` que cae en alguno de `days`.
 
-    Bounded on purpose: days that match nothing would spin forever otherwise.
+    Acotado a propósito: unos días que no matchean nada girarían para siempre.
     """
     for _ in range(7):
         if when.isoweekday() in days:

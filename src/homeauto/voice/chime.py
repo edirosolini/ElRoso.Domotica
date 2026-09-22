@@ -1,4 +1,4 @@
-"""The beeps in front of an alarm, built to match the wav they go into."""
+"""Los beeps que van delante de una alarma, con el formato del wav que los recibe."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-# (hertz, seconds). Zero is silence: the gap between beeps.
+# (hertz, segundos). Cero es silencio: el hueco entre beeps.
 BEEPS = (
     (880, 0.18),
     (0, 0.12),
@@ -22,13 +22,13 @@ BEEPS = (
 SECONDS = sum(length for _, length in BEEPS)
 
 AMPLITUDE = 0.35
-# A tone that starts at full amplitude clicks.
+# Un tono que arranca a amplitud plena hace click.
 FADE_SECONDS = 0.006
 SUPPORTED_WIDTH = 2
 
 
 def frames(rate: int, width: int, channels: int, beeps=BEEPS) -> bytes:
-    """The chime as raw frames in the format asked for."""
+    """El chime como frames crudos, en el formato pedido."""
     if width != SUPPORTED_WIDTH:
         raise ValueError(f"solo se soportan muestras de {SUPPORTED_WIDTH} bytes")
 
@@ -50,7 +50,7 @@ def frames(rate: int, width: int, channels: int, beeps=BEEPS) -> bytes:
 
 
 def prepend(path: Path) -> None:
-    """Puts the chime in front of a wav, in place. A clip it cannot read is left alone."""
+    """Pega el chime delante de un wav, en el lugar. Un clip ilegible se deja como está."""
     try:
         with wave.open(str(path), "rb") as source:
             params = source.getparams()

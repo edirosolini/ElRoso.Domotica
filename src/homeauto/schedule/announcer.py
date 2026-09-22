@@ -1,8 +1,8 @@
-"""What actually happens when a timer or an alarm fires.
+"""Qué pasa cuando dispara un timer o una alarma.
 
-Two independent things: the speaker says it, and the chat gets a message. They
-are independent on purpose — if you are not home the speaker is useless, and if
-the speaker is off you still want the phone to buzz.
+Dos cosas independientes: el parlante lo dice y al chat le llega un mensaje. Si
+no estás en casa el parlante no sirve, y si el parlante está apagado igual
+querés que suene el teléfono.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class Announcer:
     ):
         self.speakers = speakers
         self.notify = notify
-        # A job scheduled before the devices existed carries no target.
+        # Un job agendado antes de que existieran los equipos no trae destino.
         self.fallback = fallback
         self.quiet = quiet
         self.clock = clock
@@ -61,7 +61,7 @@ class Announcer:
         try:
             self.notify(job.chat_id, self._text(message, job, problem, resting))
         except Exception:
-            # The speaker may already have spoken; a broken chat does not undo that.
+            # El parlante puede ya haber hablado; un chat roto no deshace eso.
             log.exception("no se pudo avisar por chat del job %s", job.id)
 
     def _text(self, message: str, job: Job, problem: str | None, resting: bool = False) -> str:

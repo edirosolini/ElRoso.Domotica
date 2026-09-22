@@ -1,4 +1,4 @@
-"""Loading and validation of the service environment file."""
+"""Carga y validación del archivo de entorno del servicio."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 class ConfigError(Exception):
-    """The environment file is missing, incomplete or malformed."""
+    """El archivo de entorno falta, está incompleto o mal formado."""
 
 
 def _unquote(value: str) -> str:
@@ -56,31 +56,20 @@ DEFAULT_CHECKS_FILE = "/etc/domotica/checks.json"
 DEFAULT_CHECK_INTERVAL = 120
 MIN_CHECK_INTERVAL = 30
 
-# Seq: los logs de un VPS. Sin URL y clave, apagado. Una clave por instancia,
-# como los calendarios: una lista separada por comas sería ambigua porque las
-# URLs traen `:` y `/` propios.
+# Seq: los logs de un VPS. Sin URL y clave, apagado. Una clave por instancia.
 DEFAULT_SEQ_COOLDOWN = 15
 SEQ_URL_PREFIX = "SEQ_URL_"
 SEQ_KEY_PREFIX = "SEQ_API_KEY_"
-# 🔴 El alias de un Seq se dice en voz alta ("Hay dos errores nuevos en Seq de
-# hosting externo"), así que no puede llevar dígitos: Piper los lee como
-# cardinal masculino suelto. El guion bajo sí, porque es el separador natural de
-# una variable de entorno y al hablar se dice como espacio — un nombre real como
-# "hosting externo" no entra en una sola palabra.
+# El alias de un Seq se dice en voz alta, así que no lleva dígitos. El guion
+# bajo se acepta y al hablar se dice como espacio.
 SEQ_ALIAS_SHAPE = re.compile(r"^[a-záéíóúñ]+(?:_[a-záéíóúñ]+)*$")
 
 # Pulido de la redacción con un LLM. Sin clave, apagado: la casa habla igual.
-# Gemma 4 razona sin poder desactivarlo y tarda decenas de segundos: no va acá.
 DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
-# 🔴 Preguntar no es pulir. Medido contra la API real con la misma consigna, el
-# flash-lite del pulido usó la búsqueda en **una de cuatro** preguntas y contestó
-# el resto de memoria: inventó la temperatura de ahora. Un flash entero buscó en
-# las cuatro. Tarda mucho más, y vale la pena: una respuesta vieja dicha con
-# seguridad es peor que ninguna.
+# Preguntar no es pulir: pide un modelo que busque de verdad, no el barato.
 DEFAULT_ASK_MODEL = "gemini-3.7-flash"
 
 # Noticias del resumen: una clave por medio, como los calendarios y los Seq.
-# Cinco titulares dichos ya son casi un minuto de parlante.
 NEWS_PREFIX = "NEWS_RSS_"
 DEFAULT_NEWS_COUNT = 5
 MAX_NEWS_COUNT = 10
@@ -100,7 +89,7 @@ def _parse_coordinate(raw: str, key: str, default: float, limit: float) -> float
 
 
 def _parse_devices(raw: str) -> dict[str, uuid.UUID]:
-    """`alias:uuid, alias:uuid` into an ordered mapping. Order sets the default."""
+    """`alias:uuid, alias:uuid` a un mapa ordenado. El orden fija el default."""
     devices: dict[str, uuid.UUID] = {}
     for chunk in raw.split(","):
         chunk = chunk.strip()
@@ -127,10 +116,10 @@ def _parse_devices(raw: str) -> dict[str, uuid.UUID]:
 
 
 def _parse_calendars(pairs: dict[str, str]) -> dict[str, str]:
-    """One key per calendar.
+    """Una clave por calendario.
 
-    A comma-separated `alias:url` list would be ambiguous: the URLs carry
-    colons and slashes of their own, and that is where silly bugs live.
+    Una lista `alias:url` separada por comas sería ambigua: las URLs traen sus
+    propios `:` y `/`.
     """
     calendars: dict[str, str] = {}
     for key, value in pairs.items():
@@ -148,7 +137,7 @@ def _parse_calendars(pairs: dict[str, str]) -> dict[str, str]:
 
 
 def _parse_news(pairs: dict[str, str]) -> dict[str, str]:
-    """One key per outlet, for the same reason as the calendars."""
+    """Una clave por medio, por el mismo motivo que los calendarios."""
     feeds: dict[str, str] = {}
     for key, value in pairs.items():
         if not key.startswith(NEWS_PREFIX):
@@ -176,7 +165,7 @@ def _parse_news_count(pairs: dict[str, str]) -> int:
 
 
 def _parse_economy(pairs: dict[str, str]) -> bool:
-    """On unless it is turned off: it needs no key and no account."""
+    """Encendido salvo que se apague: no necesita clave ni cuenta."""
     return pairs.get("ECONOMY", "").strip().lower() not in ("off", "no", "0")
 
 
@@ -211,16 +200,11 @@ def _check_seq_url(url: str, key: str) -> str:
 
 
 def _parse_seq(pairs: dict[str, str]) -> tuple["SeqInstance", ...]:
-    """Every Seq to watch: the legacy single pair plus one per alias.
-
-    A VPS cannot report its own death — Seq dies with it — so each one is
-    watched from here, and each keeps its own marks. A noisy VPS must not
-    silence the alert of another.
-    """
+    """Todos los Seq a vigilar: el par viejo más uno por alias."""
     instances: list[SeqInstance] = []
 
-    # Older deployments carry a bare SEQ_URL/SEQ_API_KEY. It keeps the empty
-    # alias so it goes on saying "Seq" and reading from the marks it already has.
+    # Hay despliegues viejos con SEQ_URL/SEQ_API_KEY sueltas. Conservan el alias
+    # vacío: siguen diciendo "Seq" y leyendo las marcas que ya tienen.
     legacy_url = pairs.get("SEQ_URL", "").strip().rstrip("/")
     legacy_key = pairs.get("SEQ_API_KEY", "").strip()
     if legacy_url:
@@ -247,16 +231,14 @@ def _parse_seq(pairs: dict[str, str]) -> tuple["SeqInstance", ...]:
         key_name = f"{SEQ_KEY_PREFIX}{alias.upper()}"
         api_key = pairs.get(key_name, "").strip()
         if not api_key:
-            # 🔴 Loud, never skipped: dropping it quietly would leave somebody
-            # believing two VPS are watched while only one is.
+            # Falla fuerte, nunca se saltea: en silencio dejaría creyendo que se
+            # vigilan dos VPS mientras se vigila uno.
             raise ConfigError(f"Falta {key_name} para el Seq de '{alias}'")
 
         instances.append(SeqInstance(alias=alias, url=url, api_key=api_key))
 
-    # The symmetric hole: a key whose URL is missing is another VPS that would
-    # be believed watched. The bare legacy pair stays lenient on purpose — the
-    # deployed env file carries SEQ_URL with an empty SEQ_API_KEY, and refusing
-    # to boot on that would take the house down on the next restart.
+    # Una clave sin su URL es otro VPS que se creería vigilado. El par viejo
+    # queda permisivo: el env desplegado tiene SEQ_URL con la clave vacía.
     watched = {instance.alias for instance in instances}
     for name in pairs:
         if not name.startswith(SEQ_KEY_PREFIX) or not pairs[name].strip():
@@ -290,7 +272,7 @@ def _parse_interval(pairs: dict[str, str]) -> int:
     except ValueError as exc:
         raise ConfigError(f"CHECK_INTERVAL_SECONDS no es un número: {raw}") from exc
     if seconds < MIN_CHECK_INTERVAL:
-        # Hammering somebody else's service is a good way to get blocked.
+        # Machacar el servicio de otro es una buena forma de que te bloqueen.
         raise ConfigError(f"CHECK_INTERVAL_SECONDS mínimo {MIN_CHECK_INTERVAL} segundos")
     return seconds
 
@@ -339,7 +321,7 @@ def _parse_chat_ids(raw: str) -> frozenset[int]:
 
 @dataclass(frozen=True)
 class SeqInstance:
-    """One Seq to read errors from. The alias names it out loud."""
+    """Un Seq del que leer errores. El alias es cómo se lo nombra en voz alta."""
 
     alias: str
     url: str
@@ -348,7 +330,7 @@ class SeqInstance:
 
 @dataclass(frozen=True)
 class Config:
-    """Runtime configuration read from the environment file."""
+    """La configuración de ejecución, leída del archivo de entorno."""
 
     telegram_token: str
     devices: dict[str, uuid.UUID]
@@ -369,9 +351,7 @@ class Config:
     seq_cooldown: int = DEFAULT_SEQ_COOLDOWN
     llm_api_key: str = ""
     llm_model: str = DEFAULT_LLM_MODEL
-    # Answering a question is not rewording one: it grounds in search and takes
-    # its time. It never inherits LLM_MODEL — the cheap model that polishes every
-    # announcement does not reliably search, and would answer from memory.
+    # Nunca hereda de LLM_MODEL: el modelo barato no busca de forma confiable.
     ask_model: str = DEFAULT_ASK_MODEL
     news_feeds: dict[str, str] = field(default_factory=dict)
     news_count: int = DEFAULT_NEWS_COUNT
@@ -393,7 +373,7 @@ class Config:
         if raw_devices:
             devices = _parse_devices(raw_devices)
         else:
-            # Older deployments carried a single CAST_UUID; keep them working.
+            # Los despliegues viejos traían un solo CAST_UUID; siguen andando.
             legacy = pairs.get("CAST_UUID", "").strip()
             if not legacy:
                 raise ConfigError("Falta CAST_DEVICES (alias:uuid, separados por coma)")
@@ -437,7 +417,7 @@ class Config:
 
     @property
     def cast_uuid(self) -> uuid.UUID:
-        """The default device, for everything that only ever needs one."""
+        """El equipo por defecto, para todo lo que necesita uno solo."""
         return self.devices[self.default_device]
 
     @property
@@ -473,7 +453,7 @@ class Config:
 
     @property
     def is_open_enrollment(self) -> bool:
-        """No whitelist yet: the bot is waiting for its first owner to show up."""
+        """Todavía sin lista blanca: el bot espera a que aparezca su primer dueño."""
         return not self.allowed_chat_ids
 
     def is_allowed(self, chat_id: int) -> bool:

@@ -1,8 +1,7 @@
-"""Asking an external service whether it is still alive.
+"""Preguntarle a un servicio externo si sigue vivo.
 
-Deliberately small: an HTTP request or a TCP connection, with retries. A single
-timeout is not an outage, and treating it as one is how a monitor teaches you
-to ignore it.
+Un pedido HTTP o una conexión TCP, con reintentos. Un timeout suelto no es una
+caída.
 """
 
 from __future__ import annotations
@@ -103,7 +102,7 @@ def run_check(check: Check, http: HttpProbe | None, tcp: TcpProbe | None, pause:
         except Exception as exc:  # noqa: BLE001 - cualquier fallo es "no responde"
             problem = f"{type(exc).__name__}: {exc}"
 
-        # One timeout is not an outage; give it another go before saying so.
+        # Un timeout no es una caída: se reintenta antes de decirlo.
         if attempt < check.attempts and pause:
             time.sleep(pause)
 

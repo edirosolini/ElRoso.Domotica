@@ -1,7 +1,7 @@
-"""Tiny HTTP server that publishes the synthesized audio to the speaker.
+"""Servidor HTTP mínimo que publica el audio sintetizado para el parlante.
 
-A cast device does not receive a file: it receives a URL and fetches it itself.
-So whoever casts has to be reachable by the speaker on this port.
+A un equipo cast no se le manda un archivo: se le manda una URL y él la baja.
+O sea que el parlante tiene que poder alcanzar este puerto.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ class _QuietHandler(SimpleHTTPRequestHandler):
 
 
 class MediaServer:
-    """Serves one directory, and knows the URL the speaker should ask for."""
+    """Sirve un directorio y sabe qué URL tiene que pedir el parlante."""
 
     def __init__(self, directory: Path | str, advertised_ip: str, port: int = 8765):
         self.directory = Path(directory)
