@@ -92,7 +92,8 @@ class ThreadSpyCommands:
 
     start = say = call = volume = stop = where = timer = alarm = list = cancel = _record
     devices = use = turn_off = weather = agenda_command = _record
-    status = silence = speak = ask = free_text = _record
+    status = silence = speak = ask = calculate = free_text = _record
+    add_item = shopping = todo = remove_item = translate = _record
 
     def heard(self, *_args, **_kwargs):
         # Lo real devuelve un Reply, no un string.
@@ -162,7 +163,8 @@ class ExplodingCommands:
 
     start = say = call = volume = stop = where = timer = alarm = list = cancel = _boom
     devices = use = turn_off = weather = agenda_command = _boom
-    status = silence = speak = ask = free_text = heard = _boom
+    status = silence = speak = ask = calculate = free_text = heard = _boom
+    add_item = shopping = todo = remove_item = translate = _boom
 
 
 @pytest.mark.asyncio

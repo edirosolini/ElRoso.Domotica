@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from homeauto.polish import as_is
+from homeauto.watch.monitor import down_line
 
 log = logging.getLogger(__name__)
 
@@ -138,12 +139,4 @@ class Briefing:
         """Solo lo caído. El silencio es la buena noticia y mantiene esto corto."""
         if self.monitor is None:
             return ""
-
-        down = sorted(name for name, state in self.monitor.snapshot().items() if not state.up)
-        if not down:
-            return ""
-        if len(down) == 1:
-            text = f"Ojo: {down[0]} no responde."
-        else:
-            text = f"Ojo: no responden {', '.join(down[:-1])} ni {down[-1]}."
-        return self.polish(text, must_keep=tuple(down))
+        return down_line(self.monitor, self.polish)

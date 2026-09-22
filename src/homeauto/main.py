@@ -25,6 +25,7 @@ from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
 from homeauto.briefing import Briefing
+from homeauto.closing import Closing
 from homeauto.economy import EconomyClient
 from homeauto.news import NewsClient
 from homeauto.config import Config
@@ -33,6 +34,8 @@ from homeauto.correct import build as build_correction
 from homeauto.listen import TIMEOUT as LISTEN_TIMEOUT, Transcriber
 from homeauto.voice.voicemail import Voicemail
 from homeauto.polish import GoogleModel, Polisher, as_is
+from homeauto.translate import TRANSLATE_TIMEOUT, Translator
+from homeauto.lists import ListStore
 from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import Hush, HushStore
 from homeauto.schedule.announcer import Announcer
@@ -120,6 +123,12 @@ USE_COMMANDS = ("usar",)
 OFF_COMMANDS = ("apagar",)
 WEATHER_COMMANDS = ("clima", "tiempo")
 ASK_COMMANDS = ("preguntar", "pregunta")
+CALC_COMMANDS = ("calcular", "convertir")
+ADD_COMMANDS = ("agregar",)
+SHOPPING_COMMANDS = ("compras",)
+TODO_COMMANDS = ("pendientes",)
+REMOVE_COMMANDS = ("sacar",)
+TRANSLATE_COMMANDS = ("traducir",)
 AGENDA_COMMANDS = ("agenda",)
 STATUS_COMMANDS = ("estado",)
 SILENCE_COMMANDS = ("silencio", "siesta")
@@ -129,7 +138,9 @@ ALL_COMMANDS = (
     + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
-    + ASK_COMMANDS
+    + ASK_COMMANDS + CALC_COMMANDS
+    + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
+    + TRANSLATE_COMMANDS
 )
 
 # Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
@@ -141,6 +152,7 @@ COMMAND_MENU = (
     ("lista", "Ver y cancelar lo que está programado"),
     ("silencio", "No hablar por un rato — /silencio 2h"),
     ("preguntar", "Averiguar algo y contestarlo en voz alta"),
+    ("compras", "Qué falta comprar — /agregar leche, pan"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
     ("ayuda", "Todos los comandos y cómo se usan"),
 )
@@ -235,25 +247,43 @@ def schedule_calendar_jobs(app, watcher) -> None:
     app.job_queue.run_repeating(look_ahead, interval=60, first=30, name="calendar-watch")
 
 
-def schedule_briefing(app, config, briefing, announce) -> None:
-    """El resumen de la mañana, agendado haya o no calendarios configurados.
+def _schedule_daily(app, at, speak, name: str, label: str) -> None:
+    """Un trabajo diario a hora fija, fuera del event loop.
 
     La hora lleva su zona: APScheduler lee una naive como UTC.
     """
+    moment = clock_time(at.hour, at.minute, tzinfo=local_timezone())
+
+    async def job(_context):
+        await asyncio.to_thread(speak)
+
+    app.job_queue.run_daily(job, time=moment, name=name)
+    log.info("%s a las %s", label, moment.strftime("%H:%M"))
+
+
+def schedule_briefing(app, config, briefing, announce) -> None:
+    """El resumen de la mañana, agendado haya o no calendarios configurados."""
     if config.briefing_at is None:
         return
 
-    moment = clock_time(config.briefing_at.hour, config.briefing_at.minute, tzinfo=local_timezone())
+    def speak() -> None:
+        summary = briefing.speech()
+        announce(summary.spoken, summary.written)
 
-    async def say_briefing(_context):
-        def speak() -> None:
-            summary = briefing.speech()
-            announce(summary.spoken, summary.written)
+    _schedule_daily(app, config.briefing_at, speak, name="briefing", label="resumen diario")
 
-        await asyncio.to_thread(speak)
 
-    app.job_queue.run_daily(say_briefing, time=moment, name="briefing")
-    log.info("resumen diario a las %s", moment.strftime("%H:%M"))
+def schedule_closing(app, config, closing, announce) -> None:
+    """El cierre del día, que se calla cuando no juntó nada que decir."""
+    if config.closing_at is None:
+        return
+
+    def speak() -> None:
+        said = closing.text()
+        if said:
+            announce(said)
+
+    _schedule_daily(app, config.closing_at, speak, name="closing", label="cierre del día")
 
 
 def build_post_init(notifier, reminders, api=None):
@@ -343,6 +373,22 @@ def build_asker(config: Config) -> Asker | None:
             model=config.ask_model,
             search=True,
             timeout=ASK_TIMEOUT,
+        )
+    )
+
+
+def build_translator(config: Config) -> Translator | None:
+    """Quién traduce, o None si no hay clave.
+
+    El modelo barato y sin búsqueda: traducir tampoco es averiguar.
+    """
+    if not config.polish_enabled:
+        return None
+    return Translator(
+        model=GoogleModel(
+            api_key=config.llm_api_key,
+            model=config.llm_model,
+            timeout=TRANSLATE_TIMEOUT,
         )
     )
 
@@ -479,6 +525,12 @@ def register(app: Application, commands: Commands) -> None:
         (OFF_COMMANDS, commands.turn_off),
         (WEATHER_COMMANDS, commands.weather),
         (ASK_COMMANDS, commands.ask),
+        (CALC_COMMANDS, commands.calculate),
+        (ADD_COMMANDS, commands.add_item),
+        (SHOPPING_COMMANDS, commands.shopping),
+        (TODO_COMMANDS, commands.todo),
+        (REMOVE_COMMANDS, commands.remove_item),
+        (TRANSLATE_COMMANDS, commands.translate),
         (AGENDA_COMMANDS, commands.agenda_command),
         (STATUS_COMMANDS, commands.status),
         (SILENCE_COMMANDS, commands.silence),
@@ -647,8 +699,10 @@ def main() -> None:
         weather=weather,
         quiet=hush,
         asker=build_asker(config),
+        translator=build_translator(config),
         router=build_router(config),
         conversation=Conversation(PendingStore(db_path)),
+        lists=ListStore(db_path),
         transcribe=build_transcriber(config),
         voicemail=build_voicemail(synth),
         correct=build_corrector(config),
@@ -715,6 +769,19 @@ def main() -> None:
             polish=polish,
         ),
         lambda text, written=None: _announce(house, text, written),
+    )
+
+    schedule_closing(
+        app,
+        config,
+        Closing(
+            agenda=agenda,
+            weather=weather,
+            monitor=monitor,
+            lists=ListStore(db_path),
+            polish=polish,
+        ),
+        lambda text: _announce(house, text),
     )
 
     rain = RainWatcher(

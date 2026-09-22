@@ -182,3 +182,19 @@ def test_a_too_small_interval_is_rejected(tmp_path):
     """Un intervalo de segundos machaca los servicios ajenos."""
     with pytest.raises(ConfigError, match="CHECK_INTERVAL_SECONDS"):
         Config.from_file(write_env(tmp_path, BASE + "CHECK_INTERVAL_SECONDS=5\n"))
+
+
+def test_the_closing_hour_has_a_default(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE))
+
+    assert cfg.closing_at is not None
+
+
+def test_the_closing_can_be_moved_or_turned_off(tmp_path):
+    assert Config.from_file(write_env(tmp_path, BASE + "CLOSING_AT=21:30\n")).closing_at.strftime("%H:%M") == "21:30"
+    assert Config.from_file(write_env(tmp_path, BASE + "CLOSING_AT=off\n")).closing_at is None
+
+
+def test_a_broken_closing_hour_is_rejected(tmp_path):
+    with pytest.raises(ConfigError, match="CLOSING_AT"):
+        Config.from_file(write_env(tmp_path, BASE + "CLOSING_AT=a la noche\n"))

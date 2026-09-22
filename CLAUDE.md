@@ -27,6 +27,10 @@ Domotica/
 │   ├── economy.py       # dólar, riesgo país e inflación, en palabras
 │   ├── news.py          # titulares por RSS, solo para el chat
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
+│   ├── closing.py       # cierre del día: lo de mañana y lo que sigue roto
+│   ├── calc.py          # cuentas y conversión de unidades, sin modelo
+│   ├── lists.py         # las listas de compras y de pendientes
+│   ├── translate.py     # traducir, solo para leer
 │   ├── api.py           # endpoint HTTP para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
@@ -246,6 +250,33 @@ hablado, a la hora de `BRIEFING_AT`.
   igual que los servicios en orden.
 - El texto se sintetiza, así que **no lleva dígitos**: las fuentes ya hablan en palabras y
   este módulo solo agrega nombres y conectores. Hay test que lo verifica.
+
+## Cierre del día
+
+`closing.py` es el espejo del resumen a la hora de `CLOSING_AT` (por defecto 22:00): lo
+agendado para **mañana**, el pronóstico de **mañana** y lo que sigue caído.
+
+- 🔴 **Un cierre vacío no se dice.** Es la única diferencia de forma con el resumen, que
+  contesta "No tengo nada para el resumen de hoy": a la mañana ese texto avisa que la casa
+  está viva, a las diez de la noche es hablar por hablar. `text()` devuelve `""` y `main()`
+  no anuncia nada.
+- 🔴 **Mira para adelante, no para atrás.** Por eso no lleva economía, titulares ni los
+  errores de Seq: el día ya pasó y esas tres son noticias de la mañana. Lo que entra es lo
+  que cambia un plan antes de dormir, y por eso se sumó **cuánto falta comprar**.
+- ⚠️ **De la lista de compras solo se dice el conteo**, en palabras. Los ítems se leen en
+  `/compras`: dictar quince productos es exactamente el error que se evitó con los titulares.
+- **La agenda se pide con `place=False`**, igual que en el resumen y por lo mismo: escuchado
+  de corrido, "en Sanatorio Colegiales" lo hace arrastrarse. `AgendaService.spoken()` ahora
+  acepta ese argumento; `/agenda` lo sigue diciendo.
+- **El clima de mañana sale del índice uno de `daily`**, que ya viajaba en el mismo pedido
+  desde que `RainWatcher` pidió `forecast_days=2`. No cambia ningún parámetro de la API; sí
+  es un pedido más por día, igual que cada watcher.
+- 🔴 **La línea de los servicios caídos es una sola**, `watch.monitor.down_line()`, y la usan
+  el resumen y el cierre. Estaba escrita dos veces por un rato y esa es exactamente la forma
+  en que las dos redacciones se separan sin que nadie lo note.
+- ⚠️ **La hora por defecto es una hora antes del descanso.** Moverla más allá de `QUIET_FROM`
+  la deja solo escrita en el chat: es la regla de siempre, no una falla.
+- Fuentes independientes y nada de dígitos, como el resumen. Hay test de las dos cosas.
 
 ## Agenda
 
@@ -501,6 +532,62 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
+## Cuentas y unidades
+
+`calc.py` resuelve una cuenta o una conversión **sin llamar a ningún modelo**, y por eso es
+lo único que la casa contesta con un número exacto.
+
+- 🔴 **Nació de un agujero que ya existía.** Una cuenta por `/preguntar` vuelve con dígitos,
+  así que `ask._safe_to_say()` la mandaba al chat y el parlante decía "te lo dejé escrito".
+  Acá el resultado pasa por `verbalize` y **se puede decir**.
+- 🔴 **Lo escrito y lo hablado son distintos**, la misma separación de `ask.Answer` y
+  `seq.Summary`: `written` es `15 × 4 = 60` y `spoken` es "Son sesenta".
+- 🔴 **`verbalize.MAXIMUM` es el techo real.** Pasado el millón, `spoken` vuelve vacío y el
+  comando contesta que ese número no lo puede decir, con la cifra escrita al lado. La
+  respuesta no se pierde, cambia de forma — igual que en `ask`.
+- 🔴 **El evaluador tiene tope de potencia a propósito.** `9 ** 9 ** 9` cuelga el proceso
+  antes de contestar; `MAX_POWER_BASE` y `MAX_EXPONENT` lo frenan. Es `ast` con una lista
+  blanca de operadores: no hay `eval`, no hay nombres, no hay llamadas.
+- **Las unidades son una tabla propia, no `pint`.** El CT tiene 512 MB y ya se descartó
+  Kokoro por RAM; lo que pregunta una casa entra en veinte filas. Si algún día hace falta
+  más, ahí sí entra una dependencia.
+- ⚠️ **La temperatura no escala, se desplaza**, así que va aparte de la tabla de factores.
+  "veinte grados" sin apellido es Celsius: es lo que se mide acá.
+- ⚠️ **La coma decimal es de ida y de vuelta.** Entra como la escribe una persona (`1,5`),
+  se convierte a punto para Python y vuelve a coma para el chat.
+
+## Las listas
+
+`lists.py` guarda dos listas —**compras** y **pendientes**— en la octava tabla de `jobs.db`,
+con el mismo patrón que las otras siete.
+
+- 🔴 **Dos listas fijas y no un nombre libre.** "agregá a X Y" no se puede partir sin
+  adivinar dónde termina el nombre. Una tercera es una línea en `_NAMES`.
+- **El nombre se busca del más largo al más corto.** "a la lista de compras leche" nombra una
+  lista; "a comprar pan" no, y entra entero como ítem. Es la misma lección que `en <equipo>`:
+  un prefijo que también puede ser texto real se come parte del mensaje.
+- **Se separa por comas y por "y".** Dictado, "leche y pan" son dos cosas; obligar a la coma
+  hacía que una nota de voz guardara un solo ítem con todo adentro.
+- **Un duplicado se avisa, no se repite**, comparando sin mayúsculas.
+- 🔴 **La lista se lee, no se escucha.** `/compras` y `/pendientes` contestan al chat como
+  `/lista`: números y cantidades son de leer. Lo único hablado es el conteo del cierre del
+  día, y ese va en palabras.
+- **`/compras` nombra a `/sacar`**, como `/lista` nombra a `/cancelar`: es la única entrada
+  del menú que deja a otro comando sin puerta.
+
+## Traducir
+
+`translate.py` traduce un texto con el modelo barato y **lo deja escrito**.
+
+- 🔴 **Nunca se dice en voz alta.** Piper habla `es_AR` y lee cualquier otro idioma con
+  fonética española. Pedirlo "por el parlante" contesta la traducción escrita y avisa por qué
+  no suena. Hablarla obligaría a otra voz de Piper, y con ella a otra clave de cache.
+- **La lista de idiomas es cerrada** (`LANGUAGES`), por lo mismo que los alias de equipo:
+  "al final no fui" empieza igual que "al francés" y un prefijo ambiguo se come el mensaje.
+- **Sin idioma, va de español a inglés y al revés**, que es el caso de esta casa.
+- **Acá no hay original que gane**: si el modelo no contesta, no hay nada que decir, así que
+  el error sale al chat en vez de un texto a medias.
+
 ## Preguntas
 
 `ask.py` contesta una pregunta con un modelo con **búsqueda** y la casa la dice. Es lo único
@@ -683,6 +770,10 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
+- 🔴 **El prompt creció con seis comandos y hay que volver a medirlo.** `calcular`,
+  `agregar`, `compras`, `pendientes`, `sacar` y `traducir` entraron a la lista y dos de ellos
+  sumaron ejemplo. Los dieciséis de dieciséis se midieron **antes** de eso: hasta que se
+  repita contra el endpoint real, ese número es historia, no el estado de ahora.
 - 🔴 **Los ejemplos del prompt sostienen el comportamiento, no lo decoran.** Sin ellos el
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
@@ -746,8 +837,8 @@ donde entró y nada más.
 - **`/decir` y `/llamar` no consultan la regla.** Pedirles que hablen *es* el comando; un
   `/decir` que no suena no es nada. Los que sí la consultan son los tres que antes hablaban
   sin que nadie se lo pidiera: `/clima`, `/agenda` y `/preguntar`.
-- 🔴 **Las alarmas, los timers, el resumen de la mañana y los avisos del monitor y de Seq
-  siguen saliendo por el parlante**, siempre, más su copia al chat. Son lo que interrumpe a
+- 🔴 **Las alarmas, los timers, el resumen de la mañana, el cierre del día y los avisos del
+  monitor y de Seq siguen saliendo por el parlante**, siempre, más su copia al chat. Son lo que interrumpe a
   propósito: nadie pide a las tres de la mañana que la alerta suene.
 - 🔴 **La coletilla se saca antes de rutear.** El router arma el argumento del comando y se la
   comería, así que `free_text()` la detecta sobre el mensaje entero, la quita y deja puesto un
@@ -851,21 +942,21 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 28 nombres: 18 comandos y 10 **alias** (`help`, `recordar`, `tiempo`,
-`donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`). Los alias funcionan pero no
-van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
+`ALL_COMMANDS` tiene 35 nombres: 24 comandos y 11 **alias** (`help`, `recordar`, `tiempo`,
+`donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
+funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
 
-🔴 **El menú de Telegram tiene 8, no los 18.** Con los 18, la lista que sale al escribir `/`
+🔴 **El menú de Telegram tiene 9, no los 24.** Con los 18, la lista que sale al escribir `/`
 era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
 argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
-`parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`— **siguen andando escritos** y se
-alcanzan sin barra por el router.
+`parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
+`sacar`, `traducir`— **siguen andando escritos** y se alcanzan sin barra por el router.
 
 - **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
   va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
   ata las dos mitades.
-- **`/lista` nombra a `/cancelar`.** Es la única salida del menú que deja a otro comando sin
-  puerta: quien ve sus alarmas ahí mismo lee cómo borrarlas.
+- **`/lista` nombra a `/cancelar` y `/compras` nombra a `/sacar`.** Son las salidas del menú
+  que dejan a otro comando sin puerta: quien ve la lista ahí mismo lee cómo borrar de ella.
 
 ## Cableado
 

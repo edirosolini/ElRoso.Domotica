@@ -143,3 +143,29 @@ def test_the_briefing_does_not_name_the_place():
 
     assert "Sanatorio" not in service.briefing()
     assert "Sanatorio" in service.spoken("hoy"), "pedida a mano sí dice dónde"
+
+
+def test_tomorrow_can_be_asked_without_the_place():
+    """El cierre del día lo escucha de corrido, como el resumen de la mañana."""
+    class OneEvent:
+        def day(self, when):
+            return [
+                Event(
+                    uid="x@t",
+                    summary="Dentista",
+                    start=datetime(2026, 8, 31, 10, 0, tzinfo=TZ),
+                    end=datetime(2026, 8, 31, 11, 0, tzinfo=TZ),
+                    all_day=False,
+                    calendar="personal",
+                    location="Sanatorio Colegiales",
+                )
+            ]
+
+        def rest_of_day(self, when):
+            return self.day(when)
+
+    service = AgendaService(calendar=OneEvent(), clock=lambda: NOW)
+
+    assert "Sanatorio" not in service.spoken("mañana", place=False)
+    assert "Dentista" in service.spoken("mañana", place=False)
+    assert "Sanatorio" in service.spoken("mañana"), "pedida a mano sí dice dónde"

@@ -50,6 +50,23 @@ de una vez lo que hay para el día: la agenda, el clima y qué servicios vigilad
 Si todo está en orden no nombra ningún servicio. No hace falta tener agenda configurada: con
 el clima solo ya sirve, y una fuente que falla no se lleva puestas a las otras.
 
+**Cierre del día.** A la hora de `CLOSING_AT` (por defecto 22:00, `off` lo apaga) dice lo que
+viene: qué tenés agendado mañana, cómo va a estar el día y qué servicios siguen sin responder.
+Si no juntó nada que decir, se queda callado. Ponerlo después de `QUIET_FROM` lo deja escrito
+en el chat, sin voz.
+
+**Cuentas y unidades.** `/calcular 15 por 4` hace la cuenta y `/calcular 20 grados en
+fahrenheit` convierte. No pasa por ningún modelo: el número sale exacto y, si entra en el
+rango que se puede decir, suena en palabras cuando lo pedís por el parlante.
+
+**Listas.** `/agregar leche, pan` suma a la lista de compras y `/agregar a pendientes llamar
+al plomero` a la otra. `/compras` y `/pendientes` las muestran numeradas, `/sacar 2` saca una
+y `/sacar todo` la vacía. El cierre del día dice cuántas cosas quedan por comprar.
+
+**Traducir.** `/traducir hola` va de español a inglés y al revés; `/traducir al francés hola`
+al idioma que pidas. Vuelve escrito y nunca por el parlante: la voz de la casa habla español
+y leería el resto con fonética española.
+
 **Agenda.** Lee Google Calendar por su **dirección privada en formato iCal**, no por la API:
 es solo lectura, así que no hace falta proyecto en Google Cloud, ni OAuth, ni tokens que se
 vencen. Además del `/agenda` a pedido:
@@ -398,6 +415,7 @@ API_PORT=8099
 CALENDAR_URL_PERSONAL=   # dirección privada en formato iCal
 CALENDAR_URL_TRABAJO=    # una clave por calendario; el sufijo es el alias
 BRIEFING_AT=08:00        # resumen del día; "off" lo apaga
+CLOSING_AT=22:00         # cierre del día: lo de mañana; "off" lo apaga
 EVENT_LEAD_MINUTES=10    # cuántos minutos antes avisar
 CHECKS_FILE=/etc/domotica/checks.json
 CHECK_INTERVAL_SECONDS=120

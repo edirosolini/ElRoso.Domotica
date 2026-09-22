@@ -41,6 +41,9 @@ RAIN_WINDOW_HOURS = 6
 RAIN_ALERT_CHANCE = 60
 RAIN_MARK = "rain-alert"
 
+# Índice del día siguiente en las listas diarias, que ya vienen con dos días.
+TOMORROW = 1
+
 # Umbrales de los otros cuatro avisos. Constantes del módulo, como los de lluvia.
 HEAT_ALERT = 33
 COLD_ALERT = 3
@@ -107,6 +110,16 @@ class HourAhead:
     when: datetime
     rain_chance: int
     gust: int
+    code: int
+
+
+@dataclass(frozen=True)
+class Tomorrow:
+    """El día siguiente, sin la parte de "ahora" que no existe todavía."""
+
+    maximum: int
+    minimum: int
+    rain_chance: int
     code: int
 
 
@@ -233,6 +246,37 @@ class WeatherClient:
                 )
             )
         return ahead
+
+    def tomorrow(self) -> Tomorrow:
+        """El pronóstico del día siguiente, que ya viaja en el mismo pedido."""
+        try:
+            payload = self.fetch(self.latitude, self.longitude)
+        except Exception as exc:
+            log.warning("no se pudo consultar el clima de mañana: %s", exc)
+            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+
+        try:
+            daily = payload["daily"]
+            return Tomorrow(
+                maximum=round(daily["temperature_2m_max"][TOMORROW]),
+                minimum=round(daily["temperature_2m_min"][TOMORROW]),
+                rain_chance=round(daily["precipitation_probability_max"][TOMORROW]),
+                code=int(daily["weather_code"][TOMORROW]),
+            )
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise WeatherError(f"El servicio de clima contestó algo que no entiendo: {exc}") from exc
+
+    def spoken_tomorrow(self) -> str:
+        """El día siguiente en una o dos oraciones, para el cierre del día."""
+        forecast = self.tomorrow()
+
+        parts = [
+            f"Para mañana, máxima de {number(forecast.maximum)} y mínima de "
+            f"{number(forecast.minimum)}, {describe_code(forecast.code)}."
+        ]
+        if forecast.rain_chance >= RAIN_WORTH_MENTIONING:
+            parts.append(f"Probabilidad de lluvia, {number(forecast.rain_chance)} por ciento.")
+        return self.polish(" ".join(parts), must_keep=["mañana"])
 
     def day_ahead(self) -> tuple[int, int]:
         """La máxima y la mínima de hoy, que es lo que mira un aviso del día entero."""

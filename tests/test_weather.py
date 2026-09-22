@@ -133,3 +133,73 @@ def test_the_forecast_wording_is_polished():
 
 def test_without_a_polisher_the_forecast_is_untouched():
     assert "grados" in client().spoken()
+
+
+# --- el día siguiente, para el cierre del día -------------------------------
+
+TWO_DAYS = {
+    "current": PAYLOAD["current"],
+    "daily": {
+        "temperature_2m_max": [22.3, 28.4],
+        "temperature_2m_min": [10.8, 16.2],
+        "precipitation_probability_max": [20, 70],
+        "weather_code": [61, 0],
+    },
+}
+
+
+def test_tomorrow_reads_the_second_day_of_the_forecast():
+    """Open-Meteo ya contesta dos días: el índice cero sigue siendo hoy."""
+    tomorrow = client(TWO_DAYS).tomorrow()
+
+    assert tomorrow.maximum == 28
+    assert tomorrow.minimum == 16
+    assert tomorrow.rain_chance == 70
+    assert tomorrow.code == 0
+
+
+def test_a_forecast_without_tomorrow_is_reported():
+    with pytest.raises(WeatherError):
+        client(PAYLOAD).tomorrow()
+
+
+def test_the_spoken_tomorrow_reads_like_a_person():
+    said = client(TWO_DAYS).spoken_tomorrow()
+
+    assert "mañana" in said.lower()
+    assert "veintiocho" in said
+    assert "dieciséis" in said
+    assert "despejado" in said
+
+
+def test_the_spoken_tomorrow_mentions_rain_when_it_is_likely():
+    assert "setenta por ciento" in client(TWO_DAYS).spoken_tomorrow()
+
+
+def test_the_spoken_tomorrow_does_not_nag_about_rain_when_there_is_none():
+    dry = {"current": PAYLOAD["current"], "daily": dict(TWO_DAYS["daily"])}
+    dry["daily"]["precipitation_probability_max"] = [20, 5]
+
+    assert "lluvia" not in client(dry).spoken_tomorrow()
+
+
+def test_no_digit_reaches_the_synthesizer_from_tomorrow():
+    assert not any(character.isdigit() for character in client(TWO_DAYS).spoken_tomorrow())
+
+
+def test_the_tomorrow_wording_is_polished():
+    seen = {}
+
+    def polish(text, must_keep=()):
+        seen["text"] = text
+        return "REESCRITO"
+
+    weather = WeatherClient(
+        latitude=-34.6,
+        longitude=-58.4,
+        fetch=lambda latitude, longitude: TWO_DAYS,
+        polish=polish,
+    )
+
+    assert weather.spoken_tomorrow() == "REESCRITO"
+    assert "veintiocho" in seen["text"]
