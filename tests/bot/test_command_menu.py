@@ -20,6 +20,10 @@ OUT_OF_MENU = (
     "agenda",
     "estado",
     "usar",
+    "calcular",
+    "agregar",
+    "pendientes",
+    "sacar",
 )
 
 VALID = re.compile(r"^[a-z0-9_]{1,32}$")

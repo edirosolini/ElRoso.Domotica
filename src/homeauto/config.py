@@ -46,8 +46,10 @@ DEFAULT_QUIET_TO = "07:00"
 MIN_TOKEN_LENGTH = 16
 DEFAULT_API_PORT = 8099
 
-# El resumen del día y el aviso previo a cada evento.
+# El resumen del día, el cierre de la noche y el aviso previo a cada evento.
 DEFAULT_BRIEFING_AT = "08:00"
+# Antes del horario de descanso, o el cierre se escribiría en vez de decirse.
+DEFAULT_CLOSING_AT = "22:00"
 DEFAULT_EVENT_LEAD = 10
 CALENDAR_PREFIX = "CALENDAR_URL_"
 
@@ -169,15 +171,16 @@ def _parse_economy(pairs: dict[str, str]) -> bool:
     return pairs.get("ECONOMY", "").strip().lower() not in ("off", "no", "0")
 
 
-def _parse_briefing(pairs: dict[str, str]) -> clock_time | None:
-    raw = pairs.get("BRIEFING_AT", "").strip() or DEFAULT_BRIEFING_AT
+def _parse_daily_hour(pairs: dict[str, str], key: str, default: str) -> clock_time | None:
+    """La hora de un resumen diario, o None si está apagado."""
+    raw = pairs.get(key, "").strip() or default
     if raw.lower() in ("off", "no", "0"):
         return None
     try:
         hour, _, minute = raw.partition(":")
         return clock_time(int(hour), int(minute or 0))
     except ValueError as exc:
-        raise ConfigError(f"BRIEFING_AT no es una hora válida: {raw}") from exc
+        raise ConfigError(f"{key} no es una hora válida: {raw}") from exc
 
 
 def _parse_lead(pairs: dict[str, str]) -> int:
@@ -344,6 +347,7 @@ class Config:
     api_port: int = DEFAULT_API_PORT
     calendars: dict[str, str] = field(default_factory=dict)
     briefing_at: clock_time | None = None
+    closing_at: clock_time | None = None
     event_lead_minutes: int = DEFAULT_EVENT_LEAD
     checks_file: Path = Path(DEFAULT_CHECKS_FILE)
     check_interval: int = DEFAULT_CHECK_INTERVAL
@@ -401,7 +405,8 @@ class Config:
             api_token=_parse_api_token(pairs),
             api_port=_parse_api_port(pairs),
             calendars=_parse_calendars(pairs),
-            briefing_at=_parse_briefing(pairs),
+            briefing_at=_parse_daily_hour(pairs, "BRIEFING_AT", DEFAULT_BRIEFING_AT),
+            closing_at=_parse_daily_hour(pairs, "CLOSING_AT", DEFAULT_CLOSING_AT),
             event_lead_minutes=_parse_lead(pairs),
             checks_file=Path(pairs.get("CHECKS_FILE", "").strip() or DEFAULT_CHECKS_FILE),
             check_interval=_parse_interval(pairs),

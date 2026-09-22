@@ -33,15 +33,18 @@ class AgendaService:
             must_keep=[event.summary for event in events],
         )
 
-    def spoken(self, when: str = "") -> str:
+    def spoken(self, when: str = "", place: bool = True) -> str:
+        """Lo agendado para hoy o para mañana, con el lugar salvo que se apague."""
         word = when.strip().lower()
         now = self.clock()
 
         if word in TODAY_WORDS:
             # Lo que queda, no lo que ya pasó.
-            return self._say(self.calendar.rest_of_day(now), label="hoy")
+            return self._say(self.calendar.rest_of_day(now), label="hoy", place=place)
         if word in TOMORROW_WORDS:
-            return self._say(self.calendar.day(now + timedelta(days=1)), label="mañana")
+            return self._say(
+                self.calendar.day(now + timedelta(days=1)), label="mañana", place=place
+            )
 
         raise ValueError(f"No entiendo '{when}'. Probá con hoy o mañana.")
 

@@ -18,14 +18,17 @@ from typing import Callable
 
 from homeauto.agenda.ical import CalendarError
 from homeauto.ask import NOT_SPOKEN, AskError
+from homeauto.calc import CalcError, evaluate
 from homeauto.aloud import strip_aloud
 from homeauto.config import Config
 from homeauto.listen import ListenError
+from homeauto.lists import LISTS, SHOPPING, TODO, ListError, resolve
 from homeauto.voice.voicemail import VoicemailError
 from homeauto import slots, summon
 from homeauto.correct import as_written
 from homeauto.polish import as_is
 from homeauto.route import Decision, RouteError
+from homeauto.translate import TranslateError
 from homeauto.schedule.store import DAILY, ONCE, WEEKLY
 from homeauto.quiet import Hush
 from homeauto.timespec import (
@@ -50,6 +53,11 @@ ALL_WORD = "todos"
 # Una tanda de alias adelante: "comedor", "comedor,recamara", "comedor, recamara".
 _TARGET_LIST = re.compile(r"^([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
 _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
+# Los ítems de una lista, como los separa una persona: "leche, pan y yerba".
+_ITEMS = re.compile(r"\s*,\s*|\s+y\s+")
+# «de pendientes» al final de un /sacar.
+_LIST_SUFFIX = re.compile(r"\s+(?:de|en)\s+(.+)$", re.IGNORECASE)
+ALL_ITEMS = "todo"
 
 
 class TargetError(Exception):
@@ -90,6 +98,12 @@ HELP = """Hola. Manejo los equipos de casa.
 /apagar — cierra la app y deja el equipo en reposo
 /clima — el pronóstico
 /preguntar <pregunta> — la averigua y te la contesta
+/calcular 15 por 4 — hace la cuenta · /calcular 20 grados en fahrenheit convierte
+/agregar leche, pan — a la lista de compras
+/agregar a pendientes llamar al plomero — a la otra lista
+/compras — qué falta comprar · /pendientes — qué falta hacer
+/traducir hola — al inglés · /traducir al francés hola — al que pidas
+/sacar 2 — saca ese número de la lista · /sacar todo la vacía
 /agenda — qué te queda hoy · /agenda mañana
 /estado — cómo están los servicios que vigilo
 /equipos — qué equipos tengo y cuál está activo
@@ -132,6 +146,8 @@ class Commands:
         asker=None,
         router=None,
         conversation=None,
+        lists=None,
+        translator=None,
         transcribe=None,
         voicemail=None,
         correct=as_written,
@@ -149,6 +165,8 @@ class Commands:
         self.asker = asker
         self.router = router
         self.conversation = conversation
+        self.lists = lists
+        self.translator = translator
         self.transcribe = transcribe
         self.voicemail = voicemail
         self.correct = correct
@@ -425,6 +443,166 @@ class Commands:
         summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
         return f"{answer.written}\n\n{summary}"
 
+    def calculate(self, chat_id: int, text: str = "") -> str:
+        """Resuelve una cuenta o una conversión sin pasar por ningún modelo."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        aloud, text = self._wanted_aloud(text)
+        try:
+            aliases, expression = self._split_target(chat_id, text)
+        except TargetError as exc:
+            return str(exc)
+
+        if not expression.strip():
+            return "Pasame una cuenta: /calcular 15 por 4"
+
+        try:
+            result = evaluate(expression)
+        except CalcError as exc:
+            return str(exc)
+
+        if not aloud:
+            return result.written
+        if not result.spoken:
+            return f"{result.written}\n\nEse número no lo puedo decir; te lo dejé escrito."
+
+        _SPOKEN.set(result.spoken)
+        resting = self._resting()
+        if resting:
+            return f"{result.written}\n\n{resting}"
+
+        results = self._broadcast(aliases, lambda speaker: speaker.say(result.spoken))
+        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        return f"{result.written}\n\n{summary}"
+
+    def translate(self, chat_id: int, text: str = "") -> str:
+        """Traduce un texto y lo deja escrito. No sale por el parlante."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        if self.translator is None:
+            return (
+                "No tengo modelo para traducir. "
+                "Cargá LLM_API_KEY en el archivo de entorno."
+            )
+
+        aloud, text = self._wanted_aloud(text)
+        if not text.strip():
+            return "Decime qué traduzco: /traducir hola"
+
+        try:
+            translated = self.translator.translate(text)
+        except TranslateError as exc:
+            return str(exc)
+
+        if aloud:
+            return f"{translated}\n\n⚠️ Esto no lo digo: mi voz habla solo español."
+        return translated
+
+    # --- listas ------------------------------------------------------------
+
+    def _no_lists(self) -> str:
+        return "No tengo las listas configuradas."
+
+    def _split_list(self, text: str) -> tuple[str, str]:
+        """La lista nombrada adelante y lo que queda, o la de compras y todo.
+
+        Se prueba el nombre más largo primero: "a la lista de compras leche"
+        nombra una lista, "a comprar pan" no.
+        """
+        words = text.split()
+        if not words or words[0].lower() not in ("a", "en"):
+            return SHOPPING, text
+
+        for size in range(len(words) - 1, 0, -1):
+            try:
+                name = resolve(" ".join(words[1:size + 1]))
+            except ListError:
+                continue
+            return name, " ".join(words[size + 1:])
+        return SHOPPING, text
+
+    def add_item(self, chat_id: int, text: str = "") -> str:
+        """Suma cosas a una lista, la de compras salvo que se nombre otra."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.lists is None:
+            return self._no_lists()
+
+        list_name, rest = self._split_list(text.strip())
+        wanted = [item for item in _ITEMS.split(rest) if item.strip()]
+        if not wanted:
+            return "Decime qué agrego: /agregar leche, pan"
+
+        added = self.lists.add(list_name, wanted)
+        repeated = [item for item in wanted if item not in added]
+
+        lines = []
+        if added:
+            lines.append(f"Agregado a {list_name}: {', '.join(added)}")
+        if repeated:
+            lines.append(f"Ya estaba en {list_name}: {', '.join(repeated)}")
+        return "\n".join(lines)
+
+    def shopping(self, chat_id: int, _text: str = "") -> str:
+        return self._show(chat_id, SHOPPING)
+
+    def todo(self, chat_id: int, _text: str = "") -> str:
+        return self._show(chat_id, TODO)
+
+    def _show(self, chat_id: int, list_name: str) -> str:
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.lists is None:
+            return self._no_lists()
+
+        items = self.lists.items(list_name)
+        if not items:
+            return f"La lista de {list_name} está vacía."
+
+        lines = [f"{list_name.capitalize()} ({len(items)})"]
+        lines += [f"{position}. {item}" for position, item in enumerate(items, start=1)]
+        lines.append("\nSacá uno con /sacar <número>")
+        return "\n".join(lines)
+
+    def remove_item(self, chat_id: int, text: str = "") -> str:
+        """Saca un ítem por su número, o vacía la lista entera."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.lists is None:
+            return self._no_lists()
+
+        list_name, what = SHOPPING, text.strip()
+        suffix = _LIST_SUFFIX.search(what)
+        if suffix:
+            try:
+                list_name = resolve(suffix.group(1))
+                what = what[: suffix.start()].strip()
+            except ListError:
+                pass
+
+        if what.lower() == ALL_ITEMS:
+            emptied = self.lists.clear(list_name)
+            if not emptied:
+                return f"La lista de {list_name} ya estaba vacía."
+            return f"Vacié {list_name}: {emptied} cosas menos."
+
+        try:
+            position = int(what.lstrip("#"))
+        except ValueError:
+            return "Decime el número. Ej: /sacar 2 (lo ves con /compras)"
+
+        removed = self.lists.remove(list_name, position)
+        if removed is None:
+            return f"En {list_name} no hay ningún {position}. Fijate con /{list_name}"
+        return f"Saqué de {list_name}: {removed}"
+
     def _dispatch(self) -> dict:
         """Todos los comandos alcanzables sin barra, por nombre.
 
@@ -449,6 +627,12 @@ class Commands:
             "equipos": lambda chat_id, _text="": self.devices(chat_id),
             "usar": self.use,
             "preguntar": self.ask,
+            "calcular": self.calculate,
+            "agregar": self.add_item,
+            "compras": self.shopping,
+            "pendientes": self.todo,
+            "sacar": self.remove_item,
+            "traducir": self.translate,
         }
 
     def heard(self, chat_id: int, audio: bytes, mime: str = "audio/ogg") -> Reply:

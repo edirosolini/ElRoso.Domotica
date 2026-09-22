@@ -304,6 +304,7 @@ def test_the_polisher_reaches_everything_the_house_says(tmp_path, monkeypatch):
         ("seq", main.SeqWatcher),
         ("rain", main.RainWatcher),
         ("briefing", main.Briefing),
+        ("closing", main.Closing),
         ("api", main.ApiService),
     )
     for name, cls in sources:
@@ -604,3 +605,88 @@ def test_the_briefing_remembers_the_night_errors(wired, tmp_path, monkeypatch):
 
     assert seen["seq"], "el resumen no tiene con qué recordar la noche"
     assert all(hasattr(client, "errors_since") for client in seen["seq"])
+
+
+# --- el cierre del día ------------------------------------------------------
+
+
+def test_the_closing_is_scheduled(wired, tmp_path, monkeypatch):
+    """Como el resumen, no depende de que haya un calendario configurado."""
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert "closing" in wired.job_queue.daily
+
+
+def test_the_closing_can_be_turned_off(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "CLOSING_AT=off\n"))
+
+    assert "closing" not in wired.job_queue.daily
+
+
+def closing_built(monkeypatch):
+    """Lo que main() le pasó al cierre del día."""
+    seen = {}
+    original = main.Closing.__init__
+
+    def spy(self, *args, **kwargs):
+        seen.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Closing, "__init__", spy)
+    return seen
+
+
+def test_the_closing_gets_the_weather_and_the_monitor(wired, tmp_path, monkeypatch):
+    seen = closing_built(monkeypatch)
+    checks = tmp_path / "checks.json"
+    checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
+
+    run_main(monkeypatch, config_file(tmp_path, f"CHECKS_FILE={checks}\n"))
+
+    assert seen["weather"].spoken_tomorrow, "el doble tiene que poder usarse como lo real"
+    assert seen["monitor"].snapshot() == {}
+
+
+def test_without_a_calendar_the_closing_still_runs(wired, tmp_path, monkeypatch):
+    seen = closing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["agenda"] is None
+
+
+def test_the_closing_counts_what_is_left_to_buy(wired, tmp_path, monkeypatch):
+    seen = closing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["lists"].items("compras") == [], "el doble tiene que poder usarse como lo real"
+
+
+def test_a_key_builds_the_translator(wired, tmp_path, monkeypatch):
+    got = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        got.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
+
+    assert got["translator"] is not None
+    assert callable(got["translator"].translate)
+
+
+def test_without_a_key_there_is_no_translator(wired, tmp_path, monkeypatch):
+    got = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        got.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert got["translator"] is None

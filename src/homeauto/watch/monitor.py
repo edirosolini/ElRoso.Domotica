@@ -19,6 +19,21 @@ log = logging.getLogger(__name__)
 FAILURES_TO_DECLARE = 2
 
 
+def down_line(monitor, polish: Callable[..., str] = as_is) -> str:
+    """Los servicios caídos en una oración, o nada si están todos en pie.
+
+    El silencio es la buena noticia: el estado completo está en `/estado`.
+    """
+    down = sorted(name for name, state in monitor.snapshot().items() if not state.up)
+    if not down:
+        return ""
+    if len(down) == 1:
+        text = f"Ojo: {down[0]} no responde."
+    else:
+        text = f"Ojo: no responden {', '.join(down[:-1])} ni {down[-1]}."
+    return polish(text, must_keep=tuple(down))
+
+
 class Monitor:
     def __init__(
         self,

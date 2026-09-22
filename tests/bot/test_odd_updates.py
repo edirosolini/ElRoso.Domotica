@@ -33,7 +33,8 @@ class SpyCommands:
 
     start = say = call = volume = stop = where = timer = alarm = list = cancel = _record
     devices = use = turn_off = weather = agenda_command = _record
-    status = silence = speak = ask = free_text = _record
+    status = silence = speak = ask = calculate = free_text = _record
+    add_item = shopping = todo = remove_item = translate = _record
 
 
 class EditedUpdate:

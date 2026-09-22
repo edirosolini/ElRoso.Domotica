@@ -23,7 +23,8 @@ NONE_WORDS = {"ninguno", "ninguna", "nada", "none", ""}
 ROUTABLE = (
     "decir", "llamar", "timer", "alarma", "lista", "cancelar", "silencio", "hablar",
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
-    "usar", "preguntar",
+    "usar", "preguntar", "calcular",
+    "agregar", "compras", "pendientes", "sacar", "traducir",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -58,6 +59,14 @@ Comandos y qué lleva cada uno:
 - equipos: sin argumento, qué equipos hay
 - usar: el equipo que pasa a ser el de siempre
 - preguntar: una pregunta de conocimiento o de actualidad, para buscar la respuesta
+- calcular: una cuenta o una conversión de unidades, así: "15 por 4" o
+  "20 grados en fahrenheit"
+- agregar: lo que hay que sumar a una lista, con "a pendientes" adelante si no va a
+  la de compras
+- compras: sin argumento, qué falta comprar
+- pendientes: sin argumento, qué falta hacer
+- sacar: el número a sacar de una lista, o "todo" para vaciarla
+- traducir: el texto a traducir, con "al <idioma>" adelante si se nombra uno
 
 Reglas:
 - Si el mensaje es una pregunta, o no encaja claramente en ningún comando, contestá
@@ -99,6 +108,14 @@ ARGUMENTO: 10m sacar la pizza
 Mensaje: cuántos goles hizo Messi
 COMANDO: preguntar
 ARGUMENTO: cuántos goles hizo Messi
+
+Mensaje: cuánto es 15 por 4
+COMANDO: calcular
+ARGUMENTO: 15 por 4
+
+Mensaje: agregá leche y pan a la lista de compras
+COMANDO: agregar
+ARGUMENTO: leche y pan
 
 Contestá solo con dos líneas:
 COMANDO: <nombre o ninguno>

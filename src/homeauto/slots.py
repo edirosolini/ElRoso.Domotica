@@ -47,6 +47,10 @@ REPEAT = Slot("repeticion", "¿Una sola vez, todos los días, o algunos días?")
 NUMBER = Slot("numero", "¿Cuál cancelo? El número sale en /lista.")
 VOLUME = Slot("volumen", "¿Qué volumen? De cero a cien.")
 DEVICE = Slot("equipo", "¿En qué equipo?")
+CALCULATION = Slot("cuenta", "¿Qué cuenta querés que haga?")
+ITEM = Slot("item", "¿Qué agrego?")
+POSITION = Slot("numero", "¿Cuál saco? El número sale en /compras.")
+PHRASE = Slot("texto", "¿Qué traduzco?")
 
 
 def missing(command: str, argument: str) -> Slot | None:
@@ -104,6 +108,13 @@ def _alarm(argument: str) -> Slot | None:
     return _timed(argument, TIME) or REPEAT
 
 
+def _removal(argument: str) -> Slot | None:
+    """Sacar pide un número, salvo que se pida vaciar la lista entera."""
+    if "todo" in argument.lower():
+        return None
+    return None if _DIGIT.search(argument) else POSITION
+
+
 def _numbered(slot: Slot):
     return lambda argument: None if _DIGIT.search(argument) else slot
 
@@ -119,4 +130,8 @@ _CHECKS = {
     "cancelar": _numbered(NUMBER),
     "volumen": _numbered(VOLUME),
     "usar": _needed(DEVICE),
+    "calcular": _needed(CALCULATION),
+    "agregar": _needed(ITEM),
+    "sacar": _removal,
+    "traducir": _needed(PHRASE),
 }
