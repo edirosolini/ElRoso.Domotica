@@ -1,4 +1,4 @@
-"""Per-chat choices that outlive a restart. Shares the file with the jobs."""
+"""Preferencias por chat que sobreviven un reinicio. Comparte archivo con los jobs."""
 
 from __future__ import annotations
 

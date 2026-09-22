@@ -1,7 +1,7 @@
-"""One speaker per configured device, built the first time it is needed.
+"""Un Speaker por equipo configurado, construido recién al usarse.
 
-Connecting to a cast device is slow, so the objects are cached; and nothing is
-built at startup, because most of the devices are usually off.
+Conectarse a un equipo cast es lento, así que los objetos se cachean; y no se
+arma nada al arrancar, porque casi todos los equipos suelen estar apagados.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Callable
 
 
 class UnknownDevice(Exception):
-    """The alias does not match any configured device."""
+    """El alias no corresponde a ningún equipo configurado."""
 
 
 class SpeakerRegistry:

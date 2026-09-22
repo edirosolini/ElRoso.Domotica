@@ -1,4 +1,4 @@
-"""Remembering what was already reported, so the monitor stays bearable."""
+"""Recuerda qué ya se avisó, para que el monitor siga siendo soportable."""
 
 from __future__ import annotations
 

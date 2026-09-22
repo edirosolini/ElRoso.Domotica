@@ -1,4 +1,4 @@
-"""Watching Seq for new errors, without turning a storm into a storm of alerts."""
+"""Vigila Seq buscando errores nuevos, sin convertir una tormenta en otra de avisos."""
 
 from __future__ import annotations
 
@@ -37,18 +37,16 @@ class SeqWatcher:
         self.cooldown_minutes = cooldown_minutes
         self.lookback_minutes = lookback_minutes
         self.polish = polish
-        # Empty for the instance that was here first: it keeps saying "Seq" and
-        # reading the marks it already wrote. Renaming it would make a fresh
-        # deploy reread everything and alert about old errors.
+        # Vacío para la instancia que estaba primero: sigue diciendo "Seq" y
+        # leyendo las marcas que ya escribió.
         self.alias = alias
 
     @property
     def name(self) -> str:
-        """How it is named out loud.
+        """Cómo se lo nombra en voz alta.
 
-        🔴 The underscores become spaces. They are the separator an environment
-        variable name forces on a multi-word alias, and "seq de vps guion bajo
-        id" is not what anybody meant to hear.
+        Los guiones bajos se dicen como espacios: son el separador que impone el
+        nombre de una variable de entorno.
         """
         return f"Seq de {self.alias.replace('_', ' ')}" if self.alias else "Seq"
 
@@ -58,8 +56,7 @@ class SeqWatcher:
 
     @property
     def last_alert_key(self) -> str:
-        # 🔴 One cooldown per instance. Sharing the file is not sharing state:
-        # a VPS logging an error a second would silence the alert of the other.
+        # Un enfriamiento por instancia: un VPS ruidoso no puede callar al otro.
         return f"seq:{self.alias}:last_alert" if self.alias else LAST_ALERT
 
     def check(self) -> str | None:
@@ -76,8 +73,7 @@ class SeqWatcher:
         if not events:
             return None
 
-        # A failing service logs the same error hundreds of times a minute.
-        # Alerting on each one turns the monitor into noise.
+        # Un servicio roto loguea el mismo error cientos de veces por minuto.
         last_alert = self.marks.get(self.last_alert_key)
         if last_alert and now - last_alert < timedelta(minutes=self.cooldown_minutes):
             log.info("hay errores en Seq pero seguimos en enfriamiento")
@@ -87,8 +83,8 @@ class SeqWatcher:
         if summary is None:
             return None
 
-        # The quoted log line stays written: it is arbitrary text, with digits
-        # and stack traces in it, and none of that survives being spoken.
+        # La cita del log queda escrita: es texto arbitrario, con dígitos y
+        # trazas, y nada de eso sobrevive al ser dicho.
         spoken = self.polish(summary.spoken, must_keep=("Seq", self.alias))
         self.announce(spoken, summary.detail)
         self.marks.set(self.last_alert_key, now)

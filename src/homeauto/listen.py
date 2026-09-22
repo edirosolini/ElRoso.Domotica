@@ -7,12 +7,11 @@ import logging
 log = logging.getLogger(__name__)
 
 MIME = "audio/ogg"
-# Subir el audio tarda más que pedir una reescritura: con los seis del
-# pulidor, una nota de voz corta ya daba timeout.
+# Subir el audio tarda más que pedir una reescritura.
 TIMEOUT = 30
 # Un comando dicho es una oración.
 MAX_CHARS = 300
-# What the model answers when there is nothing to transcribe.
+# Lo que contesta el modelo cuando no hay nada que transcribir.
 NOTHING = "NADA"
 
 PROMPT = (
@@ -26,7 +25,7 @@ _QUOTES = "«»\"'“”"
 
 
 class ListenError(Exception):
-    """The audio could not be turned into words."""
+    """El audio no se pudo convertir en palabras."""
 
 
 class Transcriber:

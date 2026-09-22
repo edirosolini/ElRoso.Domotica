@@ -1,8 +1,8 @@
-"""Command logic, free of any Telegram plumbing.
+"""La lógica de los comandos, sin nada de Telegram.
 
-Every method takes the chat id and the raw argument text, and returns the reply
-to send back. Device failures become sentences, never tracebacks: the person on
-the other side is holding a phone, not a log viewer.
+Cada método recibe el chat y el texto del argumento, y devuelve la respuesta a
+mandar. Los fallos de un equipo se vuelven oraciones, nunca trazas: del otro
+lado hay alguien con un teléfono, no leyendo un log.
 """
 
 from __future__ import annotations
@@ -47,13 +47,13 @@ DEVICE_ERRORS = (CastError, TtsError, UnknownDevice)
 TARGET_WORD = "en"
 ALL_WORD = "todos"
 
-# A leading run of aliases: "comedor", "comedor,recamara", "comedor, recamara".
+# Una tanda de alias adelante: "comedor", "comedor,recamara", "comedor, recamara".
 _TARGET_LIST = re.compile(r"^([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
 _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
 
 
 class TargetError(Exception):
-    """The devices asked for do not all exist."""
+    """Alguno de los equipos pedidos no existe."""
 
 
 # El pedido en curso quiere el parlante. Va en contextvar y no en el objeto:
@@ -66,7 +66,7 @@ _SPOKEN = contextvars.ContextVar("spoken", default="")
 
 @dataclass(frozen=True)
 class Reply:
-    """What goes back to the chat: always the text, sometimes also a voice note."""
+    """Lo que vuelve al chat: siempre el texto, a veces también una nota de voz."""
 
     text: str
     audio: Path | None = None
@@ -108,7 +108,7 @@ Y me mandás una nota de voz: la escucho, hago lo que pidas y te contesto con ot
 
 
 def format_when(when: datetime, now: datetime) -> str:
-    """Human wording for a moment, close to how a person would say it."""
+    """Un momento dicho como lo diría una persona."""
     days = (when.date() - now.date()).days
     clock = when.strftime("%H:%M")
     if days == 0:
@@ -158,15 +158,15 @@ class Commands:
     # --- permisos y destino ------------------------------------------------
 
     def _denial(self, chat_id: int) -> str | None:
-        """Returns the refusal to send, or None when the chat may proceed."""
+        """Devuelve la negativa a mandar, o None si el chat puede seguir."""
         if self.config.is_allowed(chat_id):
             return None
         log.warning("chat %s rechazado", chat_id)
         return "No estás en la lista. Pedile al dueño que agregue tu ID: " + str(chat_id)
 
     def _enrollment_hint(self, chat_id: int) -> str:
-        # While the whitelist is empty anyone can drive the speakers. Say so, and
-        # hand over the id needed to close it.
+        # Con la lista blanca vacía cualquiera maneja los parlantes. Se avisa y
+        # se entrega el id que hace falta para cerrarla.
         if not self.config.is_open_enrollment:
             return ""
         return (
@@ -175,12 +175,12 @@ class Commands:
         )
 
     def _wanted_aloud(self, text: str) -> tuple[bool, str]:
-        """Whether the answer was asked for out loud, and the text without the request."""
+        """Si se pidió la respuesta en voz alta, y el texto sin esa coletilla."""
         aloud, rest = strip_aloud(text)
         return aloud or _ALOUD.get(), rest
 
     def _resting(self) -> str | None:
-        """The reply to send instead of speaking, or None when it may sound."""
+        """La respuesta a mandar en vez de hablar, o None si puede sonar."""
         if self.quiet is not None and self.quiet.is_quiet(self.clock()):
             return f"Horario de descanso ({self.quiet.label}): no lo dije en voz alta."
         return None
@@ -191,7 +191,7 @@ class Commands:
         return chosen or [self.config.default_device]
 
     def _parse_aliases(self, spec: str) -> list[str] | None:
-        """The aliases in «en <spec>», or None when it is not a target at all."""
+        """Los alias de «en <spec>», o None si no es un destino."""
         if spec.lower() == ALL_WORD:
             return list(self.speakers.aliases)
 
@@ -204,21 +204,21 @@ class Commands:
         if not unknown:
             return list(dict.fromkeys(parts))  # dedup, keeping the order typed
         if len(parts) > 1:
-            # A comma-separated list is unambiguously a target: say what is wrong
-            # instead of quietly speaking half of it as if it were the message.
+            # Una lista con comas es inequívocamente un destino: se dice qué está
+            # mal en vez de hablar la mitad como si fuera el mensaje.
             raise TargetError(
                 f"No conozco: {', '.join(unknown)}. Tengo: {', '.join(self.speakers.aliases)}"
             )
-        # A single unknown word is just the message: "/decir en casa hace frío".
+        # Una sola palabra desconocida es el mensaje: "/decir en casa hace frío".
         return None
 
     def _split_target(
         self, chat_id: int, text: str, default: list[str] | None = None
     ) -> tuple[list[str], str]:
-        """Pull a leading «en <equipos>» off the text, if it names real ones.
+        """Saca un «en <equipos>» de adelante, si nombra equipos que existen.
 
-        `default` overrides where it goes when nobody named a room: a call to
-        dinner is for the house, not for whatever speaker this chat last used.
+        `default` manda cuando nadie nombró un ambiente: un llamado a cenar es
+        para la casa, no para el último parlante que usó este chat.
         """
         text = text.strip()
         head, _, rest = text.partition(" ")
@@ -231,10 +231,10 @@ class Commands:
         return (default or self._default_aliases(chat_id)), text
 
     def _broadcast(self, aliases: list[str], action) -> dict[str, str | None]:
-        """Run the action on every device at once.
+        """Corre la acción en todos los equipos a la vez.
 
-        In parallel on purpose: one after another, the same phrase starts a
-        couple of seconds apart in each room and the house echoes.
+        En paralelo a propósito: uno tras otro, la misma frase arranca con un par
+        de segundos de diferencia en cada ambiente y la casa hace eco.
         """
         def run(alias: str) -> str | None:
             try:
@@ -283,9 +283,8 @@ class Commands:
         if resting:
             return f"{resting}\n\nDecía: «{message}»"
 
-        # 🔴 Corrected, not reworded: the words stay the person's. What changes
-        # is how they are spelled, so Piper reads them right — and the reply
-        # shows what actually came out of the speaker, not what was typed.
+        # Se corrige, no se reescribe: solo cambia la escritura. La respuesta
+        # muestra lo que salió por el parlante, no lo que se tipeó.
         spoken = self.correct(message)
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
         summary = self._summary(results, "Ya le avisé", "No pude decirlo en ninguno:")
@@ -294,21 +293,18 @@ class Commands:
         return summary + self._enrollment_hint(chat_id)
 
     def call(self, chat_id: int, text: str = "") -> str:
-        """Call the house to something. The sentence is the house's own.
+        """Llama a la casa a algo. La frase la genera la casa.
 
-        🔴 The other side of `/decir`. There the words are somebody's and may
-        not change; here the person gave an intention —"llamar a todos a
-        cenar"— and never wrote what to say. So this generates the sentence,
-        which makes it our text: it goes through the polisher like the weather,
-        and it is the reason the router's fidelity check does not apply to it.
+        La persona da una intención, no las palabras, así que la frase se genera
+        acá y pasa por el pulidor.
         """
         denial = self._denial(chat_id)
         if denial:
             return denial
 
         try:
-            # A call is for the whole house unless somebody names a room:
-            # calling one speaker to dinner is not what "a todos" means.
+            # Un llamado es para toda la casa salvo que alguien nombre un
+            # ambiente: llamar a cenar a un solo parlante no es "a todos".
             aliases, what = self._split_target(
                 chat_id, text, default=list(self.speakers.aliases)
             )
@@ -370,7 +366,7 @@ class Commands:
         except TargetError as exc:
             return str(exc)
 
-        # One query for the whole house: the forecast does not change per room.
+        # Una sola consulta para toda la casa: el pronóstico no cambia por ambiente.
         try:
             spoken = self.weather_client.spoken()
         except WeatherError as exc:
@@ -388,11 +384,10 @@ class Commands:
         return f"{spoken}\n\n{summary}"
 
     def ask(self, chat_id: int, text: str = "") -> str:
-        """Answer a question out loud, and leave the whole answer written.
+        """Contesta una pregunta en voz alta y deja la respuesta entera escrita.
 
-        🔴 What is said and what is written are different texts. A search answer
-        is made of years and counts, and a digit is read as a loose masculine
-        cardinal; `Asker` splits them and this only forwards the split.
+        Lo dicho y lo escrito son textos distintos: una respuesta de búsqueda
+        está hecha de años y cifras. `Asker` las separa y esto solo reenvía.
         """
         denial = self._denial(chat_id)
         if denial:
@@ -431,10 +426,10 @@ class Commands:
         return f"{answer.written}\n\n{summary}"
 
     def _dispatch(self) -> dict:
-        """Every command reachable without a slash, by name.
+        """Todos los comandos alcanzables sin barra, por nombre.
 
-        Kept next to the commands themselves and not in the Telegram wiring:
-        the router names a command, and naming is not transport.
+        Vive con los comandos y no en el cableado de Telegram: el router nombra
+        un comando, y nombrar no es transporte.
         """
         return {
             "decir": self.say,
@@ -457,7 +452,7 @@ class Commands:
         }
 
     def heard(self, chat_id: int, audio: bytes, mime: str = "audio/ogg") -> Reply:
-        """A voice note: transcribe it, run it, and answer with another one."""
+        """Una nota de voz: se transcribe, se ejecuta y se contesta con otra."""
         denial = self._denial(chat_id)
         if denial:
             return Reply(denial)
@@ -491,12 +486,11 @@ class Commands:
             return Reply(text)
 
     def free_text(self, chat_id: int, text: str) -> str:
-        """Run whatever a message without a slash was asking for.
+        """Ejecuta lo que pedía un mensaje sin barra.
 
-        A message that carries everything runs on the spot and says what it
-        understood, without asking first: the owner's call, and /cancelar is the
-        undo. What is new is the other half — a message missing an obligatory
-        datum is not an error to report, it is a question to ask.
+        Un mensaje completo se ejecuta de una y avisa qué entendió, sin
+        preguntar antes; `/cancelar` es el deshacer. A uno al que le falta un
+        dato obligatorio no se le contesta un error: se le pregunta.
         """
         denial = self._denial(chat_id)
         if denial:
@@ -525,12 +519,11 @@ class Commands:
         try:
             decision = self.router.route(text)
         except RouteError as exc:
-            # 🔴 Not a question. Sending "apagá la tele" out to a web search
-            # would answer something nobody asked, slowly and confidently.
+            # Un comando que no se pudo interpretar no es una pregunta.
             if not pending:
                 return str(exc)
-            # Mid-conversation it is almost never a command: "a las siete" on
-            # its own is not one either. Let the thread decide.
+            # En medio de una conversación casi nunca es un comando: "a las
+            # siete" tampoco lo es. Decide el hilo.
             decision = Decision(None)
 
         note = ""
@@ -544,8 +537,8 @@ class Commands:
                 if decision is None:
                     return "No te entendí. Probá con /ayuda."
 
-        # With a pending one this is never None: `_continue` only ever returns
-        # the command being built, and only dispatchable commands get stored.
+        # Con uno pendiente esto nunca es None: `_continue` solo devuelve el
+        # comando que se está armando, y solo se guardan los ejecutables.
         run = None if decision.is_question else self._dispatch().get(decision.command)
         if run is None:
             return note + self.ask(chat_id, text)
@@ -566,11 +559,10 @@ class Commands:
         return f"{note}Entendí: {understood}\n\n{answer}"
 
     def _interrupts(self, pending, decision) -> bool:
-        """Whether this message is a new order rather than the answer asked for.
+        """Si este mensaje es una orden nueva y no la respuesta que se pidió.
 
-        Only a *complete* different command interrupts. Something half said is
-        far more likely to be the missing datum arriving than a second thing
-        being asked for.
+        Solo interrumpe un comando *completo* y distinto. Algo dicho a medias es
+        casi siempre el dato que faltaba, no una segunda cosa.
         """
         if decision.is_question or decision.command == pending.command:
             return False
@@ -579,28 +571,28 @@ class Commands:
         return slots.missing(decision.command, decision.argument) is None
 
     def _continue(self, pending, text: str):
-        """Re-read the whole thread, so the answer joins what came before.
+        """Se vuelve a leer el hilo entero, así la respuesta se junta con lo anterior.
 
-        The thread goes through the same prompt as a single message —the one
-        that was measured— instead of a second one that merges an answer into an
-        argument. It costs one more call per turn and keeps one prompt to trust.
+        El hilo pasa por el mismo prompt que un mensaje suelto en vez de por un
+        segundo prompt que fusione la respuesta con el argumento. Cuesta una
+        llamada más por turno y deja un solo prompt del que fiarse.
         """
         try:
             decision = self.router.route(f"{pending.thread}\n{text}")
         except RouteError:
             return None
         if decision.is_question or decision.command != pending.command:
-            # The thread confused it. Stay on what was being built rather than
-            # sending half a conversation out to a web search.
+            # El hilo lo confundió. Se queda en lo que se estaba armando en vez
+            # de mandar media conversación a buscar en internet.
             return Decision(pending.command, "")
         return decision
 
     def _still_missing(self, decision, asked: tuple[str, ...]):
-        """The datum to ask for, or None when it is time to run.
+        """El dato a preguntar, o None cuando ya se puede ejecutar.
 
-        A slot already asked for is never asked again: if the answer did not
-        carry it, asking twice is a loop, and the command's own parser says it
-        better than a second question would.
+        Un dato ya preguntado no se vuelve a pedir: si la respuesta no lo trajo,
+        preguntar dos veces es un loop, y el parser del comando lo explica
+        mejor que una segunda pregunta.
         """
         if not self.conversation:
             return None
@@ -692,7 +684,7 @@ class Commands:
             + "\nTambién podés mandar uno suelto: /decir en comedor,recamara hola"
         )
 
-    # Kept so /donde keeps working; it is the same question.
+    # Se conserva para que /donde siga andando; es la misma pregunta.
     where = devices
 
     def use(self, chat_id: int, text: str) -> str:
@@ -783,7 +775,7 @@ class Commands:
             return str(exc)
 
         if days:
-            # The hour already rolled to its next occurrence; now pick the day.
+            # La hora ya rodó a su próxima ocurrencia; ahora se elige el día.
             when = next_weekday(when, days)
 
         job = self.reminders.add(
@@ -810,8 +802,8 @@ class Commands:
 
         days = parse_weekdays(head)
         if days:
-            # Days pick the occurrence, so what follows has to be a clock time:
-            # "lun-vie 10m" would mean ten minutes from now on a Tuesday.
+            # Los días eligen la ocurrencia, así que lo que sigue tiene que ser
+            # una hora: "lun-vie 10m" significaría diez minutos desde ahora.
             if not _CLOCK.fullmatch(tail.strip().split(" ")[0]):
                 return "Con días de la semana necesito una hora. Ej: /alarma lun-vie 5:30 arriba"
             return self._schedule(

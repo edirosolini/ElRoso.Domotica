@@ -1,16 +1,9 @@
-"""The morning summary: the day ahead, the sky, the figures, and anything broken.
+"""El resumen de la mañana: el día, el cielo, las cifras y lo que esté caído.
 
-Independent sources joined into one spoken text. Independence is the point: a
-calendar that times out must not cost you the weather, the same way a broken
-calendar does not hide the others inside the agenda.
-
-Everything spoken here is synthesized, so it carries no digits: the sources
-already speak in words and this module only adds names and connectors.
-
-🔴 The news are the one source that is **never spoken**: five headlines are the
-longest part of the summary and the one you cannot act on, and they are made of
-prices and percentages. `speech()` returns both halves — what the house says,
-and the copy the chat keeps, which is the same text with the headlines under it.
+Fuentes independientes juntadas en un solo texto hablado: una que falla deja un
+hueco, nunca cancela el resumen. Nada de lo hablado lleva dígitos. Los
+titulares son la única fuente que no se dice, así que `speech()` devuelve las
+dos mitades: lo que la casa dice y la copia que queda en el chat.
 """
 
 from __future__ import annotations
@@ -30,7 +23,7 @@ NIGHT_HOURS = 12
 
 @dataclass(frozen=True)
 class Summary:
-    """What the house says, and what the chat keeps."""
+    """Lo que dice la casa y lo que queda en el chat."""
 
     spoken: str
     written: str
@@ -55,18 +48,18 @@ class Briefing:
         # se recuerdan acá.
         self.seq = [seq] if hasattr(seq, "errors_since") else list(seq)
         self.news = news
-        # Only the trouble line: the agenda and the weather arrive already
-        # reworded by their own sources, and polishing twice buys nothing.
+        # Solo la línea de lo caído: la agenda y el clima ya vienen pulidos por
+        # sus propias fuentes, y pulir dos veces no agrega nada.
         self.polish = polish
 
     def text(self) -> str:
-        """What the house says at the briefing hour."""
+        """Lo que la casa dice a la hora del resumen."""
         return self.speech().spoken
 
     def speech(self) -> Summary:
-        """The spoken summary and the copy the chat keeps.
+        """El resumen hablado y la copia que queda en el chat.
 
-        They differ by the headlines, which only ever go to the chat.
+        Se diferencian en los titulares, que van solo al chat.
         """
         parts = [
             said
@@ -96,7 +89,7 @@ class Briefing:
         try:
             return source()
         except Exception:
-            # One source failing is a hole in the summary, not a lost summary.
+            # Una fuente que falla es un hueco en el resumen, no un resumen perdido.
             log.exception("una fuente del resumen falló")
             return ""
 
@@ -110,7 +103,7 @@ class Briefing:
         return self.economy.spoken() if self.economy is not None else ""
 
     def _safe_news(self) -> str:
-        """The headlines for the chat, or nothing. Never part of what is said."""
+        """Los titulares para el chat, o nada. Nunca parte de lo hablado."""
         if self.news is None:
             return ""
         try:
@@ -120,7 +113,7 @@ class Briefing:
             return ""
 
     def _safe_night(self):
-        """What Seq collected overnight, or None when there is nothing to tell."""
+        """Lo que juntó Seq de noche, o None si no hay nada que contar."""
         from datetime import datetime, timedelta
 
         from homeauto.watch.seq import summarize
@@ -142,7 +135,7 @@ class Briefing:
         return type(summary)(spoken=spoken, detail=summary.detail)
 
     def _trouble(self) -> str:
-        """Only what is down. Silence is the good news, and keeps this short."""
+        """Solo lo caído. El silencio es la buena noticia y mantiene esto corto."""
         if self.monitor is None:
             return ""
 

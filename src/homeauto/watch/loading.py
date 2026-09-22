@@ -1,7 +1,7 @@
-"""Reading the list of services to watch.
+"""Lectura de la lista de servicios a vigilar.
 
-A file instead of environment variables: each service needs a name, a target,
-an expected answer and an urgency, and that in a .env line is unreadable.
+Un archivo en vez de variables de entorno: cada servicio necesita nombre,
+destino, respuesta esperada y urgencia, y eso en una línea de .env es ilegible.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ ALLOWED_FIELDS = {"name", "url", "host", "port", "expect", "urgent", "timeout", 
 
 
 class ChecksError(Exception):
-    """The file exists but cannot be used."""
+    """El archivo existe pero no se puede usar."""
 
 
 def load_checks(path: Path | str) -> list[Check]:
@@ -37,7 +37,7 @@ def load_checks(path: Path | str) -> list[Check]:
         if not isinstance(entry, dict):
             raise ChecksError(f"{path}: cada servicio tiene que ser un objeto")
 
-        # A silent typo in "urgent" would mean it never wakes you up.
+        # Un typo silencioso en "urgent" significaría que nunca te despierta.
         unknown = set(entry) - ALLOWED_FIELDS
         if unknown:
             raise ChecksError(f"{path}: campos desconocidos: {', '.join(sorted(unknown))}")

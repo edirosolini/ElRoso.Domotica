@@ -1,4 +1,4 @@
-"""Small timestamps the watchers need to remember between runs."""
+"""Marcas de tiempo que los watchers recuerdan entre vueltas."""
 
 from __future__ import annotations
 

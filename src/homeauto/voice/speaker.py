@@ -1,7 +1,7 @@
-"""The speaker as a single thing: say a phrase out loud.
+"""El parlante como una sola cosa: decir una frase en voz alta.
 
-Ties together synthesis, publishing the audio over HTTP, and telling the device
-to fetch it. Everything above this layer only says what it wants said.
+Junta la síntesis, publicar el audio por HTTP y avisarle al equipo que lo baje.
+Todo lo que está por encima solo dice qué quiere que se diga.
 """
 
 from __future__ import annotations
@@ -10,10 +10,7 @@ from pathlib import Path
 
 from homeauto.voice.tts import duration_seconds
 
-# Everything the house says goes out at least this loud, and the device gets
-# its own level back afterwards. A house left at low volume turns an
-# announcement into nothing, and nobody remembers to check the volume before
-# an alarm goes off.
+# Piso de volumen para todo lo hablado. Después se le devuelve el suyo al equipo.
 MIN_VOLUME = 60
 
 
@@ -31,13 +28,10 @@ class Speaker:
             self._serving = True
 
     def say(self, text: str, chime: bool = False) -> Path:
-        """Synthesize, publish and play. Returns the audio file used.
+        """Sintetiza, publica y reproduce. Devuelve el archivo de audio usado.
 
-        The floor is applied here, and not by whoever asks for the phrase,
-        because there are five different callers and every one of them wants
-        the same thing: to be heard.
-
-        `chime` prefixes the alarm beeps, in the same clip and the same cast.
+        El piso de volumen se aplica acá, para todos los llamadores. `chime`
+        pega adelante los beeps de alarma, en el mismo clip y el mismo cast.
         """
         path = self.synth.say(text, chime=chime)
         self._ensure_serving()

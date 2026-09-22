@@ -1,17 +1,11 @@
-"""What a command is still missing before it can run.
+"""Qué le falta a un comando para poder ejecutarse.
 
-The router names the command; this says whether the command has enough to work
-with. It exists so that "creá una alarma" becomes a question instead of the
-parser's complaint: the person did not write a bad argument, they wrote half of
-a good one.
+El router nombra el comando; esto dice si tiene con qué trabajar, así media
+orden se vuelve una pregunta en vez del error del parser. Nunca completa nada:
+el dato sale de la persona.
 
-🔴 It never fills anything in. Deciding that an alarm with no hour means seven
-in the morning is how the house ends up waking somebody nobody asked to wake.
-The datum comes from the person, always.
-
-⚠️ The shape of an alarm is checked in two places: here and in `Commands.alarm`.
-They have to agree, and `tests/bot/test_conversation.py` ties them together —
-anything this module calls incomplete, the real command has to refuse.
+La forma de una alarma se mira acá y en `Commands.alarm`, y
+`tests/bot/test_conversation.py` ata las dos mitades.
 """
 
 from __future__ import annotations
@@ -22,24 +16,24 @@ from dataclasses import dataclass
 from homeauto.route import strip_target
 from homeauto.timespec import TOMORROW_WORDS, TimeSpecError, parse_duration, parse_weekdays
 
-# The words that already say how an alarm repeats. `Commands.alarm` reads the
-# same tuple, so a new one is added once.
+# Las palabras que ya dicen cómo repite una alarma. `Commands.alarm` lee la
+# misma tupla, así que una nueva se agrega en un solo lugar.
 DAILY_WORDS = ("diaria", "diario", "daily")
 
 _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
 _DIGIT = re.compile(r"\d")
-# «en comedor» with nothing after it: a device was named and the message never
-# arrived. `strip_target` leaves it alone —it only drops a prefix that has
-# something behind it— so here it counts as empty.
+# «en comedor» sin nada atrás: se nombró un equipo y el mensaje nunca llegó.
+# `strip_target` no lo toca —solo saca un prefijo que tenga algo detrás—, así
+# que acá cuenta como vacío.
 _TARGET_ONLY = re.compile(r"^en\s+[a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
 class Slot:
-    """A missing datum: its name, and what to ask for it.
+    """Un dato que falta: su nombre y con qué pregunta pedirlo.
 
-    The question goes to the chat and never to the synthesizer, so unlike
-    everything the house says out loud it is allowed to carry digits.
+    La pregunta va al chat y nunca al sintetizador, así que a diferencia de
+    todo lo que la casa dice, puede llevar dígitos.
     """
 
     name: str
@@ -56,13 +50,13 @@ DEVICE = Slot("equipo", "¿En qué equipo?")
 
 
 def missing(command: str, argument: str) -> Slot | None:
-    """The first datum the command still needs, or None when it can run."""
+    """El primer dato que le falta al comando, o None si ya puede ejecutarse."""
     check = _CHECKS.get(command)
     return check(_payload(argument)) if check else None
 
 
 def _payload(argument: str) -> str:
-    """What the command carries, with any targeting taken off the front."""
+    """Lo que lleva el comando, sin el destino que va adelante."""
     text = strip_target(argument).strip()
     return "" if _TARGET_ONLY.fullmatch(text) else text
 
@@ -78,7 +72,7 @@ def _looks_like_time(token: str) -> bool:
 
 
 def _timed(text: str, when: Slot) -> Slot | None:
-    """Whether a "<cuándo> <mensaje>" still misses one of its two halves."""
+    """Si a un "<cuándo> <mensaje>" le falta alguna de sus dos mitades."""
     text = text.strip()
     if not text:
         return when
@@ -102,11 +96,11 @@ def _alarm(argument: str) -> Slot | None:
 
     head, _, tail = argument.partition(" ")
     if head.lower() in DAILY_WORDS or parse_weekdays(head):
-        # How it repeats is already said; what is left is the hour and the text.
+        # Cómo repite ya está dicho; falta la hora y el texto.
         return _timed(tail, TIME)
 
-    # A one-off alarm is a complete order, but not an obvious one: it is the
-    # owner's call to ask rather than schedule a single shot in silence.
+    # Una alarma de una sola vez es una orden completa pero no obvia: se
+    # pregunta en vez de agendarla en silencio.
     return _timed(argument, TIME) or REPEAT
 
 

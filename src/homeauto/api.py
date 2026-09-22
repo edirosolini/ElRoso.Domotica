@@ -1,8 +1,8 @@
-"""A door for other systems to speak through the house.
+"""Una puerta para que otros sistemas hablen por la casa.
 
-Long polling means the bot itself needs no inbound port. This does: a small
-HTTP endpoint on the LAN so a backup script, a monitor or a cron can announce
-something. It is protected by a shared token and never exposed to internet.
+Con long polling el bot no necesita ningún puerto entrante. Esto sí: un
+endpoint HTTP chico en la LAN para que un script de backup, un monitor o un
+cron anuncien algo. Va protegido con token compartido y nunca sale a internet.
 """
 
 from __future__ import annotations
@@ -26,15 +26,15 @@ MAX_TEXT = 500
 
 
 class ApiError(Exception):
-    """The request was understood but cannot be served."""
+    """El pedido se entendió pero no se puede atender."""
 
 
 class Unauthorized(Exception):
-    """Wrong or missing token."""
+    """Token equivocado o ausente."""
 
 
 class ApiService:
-    """The logic behind the endpoint, free of HTTP."""
+    """La lógica del endpoint, sin nada de HTTP."""
 
     def __init__(
         self,
@@ -60,7 +60,7 @@ class ApiService:
         )
 
     def _authenticate(self, token: str) -> None:
-        # compare_digest so a wrong token cannot be guessed one character at a time.
+        # compare_digest para que un token equivocado no se adivine de a un carácter.
         if not token or not self.token or not hmac.compare_digest(token, self.token):
             raise Unauthorized("token inválido")
 

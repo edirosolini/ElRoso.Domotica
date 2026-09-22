@@ -1,6 +1,6 @@
-"""What was already announced.
+"""Lo que ya se avisó.
 
-Without this, every restart would shout the next hour's events again.
+Sin esto, cada reinicio volvería a gritar los eventos de la próxima hora.
 """
 
 from __future__ import annotations
@@ -42,6 +42,6 @@ class SeenStore:
             )
 
     def forget_before(self, cutoff: datetime) -> None:
-        """Keep the table from growing forever; a past event never repeats."""
+        """Evita que la tabla crezca para siempre; un evento pasado no se repite."""
         with self._connect() as conn:
             conn.execute("DELETE FROM announced WHERE at < ?", (cutoff.isoformat(),))

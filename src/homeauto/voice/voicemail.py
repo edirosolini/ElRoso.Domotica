@@ -14,7 +14,7 @@ BITRATE = "24"
 
 
 class VoicemailError(Exception):
-    """The answer could not be turned into a voice note."""
+    """La respuesta no se pudo convertir en nota de voz."""
 
 
 class OpusEncoder:
@@ -38,7 +38,7 @@ class OpusEncoder:
 
 
 class Voicemail:
-    """Turns a sentence into a voice note, reusing what is already encoded."""
+    """Convierte una frase en nota de voz, reusando lo ya codificado."""
 
     def __init__(self, synth, encode: Callable[[Path, Path], None] | None = None):
         self.synth = synth

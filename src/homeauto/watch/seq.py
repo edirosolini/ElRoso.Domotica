@@ -1,14 +1,9 @@
-"""Reading errors out of Seq.
+"""Lectura de los errores de Seq.
 
-Seq holds the logs of the services running on the VPS, so it answers *why*
-something broke instead of just that it stopped answering. It cannot report the
-VPS being down — it dies with it — which is why the tunnel is watched
-separately as a plain TCP check.
-
-⚠️ The exact field names of this Seq instance were not verified against the
-real API (it needs a key). The parser is deliberately tolerant: it accepts the
-documented names and a couple of likely variants, and never crashes on a
-missing field.
+Seq tiene los logs de los servicios del VPS, así que dice *por qué* se rompió
+algo. No puede avisar de que el VPS se cayó, y por eso el túnel se vigila
+aparte. El parser es tolerante: acepta los nombres de campo documentados y un
+par de variantes, y nunca revienta por uno que falte.
 """
 
 from __future__ import annotations
@@ -53,7 +48,7 @@ SPOKEN_GROUPS = 2
 
 
 class SeqError(Exception):
-    """Seq could not be queried."""
+    """No se pudo consultar Seq."""
 
 
 @dataclass(frozen=True)
@@ -76,7 +71,7 @@ def _first(payload: dict, names: tuple[str, ...], default=None):
 
 
 def _properties(payload: dict) -> dict:
-    """The event properties as a plain dict; Seq sends them as a list of pairs."""
+    """Las propiedades del evento como dict; Seq las manda como lista de pares."""
     found = {}
     for item in payload.get("Properties") or []:
         if isinstance(item, dict) and item.get("Name"):
@@ -85,16 +80,16 @@ def _properties(payload: dict) -> dict:
 
 
 def spoken_environment(raw: str) -> str:
-    """How an environment is said out loud."""
+    """Cómo se dice un ambiente en voz alta."""
     clean = raw.strip().lower()
     return SPOKEN_ENVIRONMENTS.get(clean, clean.replace("-", " ").replace("_", " "))
 
 
 def spoken_application(raw: str, environment: str = "") -> str:
-    """The app name without what Piper reads wrong.
+    """El nombre de la app sin lo que Piper lee mal.
 
-    "Staging-Facturador.Backend" carries the environment as a prefix and reads
-    as "staging guion facturador punto backend".
+    "Staging-Facturador.Backend" lleva el ambiente de prefijo y se dice
+    "staging guion facturador punto backend".
     """
     name = raw.strip()
     prefix = f"{environment.strip()}-"
@@ -172,12 +167,10 @@ class SeqClient:
 
 @dataclass(frozen=True)
 class Summary:
-    """What gets said out loud, and what only gets written.
+    """Lo que se dice en voz alta, y lo que solo se escribe.
 
-    🔴 They are separate because the quoted log line is arbitrary text: it
-    carries stack traces, ids and digits, and Piper reads a digit as a loose
-    masculine cardinal. The count is spelled out for the same reason — "Hay 1
-    error" was said as "hay uno error".
+    La cita de un log es texto arbitrario, lleno de trazas, ids y dígitos, así
+    que nunca llega al parlante.
     """
 
     spoken: str
@@ -185,7 +178,7 @@ class Summary:
 
 
 def _group(events: list[SeqEvent]) -> list[tuple[str, str, int]]:
-    """(environment, application, count), production first, then by count."""
+    """(ambiente, aplicación, cantidad), producción primero y después por cantidad."""
     counted: dict[tuple[str, str], int] = {}
     for event in events:
         key = (event.environment, event.application)
@@ -211,11 +204,11 @@ def _phrase(environment: str, application: str, count: int, with_environment: bo
 
 
 def summarize(events: list[SeqEvent], source: str = "Seq", lead: bool = True) -> Summary | None:
-    """One sentence out loud. Reading seven stack traces helps nobody.
+    """Una oración en voz alta. Leer siete trazas no le sirve a nadie.
 
-    `source` names which Seq it is; the environment and the app say whether it
-    is a fire or somebody testing. `lead` is the "Atención, producción" in
-    front: the morning summary remembers what happened, it does not alert.
+    `source` nombra de qué Seq se trata; el ambiente y la app dicen si es fuego
+    o alguien probando. `lead` es el "Atención, producción" de adelante: el
+    resumen de la mañana recuerda lo que pasó, no alerta.
     """
     if not events:
         return None

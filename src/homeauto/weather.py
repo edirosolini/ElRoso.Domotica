@@ -1,7 +1,7 @@
-"""Weather, read out loud.
+"""El clima, dicho en voz alta.
 
-Uses Open-Meteo: free, no account, no API key. Nothing here depends on the
-Google Assistant, which is what fails when you ask the speaker directly.
+Usa Open-Meteo: gratis, sin cuenta y sin API key. Nada de acá depende del
+Asistente de Google, que es lo que falla al preguntarle al parlante.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 API_URL = "https://api.open-meteo.com/v1/forecast"
 TIMEOUT = 15
 
-# WMO weather codes, in the words a person would use out loud.
+# Códigos de clima de la OMM, en las palabras que usaría una persona.
 SKY = {
     (0,): "despejado",
     (1, 2): "parcialmente nublado",
@@ -31,29 +31,24 @@ SKY = {
     (95, 96, 99): "con tormenta",
 }
 
-# Below this gap, saying the "feels like" adds nothing.
+# Con menos diferencia que esta, decir la sensación térmica no agrega nada.
 FEELS_LIKE_GAP = 3
 RAIN_WORTH_MENTIONING = 20
 
-# How far ahead the rain warning looks, and how sure it has to be. Warning
-# about a coin flip is how a warning stops being read.
+# Hasta dónde mira el aviso de lluvia y qué tan seguro tiene que estar. Avisar
+# de algo que es cara o ceca es cómo un aviso deja de leerse.
 RAIN_WINDOW_HOURS = 6
 RAIN_ALERT_CHANCE = 60
 RAIN_MARK = "rain-alert"
 
-# The other four warnings. Thresholds are module constants, like the rain ones:
-# they are a judgement about this house and this city, not something to move
-# from the container. The day one of them has to be tuned remotely, it goes to
-# `Config` — and so does the rain.
+# Umbrales de los otros cuatro avisos. Constantes del módulo, como los de lluvia.
 HEAT_ALERT = 33
 COLD_ALERT = 3
 GUST_ALERT = 50
 STORM_CODES = (95, 96, 99)
 
-# 🔴 Heat and cold are about the day as a whole, so they wait for somebody to
-# be awake: at four in the morning nobody needs today's high, and the quiet
-# window would push it to the chat where it reads as noise. Wind and storm are
-# about the next few hours and go out whenever they are seen.
+# El calor y el frío son sobre el día entero, así que esperan a que alguien
+# esté despierto. El viento y la tormenta son sobre las próximas horas.
 DAY_ALERT_FROM = 7
 DAY_ALERT_TO = 11
 
@@ -64,7 +59,7 @@ STORM_MARK = "storm-alert"
 
 
 class WeatherError(Exception):
-    """The forecast could not be fetched or understood."""
+    """El pronóstico no se pudo traer o entender."""
 
 
 def describe_code(code: int) -> str:
@@ -75,7 +70,7 @@ def describe_code(code: int) -> str:
 
 
 def fetch_open_meteo(latitude: float, longitude: float) -> dict:
-    """The real call. Imported lazily so tests never touch the network."""
+    """La llamada real. Se importa tarde para que los tests no toquen la red."""
     import requests
 
     response = requests.get(
@@ -85,12 +80,12 @@ def fetch_open_meteo(latitude: float, longitude: float) -> dict:
             "longitude": longitude,
             "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code",
             "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
-            # Gusts and the sky code ride along: one request answers every
-            # warning, and the forecast is free but not ours to hammer.
+            # Las ráfagas y el código de cielo viajan con lo demás: un solo
+            # pedido contesta todos los avisos.
             "hourly": "precipitation_probability,wind_gusts_10m,weather_code",
             "timezone": "auto",
-            # Two days, not one: at 22:00 the next six hours are mostly tomorrow.
-            # The daily lists still start at today, so index 0 keeps meaning today.
+            # Dos días, no uno: a las 22:00 las próximas seis horas caen casi
+            # todas en mañana. Las listas diarias siguen empezando por hoy.
             "forecast_days": 2,
         },
         timeout=TIMEOUT,
@@ -107,7 +102,7 @@ class RainAhead:
 
 @dataclass(frozen=True)
 class HourAhead:
-    """One hour of the forecast, with everything a warning might look at."""
+    """Una hora del pronóstico, con todo lo que un aviso pueda mirar."""
 
     when: datetime
     rain_chance: int
@@ -164,10 +159,10 @@ class WeatherClient:
             raise WeatherError(f"El servicio de clima contestó algo que no entiendo: {exc}") from exc
 
     def rain_ahead(self, now: datetime, hours: int = RAIN_WINDOW_HOURS) -> RainAhead | None:
-        """The first hour in the window where rain is likely, or None.
+        """La primera hora de la ventana con lluvia probable, o None.
 
-        Open-Meteo answers in local time and without an offset (`timezone=auto`),
-        so an aware clock is compared naive: the offset is already baked in.
+        Open-Meteo contesta en hora local y sin offset (`timezone=auto`), así
+        que un reloj con zona se compara naive: el offset ya viene aplicado.
         """
         try:
             payload = self.fetch(self.latitude, self.longitude)
@@ -193,10 +188,10 @@ class WeatherClient:
         return None
 
     def hours_ahead(self, now: datetime, hours: int = RAIN_WINDOW_HOURS) -> list[HourAhead]:
-        """The forecast hour by hour inside the window, from one request.
+        """El pronóstico hora por hora dentro de la ventana, en un solo pedido.
 
-        Open-Meteo answers in local time and without an offset (`timezone=auto`),
-        so an aware clock is compared naive: the offset is already baked in.
+        Open-Meteo contesta en hora local y sin offset (`timezone=auto`), así
+        que un reloj con zona se compara naive: el offset ya viene aplicado.
         """
         try:
             payload = self.fetch(self.latitude, self.longitude)
@@ -240,16 +235,16 @@ class WeatherClient:
         return ahead
 
     def day_ahead(self) -> tuple[int, int]:
-        """Today's high and low, which is what a whole-day warning looks at."""
+        """La máxima y la mínima de hoy, que es lo que mira un aviso del día entero."""
         forecast = self.now()
         return forecast.maximum, forecast.minimum
 
     def spoken(self) -> str:
-        """One or two sentences, written to be heard rather than read."""
+        """Una o dos oraciones, escritas para escucharse y no para leerse."""
         forecast = self.now()
         where = f" en {self.place}" if self.place else ""
 
-        # Everything spelled out: "21 grados" was read as "veintiuno grados".
+        # Todo en palabras: Piper lee un dígito como cardinal masculino suelto.
         parts = [
             f"Ahora{where} hay {number(forecast.temperature)} grados, "
             f"{describe_code(forecast.code)}."
@@ -265,11 +260,10 @@ class WeatherClient:
 
 
 class RainWatcher:
-    """Says once a day that rain is coming, while there is still time to react.
+    """Avisa una vez por día que se viene el agua, con tiempo para reaccionar.
 
-    At most one warning per day on purpose: the point is to bring the clothes
-    in, not to narrate the sky. A second one the same day would be noise, and
-    noise is how a warning gets ignored.
+    Un solo aviso por día a propósito: la idea es entrar la ropa, no narrar el
+    cielo. Un segundo aviso el mismo día sería ruido.
     """
 
     def __init__(
@@ -307,7 +301,7 @@ class RainWatcher:
         try:
             self.announce(text)
         except Exception:
-            # A warning that did not get out is not done: it retries next round.
+            # Un aviso que no salió no está hecho: se reintenta en la próxima vuelta.
             log.exception("no se pudo avisar de la lluvia")
             return None
 
@@ -316,17 +310,11 @@ class RainWatcher:
 
 
 class WeatherWatcher:
-    """The other four warnings of the sky: heat, cold, wind and storm.
+    """Los otros cuatro avisos del cielo: calor, frío, viento y tormenta.
 
-    Same shape as `RainWatcher` and for the same reasons — once a day, and a
-    warning that could not be said is not marked as done — with one difference
-    that matters: 🔴 **each warning keeps its own mark**. A shared one would
-    mean a hot day silences the gust that knocks the plants over, and nobody
-    would ever find out why.
-
-    The rain keeps its own watcher: its mark, its threshold and its test have
-    history, and folding it in here would rewrite state that is already in the
-    deployed database.
+    Misma forma que `RainWatcher`: una vez por día, y lo que no se pudo decir
+    no se marca. Cada aviso lleva su propia marca, así uno no tapa a otro. La
+    lluvia sigue en su watcher aparte.
     """
 
     def __init__(
@@ -355,7 +343,7 @@ class WeatherWatcher:
             try:
                 self.announce(text)
             except Exception:
-                # Not marked: it goes out on the next round, like the rain.
+                # No se marca: sale en la vuelta siguiente, como la lluvia.
                 log.exception("no se pudo avisar del clima")
                 continue
             self.marks.set(mark, now)

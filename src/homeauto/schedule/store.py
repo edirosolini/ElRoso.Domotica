@@ -1,7 +1,7 @@
-"""Persistence for timers and alarms.
+"""Persistencia de timers y alarmas.
 
-Scheduled things have to survive a restart of the container: an alarm that
-disappears because the service was updated at midnight is worse than no alarm.
+Lo agendado tiene que sobrevivir un reinicio del contenedor: una alarma que
+desaparece porque el servicio se actualizó a medianoche es peor que no tenerla.
 """
 
 from __future__ import annotations
@@ -51,12 +51,12 @@ class Job:
 
     @property
     def weekdays(self) -> list[int]:
-        """ISO weekday numbers of a weekly job; empty for everything else."""
+        """Días ISO de un job semanal; vacío para todo lo demás."""
         return [int(part) for part in (self.days or "").split(",") if part.strip()]
 
     @property
     def devices(self) -> list[str]:
-        """The column holds a comma-separated list; one device is the common case."""
+        """La columna guarda una lista separada por comas; lo común es un solo equipo."""
         return [part.strip() for part in (self.device or "").split(",") if part.strip()]
 
 
@@ -82,7 +82,7 @@ class Store:
 
     @staticmethod
     def _add_missing_columns(conn: sqlite3.Connection) -> None:
-        """Databases created before a column existed are already out there."""
+        """Hay bases creadas antes de que existiera la columna."""
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
         if "device" not in existing:
             conn.execute("ALTER TABLE jobs ADD COLUMN device TEXT")
@@ -106,7 +106,7 @@ class Store:
         if repeat not in REPEATS:
             raise ValueError(f"repeat inválido: {repeat}")
         stored_days = ",".join(str(day) for day in sorted(days)) if days else None
-        # A weekly job with no days would never find a day to fire on.
+        # Un job semanal sin días no encontraría nunca un día para disparar.
         if repeat == WEEKLY and not stored_days:
             raise ValueError("una alarma semanal necesita días")
         with self._connect() as conn:
