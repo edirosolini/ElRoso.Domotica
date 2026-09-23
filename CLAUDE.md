@@ -268,8 +268,9 @@ día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
   clima, la economía y lo que esté caído, "en Sanatorio Colegiales" era lo que lo hacía
   arrastrarse. `/agenda`, que se pide a propósito, lo sigue diciendo: es el argumento `place`
   de `speech.describe()`.
-- **En el chat va un párrafo por fuente**; al parlante, una sola línea. Pegado, el resumen
-  escrito era un bloque que no se podía leer de un vistazo.
+- **Un párrafo por fuente, escrito y hablado.** En el chat es una línea en blanco; en el
+  parlante, la pausa de punto y aparte de `VoiceSynth`. Pegado, el resumen era un bloque que
+  no se podía leer de un vistazo ni seguir de oído.
 - **No depende de la agenda.** El job del resumen se agenda aunque no haya ningún calendario
   configurado. Por eso está fuera de `schedule_calendar_jobs()`.
 - **De los servicios solo se nombran los caídos.** Escuchar "todo en orden" cada mañana
@@ -1063,6 +1064,12 @@ abajo en ese orden a propósito.
   velocidad para toda la casa**, por decisión del dueño, y se mueve por entorno sin
   desplegar. ⚠️ Cambiarla deja huérfano en `/var/lib/domotica/cache` lo sintetizado con
   el ritmo viejo: el ritmo es parte de la clave.
+- 🔴 **Piper no deja pausa entre renglones**, solo entre oraciones de un mismo renglón: un
+  `\n` pegaba los bloques todavía más que un espacio. Por eso `VoiceSynth` parte el texto por
+  renglones, sintetiza cada uno aparte y los une con `DEFAULT_PARAGRAPH_SILENCE` (2 s, contra
+  1,1 s entre oraciones). Cada párrafo es un arranque de Piper más: el resumen tarda unos
+  segundos más en sintetizarse. La pausa entra en la clave del cache **solo si hay más de un
+  renglón**, así lo ya sintetizado de una línea sigue sirviendo.
 - 🔴 **El ritmo va en la clave del cache, igual que la voz, y por el mismo motivo.**
   `build_synth()` arma el runner y el `VoiceSynth` juntos para que los dos usen el mismo
   `pacing`: si se separan, se sintetiza con un ritmo y se reusa audio hecho con otro.
