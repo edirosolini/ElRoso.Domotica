@@ -28,6 +28,8 @@ DEFAULT_MIN_SECONDS = 1.5
 # cache: cambiarlos deja huérfano lo sintetizado con el ritmo viejo.
 DEFAULT_LENGTH_SCALE = 1.40
 DEFAULT_SENTENCE_SILENCE = 1.10
+# Pausa de punto y aparte, entre renglones del texto. Piper no deja ninguna.
+DEFAULT_PARAGRAPH_SILENCE = 2.0
 
 
 class TtsError(Exception):
@@ -132,6 +134,25 @@ def _pad_to_minimum(path: Path, min_seconds: float) -> None:
         target.writeframes(frames + silence)
 
 
+def _join(parts: list[Path], out_path: Path, silence_seconds: float) -> None:
+    """Une los wav en uno, con silencio entre cada uno."""
+    audio = b""
+    params = None
+    for index, part in enumerate(parts):
+        with wave.open(str(part), "rb") as source:
+            params = source.getparams()
+            if index:
+                gap = int(silence_seconds * params.framerate)
+                audio += b"\x00" * (gap * params.sampwidth * params.nchannels)
+            audio += source.readframes(source.getnframes())
+
+    with wave.open(str(out_path), "wb") as target:
+        target.setnchannels(params.nchannels)
+        target.setsampwidth(params.sampwidth)
+        target.setframerate(params.framerate)
+        target.writeframes(audio)
+
+
 class VoiceSynth:
     """Produce un wav reproducible para una frase, reusando lo ya hecho."""
 
@@ -142,6 +163,7 @@ class VoiceSynth:
         min_seconds: float = DEFAULT_MIN_SECONDS,
         voice: str = "",
         pacing: str = "",
+        paragraph_silence: float = DEFAULT_PARAGRAPH_SILENCE,
     ):
         self.cache_dir = Path(cache_dir)
         self.runner = runner
@@ -149,15 +171,20 @@ class VoiceSynth:
         # El ritmo y la voz cambian el audio, así que van en la clave del cache.
         self.pacing = pacing
         self.voice = voice
+        self.paragraph_silence = paragraph_silence
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # Varios equipos piden la misma frase desde varios hilos a la vez.
         self._lock = threading.Lock()
 
     def say(self, text: str, chime: bool = False) -> Path:
-        """`chime` pega adelante los beeps de alarma. Va en la clave del cache."""
-        text = text.strip()
-        if not text:
+        """`chime` pega adelante los beeps de alarma. Va en la clave del cache.
+
+        Cada renglón es un párrafo y lleva una pausa de punto y aparte.
+        """
+        paragraphs = [line.strip() for line in text.splitlines() if line.strip()]
+        if not paragraphs:
             raise TtsError("El texto está vacío")
+        text = "\n".join(paragraphs)
 
         cached = self.cache_dir / f"{self._key(text, chime)}.wav"
         if cached.is_file():
@@ -172,7 +199,7 @@ class VoiceSynth:
             # envenenar el cache, y el id de hilo evita que dos choquen.
             pending = cached.with_suffix(f".{threading.get_ident():x}.partial")
             try:
-                self.runner(text, pending)
+                self._synthesize(paragraphs, pending)
                 if chime:
                     chime_audio.prepend(pending)
                 _pad_to_minimum(pending, self.min_seconds)
@@ -181,6 +208,23 @@ class VoiceSynth:
                 pending.unlink(missing_ok=True)
         return cached
 
+    def _synthesize(self, paragraphs: list[str], out_path: Path) -> None:
+        if len(paragraphs) == 1:
+            self.runner(paragraphs[0], out_path)
+            return
+
+        parts = [out_path.with_suffix(f"{out_path.suffix}.{index}") for index in range(len(paragraphs))]
+        try:
+            for paragraph, part in zip(paragraphs, parts):
+                self.runner(paragraph, part)
+            _join(parts, out_path, self.paragraph_silence)
+        finally:
+            for part in parts:
+                part.unlink(missing_ok=True)
+
     def _key(self, text: str, chime: bool = False) -> str:
-        seed = f"{self.voice}\x00{self.pacing}\x00{'chime' if chime else ''}\x00{text}"
+        pacing = self.pacing
+        if "\n" in text:
+            pacing = f"{pacing}|{self.paragraph_silence}"
+        seed = f"{self.voice}\x00{pacing}\x00{'chime' if chime else ''}\x00{text}"
         return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]

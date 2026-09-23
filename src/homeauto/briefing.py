@@ -80,9 +80,9 @@ class Briefing:
         verse = self._safe_verse()
         if verse is not None and verse.spoken:
             parts.append(verse.spoken)
-        said = " ".join(parts) if parts else NOTHING
+        said = "\n\n".join(parts) if parts else NOTHING
 
-        written = "\n\n".join(parts) if parts else NOTHING
+        written = said
         if night is not None:
             written = f"{written}\n\n{night.detail}"
         if verse is not None and not verse.spoken:

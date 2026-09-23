@@ -124,7 +124,7 @@ def test_what_the_sources_already_polished_is_not_polished_again():
         polish=lambda text, must_keep=(): "REESCRITO",
     )
 
-    assert briefing.text() == "Hoy tenés dentista a las diez. Ahora hay veinte grados, despejado."
+    assert briefing.text() == "Hoy tenés dentista a las diez.\n\nAhora hay veinte grados, despejado."
 
 
 # --- economía y noticias ----------------------------------------------------
@@ -274,7 +274,11 @@ def test_the_chat_gets_one_paragraph_per_source():
     )
 
 
-def test_the_speaker_still_gets_one_line():
+def test_the_speaker_gets_the_same_paragraphs():
     said = Briefing(agenda=FakeAgenda(), weather=FakeWeather(), economy=FakeEconomy()).text()
 
-    assert "\n" not in said
+    assert said == (
+        "Hoy tenés dentista a las diez.\n\n"
+        "Ahora hay veinte grados, despejado.\n\n"
+        "El dólar oficial está a mil quinientos pesos."
+    )
