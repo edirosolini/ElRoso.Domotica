@@ -1064,6 +1064,12 @@ abajo en ese orden a propósito.
   velocidad para toda la casa**, por decisión del dueño, y se mueve por entorno sin
   desplegar. ⚠️ Cambiarla deja huérfano en `/var/lib/domotica/cache` lo sintetizado con
   el ritmo viejo: el ritmo es parte de la clave.
+- 🔴 **El CT ya no corre con ese default: habla a `1.15` y `0.90`**
+  (`DOMOTICA_LENGTH_SCALE` / `DOMOTICA_SENTENCE_SILENCE` en `/etc/domotica/domotica.env`,
+  desde el 2026-09-23). Con el resumen partido en párrafos, `1.40` ya sobraba: el dueño
+  escuchaba la nota de voz a 1,5x. Se probó un punto medio en vez del equivalente exacto
+  (`0.93`), porque `1.30` ya había sonado apurado en el parlante. Como los horarios, **lo que
+  manda es el env**; el default del código queda como estaba.
 - 🔴 **Piper no deja pausa entre renglones**, solo entre oraciones de un mismo renglón: un
   `\n` pegaba los bloques todavía más que un espacio. Por eso `VoiceSynth` parte el texto por
   renglones, sintetiza cada uno aparte y los une con `DEFAULT_PARAGRAPH_SILENCE` (2 s, contra
