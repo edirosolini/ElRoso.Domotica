@@ -150,3 +150,11 @@ def test_decimals_are_said_with_the_comma(value, said):
 
 def test_a_decimal_counts_things_too():
     assert decimal(1.5, FEMININE) == "una coma cinco"
+
+
+def test_a_bare_number_is_not_apocopated():
+    from homeauto.verbalize import cardinal
+
+    assert cardinal(1) == "uno"
+    assert cardinal(21) == "veintiuno"
+    assert cardinal(119) == "ciento diecinueve"

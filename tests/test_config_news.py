@@ -61,3 +61,10 @@ def test_the_economy_is_on_unless_it_is_turned_off(tmp_path):
     assert Config.from_file(write(tmp_path, "ECONOMY=off\n")).economy_enabled is False
     assert Config.from_file(write(tmp_path, "ECONOMY=no\n")).economy_enabled is False
     assert Config.from_file(write(tmp_path, "ECONOMY=on\n")).economy_enabled is True
+
+
+def test_the_verse_of_the_day_is_on_unless_it_is_turned_off(tmp_path):
+    assert Config.from_file(write(tmp_path)).verse_enabled is True
+    assert Config.from_file(write(tmp_path, "VERSE=off\n")).verse_enabled is False
+    assert Config.from_file(write(tmp_path, "VERSE=no\n")).verse_enabled is False
+    assert Config.from_file(write(tmp_path, "VERSE=on\n")).verse_enabled is True

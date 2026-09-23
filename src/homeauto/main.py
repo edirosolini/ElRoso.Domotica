@@ -24,6 +24,7 @@ from homeauto.ask import ASK_TIMEOUT, Asker
 from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands
+from homeauto.bible import VerseOfTheDay
 from homeauto.briefing import Briefing
 from homeauto.closing import Closing
 from homeauto.economy import EconomyClient
@@ -751,6 +752,7 @@ def main() -> None:
         if config.news_enabled
         else None
     )
+    verse = VerseOfTheDay() if config.verse_enabled else None
     if news is not None:
         log.info("titulares de: %s", ", ".join(config.news_feeds))
 
@@ -763,6 +765,7 @@ def main() -> None:
             monitor=monitor,
             economy=economy,
             news=news,
+            verse=verse,
             # Los mismos clientes que vigilan de día: de madrugada el aviso
             # solo va al chat, así que a la mañana se recuerda.
             seq=[watcher.client for watcher in seq_watchers],

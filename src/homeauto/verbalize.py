@@ -108,6 +108,11 @@ def decimal(value: float, gender: str = MASCULINE) -> str:
     return f"menos {said}" if value < 0 else said
 
 
+def cardinal(value: int) -> str:
+    """Un número suelto, sin sustantivo atrás: "capítulo uno", nunca "capítulo un"."""
+    return _bare(value, MASCULINE)
+
+
 def _bare(value: int, gender: str) -> str:
     """El cardinal llano —"uno", no "un"— concordando cuando hace falta."""
     if abs(value) > MAXIMUM:

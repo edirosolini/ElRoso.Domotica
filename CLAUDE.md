@@ -26,6 +26,7 @@ Domotica/
 │   ├── weather.py       # clima por Open-Meteo y los avisos del cielo
 │   ├── economy.py       # dólar, riesgo país e inflación, en palabras
 │   ├── news.py          # titulares por RSS, solo para el chat
+│   ├── bible.py         # versículo del día de YouVersion, en la NTV
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── closing.py       # cierre del día: lo de mañana y lo que sigue roto
 │   ├── calc.py          # cuentas y conversión de unidades, sin modelo
@@ -113,8 +114,8 @@ un despliegue nuevo no necesita migración.
 - **piper-tts** — síntesis de voz **offline**, voz `es_AR-daniela-high`. No sale a internet.
 - **Open-Meteo** para el clima: sin cuenta, sin API key.
 - **icalendar** y **recurring-ical-events** para leer Google Calendar.
-- Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal) y **Seq**
-  (este último por el túnel WireGuard, no por internet).
+- Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal), YouVersion
+  y **Seq** (este último por el túnel WireGuard, no por internet).
 - **pychromecast** — control del parlante.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
@@ -253,10 +254,10 @@ configuración regional es correcta y no es la causa de las fallas del Asistente
 
 ## Resumen de la mañana
 
-`briefing.py` junta agenda, clima, economía, servicios caídos y titulares en un solo texto
-hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
+`briefing.py` junta agenda, clima, economía, servicios caídos, titulares y el versículo del
+día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
 
-- **Las cinco fuentes son independientes.** Una que falla deja un hueco, no cancela el
+- **Las seis fuentes son independientes.** Una que falla deja un hueco, no cancela el
   resumen: un calendario que no contesta no te puede costar el clima. Es la misma postura
   que dentro de `agenda/`, donde un calendario roto no tapa a los otros.
 - 🔴 **Desde las noticias, el resumen tiene dos mitades.** `speech()` devuelve `spoken` y
@@ -718,6 +719,36 @@ como los calendarios y los Seq) y arma los titulares del resumen.
 - ⚠️ **Algunos medios contestan 403 sin `User-Agent`.** Clarín es uno. Verificado el
   2026-09-10: Infobae (`arc/outboundfeeds/rss/`), Ámbito y La Nación andan; los RSS de
   Página 12, Perfil y Télam están muertos.
+
+## Versículo del día
+
+`bible.py` trae el versículo del día de YouVersion en la **Nueva Traducción Viviente**
+(versión `127`) y lo pone **al final** del resumen hablado. Decisión del dueño: se dice y se
+escribe, y cierra el resumen.
+
+- 🔴 **`bible.com` no se puede leer.** La página contesta un "Client Challenge" que pide
+  JavaScript, y la API oficial de YouVersion pide una app key. Se usan dos endpoints internos
+  de `nodejs.bible.com`, sin clave: `moments/votd` da las referencias de los 366 días y
+  `bible/verse` da el texto limpio de una referencia en una versión. ⚠️ **No tienen
+  contrato**: el día que cambien, el versículo deja un hueco en el resumen y nada más.
+- **El día se busca por `tm_yday`.** Verificado el 2026-09-23: el día doscientos sesenta y
+  seis es `PSA.19.14`.
+- **El texto va literal**, como el título de un evento: no pasa por el pulidor. Solo la
+  referencia se pone en palabras: "de Salmos, capítulo diecinueve, versículo catorce". Para
+  eso existe `verbalize.cardinal()`, porque "capítulo un" es lo que diría `number()`.
+- ⚠️ **Lo único que se toca del texto es la caja.** "SEÑOR" en mayúsculas se deletrearía, así
+  que lo hablado dice "Señor"; en el chat queda como lo publicó la NTV.
+- **Los libros numerados se dicen con ordinal**: las cartas en femenino ("Primera de Juan",
+  "Segunda de Corintios") y el resto en masculino ("Primero de Samuel", "Segundo de
+  Crónicas").
+- **Un rango es de como mucho tres versículos seguidos del mismo capítulo**, verificado
+  contra la lista del año entero. Se pide uno por uno y se dice "versículos dieciocho al
+  diecinueve".
+- 🔴 **Un versículo con un dígito no se dice: queda escrito**, con su referencia y `(NTV)`.
+  Los setenta y cinco días con rango o libro numerado se probaron contra el endpoint real y
+  se pueden decir todos.
+- **Hablado, no se repite en el chat**: la copia escrita del resumen ya lo lleva.
+- `VERSE=off` lo apaga, como `ECONOMY`.
 
 ## Sonido de alarma
 

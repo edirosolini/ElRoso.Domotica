@@ -171,6 +171,11 @@ def _parse_economy(pairs: dict[str, str]) -> bool:
     return pairs.get("ECONOMY", "").strip().lower() not in ("off", "no", "0")
 
 
+def _parse_verse(pairs: dict[str, str]) -> bool:
+    """Encendido salvo que se apague: no necesita clave ni cuenta."""
+    return pairs.get("VERSE", "").strip().lower() not in ("off", "no", "0")
+
+
 def _parse_daily_hour(pairs: dict[str, str], key: str, default: str) -> clock_time | None:
     """La hora de un resumen diario, o None si está apagado."""
     raw = pairs.get(key, "").strip() or default
@@ -360,6 +365,7 @@ class Config:
     news_feeds: dict[str, str] = field(default_factory=dict)
     news_count: int = DEFAULT_NEWS_COUNT
     economy: bool = True
+    verse: bool = True
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -418,6 +424,7 @@ class Config:
             news_feeds=_parse_news(pairs),
             news_count=_parse_news_count(pairs),
             economy=_parse_economy(pairs),
+            verse=_parse_verse(pairs),
         )
 
     @property
@@ -445,6 +452,10 @@ class Config:
     @property
     def economy_enabled(self) -> bool:
         return self.economy
+
+    @property
+    def verse_enabled(self) -> bool:
+        return self.verse
 
     @property
     def seq_enabled(self) -> bool:
