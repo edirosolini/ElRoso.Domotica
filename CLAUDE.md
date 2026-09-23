@@ -268,6 +268,8 @@ día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
   clima, la economía y lo que esté caído, "en Sanatorio Colegiales" era lo que lo hacía
   arrastrarse. `/agenda`, que se pide a propósito, lo sigue diciendo: es el argumento `place`
   de `speech.describe()`.
+- **En el chat va un párrafo por fuente**; al parlante, una sola línea. Pegado, el resumen
+  escrito era un bloque que no se podía leer de un vistazo.
 - **No depende de la agenda.** El job del resumen se agenda aunque no haya ningún calendario
   configurado. Por eso está fuera de `schedule_calendar_jobs()`.
 - **De los servicios solo se nombran los caídos.** Escuchar "todo en orden" cada mañana

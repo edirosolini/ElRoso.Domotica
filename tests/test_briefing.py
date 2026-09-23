@@ -262,3 +262,19 @@ def test_the_verse_alone_is_a_summary():
     summary = Briefing(verse=FakeVerse()).speech()
 
     assert summary.spoken.startswith("El versículo del día")
+
+
+def test_the_chat_gets_one_paragraph_per_source():
+    summary = Briefing(agenda=FakeAgenda(), weather=FakeWeather(), economy=FakeEconomy()).speech()
+
+    assert summary.written == (
+        "Hoy tenés dentista a las diez.\n\n"
+        "Ahora hay veinte grados, despejado.\n\n"
+        "El dólar oficial está a mil quinientos pesos."
+    )
+
+
+def test_the_speaker_still_gets_one_line():
+    said = Briefing(agenda=FakeAgenda(), weather=FakeWeather(), economy=FakeEconomy()).text()
+
+    assert "\n" not in said
