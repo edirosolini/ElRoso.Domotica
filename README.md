@@ -275,7 +275,8 @@ original: nadie se queda sin aviso porque el modelo estaba lento.
 ## El resumen de la mañana
 
 A la hora de `BRIEFING_AT` la casa dice, en un solo texto: qué hay en la agenda, cómo está el
-cielo, los tres números de la economía, qué servicios están caídos y los titulares del día.
+cielo, los tres números de la economía, qué servicios están caídos, los titulares del día y,
+al final, el versículo del día.
 
 **Las fuentes son independientes**: la que no contesta deja un hueco, nunca cancela el
 resumen. Un calendario caído no te puede costar el clima.
@@ -289,6 +290,11 @@ dígito.
 medios configurados, tomando turnos entre ellos — cinco titulares de un solo diario son su
 portada, no las noticias del día. **Solo van al chat**, enteros y con sus cifras: son lo más
 largo del resumen y lo único que no se puede accionar, así que se leen en vez de escucharse.
+
+**Versículo del día** (`VERSE=off` lo apaga): el de YouVersion, en la Nueva Traducción
+Viviente. Cierra lo hablado con la referencia en palabras —"de Salmos, capítulo diecinueve,
+versículo catorce"— y el texto tal cual. Sin cuenta ni API key. Si el texto trae un número,
+no se dice: queda escrito en el chat.
 
 De la agenda, el resumen dice la hora y el título; el lugar queda para `/agenda`.
 
@@ -428,6 +434,7 @@ LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado
 LLM_MODEL=gemini-3.1-flash-lite
 ASK_MODEL=gemini-3.7-flash     # el que contesta /preguntar; NO hereda de LLM_MODEL
 ECONOMY=on                     # dólar, riesgo país e inflación en el resumen
+VERSE=on                       # versículo del día (NTV) al final del resumen
 NEWS_RSS_INFOBAE=https://www.infobae.com/arc/outboundfeeds/rss/?outputType=xml
 NEWS_RSS_AMBITO=https://www.ambito.com/rss/pages/home.xml   # una clave por medio
 NEWS_COUNT=5                   # cuántos titulares, hasta diez

@@ -503,6 +503,23 @@ def test_the_economy_can_be_turned_off(wired, tmp_path, monkeypatch):
     assert seen["economy"] is None
 
 
+def test_the_verse_of_the_day_reaches_the_briefing(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["verse"] is not None
+    assert seen["verse"].passage, "el doble tiene que poder usarse como lo real"
+
+
+def test_the_verse_of_the_day_can_be_turned_off(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path, "VERSE=off\n"))
+
+    assert seen["verse"] is None
+
+
 def test_without_feeds_there_are_no_news(wired, tmp_path, monkeypatch):
     seen = briefing_built(monkeypatch)
 

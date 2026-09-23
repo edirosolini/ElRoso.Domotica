@@ -210,3 +210,55 @@ def test_nothing_spoken_in_the_summary_carries_a_digit():
     )
 
     assert not any(character.isdigit() for character in briefing.speech().spoken)
+
+
+class FakeVerse:
+    def __init__(self, spoken="El versículo del día, de Salmos, capítulo diecinueve, versículo catorce: mi roca.",
+                 written="📖 Salmos 19:14 (NTV)\nmi roca."):
+        self.said = spoken
+        self.text = written
+
+    def passage(self):
+        from homeauto.bible import Passage
+
+        return Passage(spoken=self.said, written=self.text)
+
+
+def test_the_verse_closes_what_is_said():
+    briefing = Briefing(agenda=FakeAgenda(), weather=FakeWeather(), verse=FakeVerse())
+
+    said = briefing.text()
+
+    assert said.endswith("versículo catorce: mi roca.")
+    assert said.startswith("Hoy tenés dentista")
+
+
+def test_a_spoken_verse_is_not_written_twice():
+    summary = Briefing(weather=FakeWeather(), verse=FakeVerse()).speech()
+
+    assert summary.written.count("mi roca") == 1
+
+
+def test_a_verse_that_cannot_be_said_still_reaches_the_chat():
+    briefing = Briefing(weather=FakeWeather(), verse=FakeVerse(spoken=""))
+
+    summary = briefing.speech()
+
+    assert "Salmos" not in summary.spoken
+    assert "📖 Salmos 19:14 (NTV)" in summary.written
+
+
+def test_a_broken_verse_leaves_a_hole_and_nothing_more():
+    class BrokenVerse:
+        def passage(self):
+            raise RuntimeError("bible.com no contesta")
+
+    summary = Briefing(weather=FakeWeather(), verse=BrokenVerse()).speech()
+
+    assert summary.spoken == summary.written == "Ahora hay veinte grados, despejado."
+
+
+def test_the_verse_alone_is_a_summary():
+    summary = Briefing(verse=FakeVerse()).speech()
+
+    assert summary.spoken.startswith("El versículo del día")

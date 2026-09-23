@@ -1,4 +1,4 @@
-"""El resumen de la mañana: el día, el cielo, las cifras y lo que esté caído.
+"""El resumen de la mañana: el día, el cielo, las cifras, lo que esté caído y el versículo.
 
 Fuentes independientes juntadas en un solo texto hablado: una que falla deja un
 hueco, nunca cancela el resumen. Nada de lo hablado lleva dígitos. Los
@@ -38,6 +38,7 @@ class Briefing:
         monitor=None,
         economy=None,
         news=None,
+        verse=None,
         seq=(),
         polish: Callable[..., str] = as_is,
     ):
@@ -49,6 +50,7 @@ class Briefing:
         # se recuerdan acá.
         self.seq = [seq] if hasattr(seq, "errors_since") else list(seq)
         self.news = news
+        self.verse = verse
         # Solo la línea de lo caído: la agenda y el clima ya vienen pulidos por
         # sus propias fuentes, y pulir dos veces no agrega nada.
         self.polish = polish
@@ -75,11 +77,16 @@ class Briefing:
         night = self._safe_night()
         if night is not None:
             parts.append(night.spoken)
+        verse = self._safe_verse()
+        if verse is not None and verse.spoken:
+            parts.append(verse.spoken)
         said = " ".join(parts) if parts else NOTHING
 
         written = said
         if night is not None:
             written = f"{written}\n\n{night.detail}"
+        if verse is not None and not verse.spoken:
+            written = f"{written}\n\n{verse.written}"
         headlines = self._safe_news()
         if headlines:
             written = f"{written}\n\n{headlines}"
@@ -112,6 +119,16 @@ class Briefing:
         except Exception:
             log.exception("no pude traer las noticias")
             return ""
+
+    def _safe_verse(self):
+        """El versículo del día, o None si no hay o no contestó."""
+        if self.verse is None:
+            return None
+        try:
+            return self.verse.passage()
+        except Exception:
+            log.exception("no pude traer el versículo del día")
+            return None
 
     def _safe_night(self):
         """Lo que juntó Seq de noche, o None si no hay nada que contar."""
