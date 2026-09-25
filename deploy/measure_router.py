@@ -23,6 +23,7 @@ CASES = (
     ("poné una alarma todos los días a las 7:30 para levantarse", "alarma", "7:30"),
     ("qué tengo programado", "lista", ""),
     ("cancelá el 3", "cancelar", "3"),
+    ("posponé la alarma cinco minutos", "posponer", "5m"),
     ("callate dos horas", "silencio", "2h"),
     ("podés hablar de nuevo", "hablar", ""),
     ("bajá el volumen a 30", "volumen", "30"),

@@ -162,3 +162,29 @@ def test_the_message_is_reworded_before_being_said():
 
     assert speaker.said == ["Te recuerdo: arriba"]
     assert "Te recuerdo: arriba" in sent[0], "el chat dice lo mismo que el parlante"
+
+
+# --- acciones del aviso ----------------------------------------------------
+
+
+def test_the_chat_gets_the_actions_when_there_are_some():
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=FakeSpeaker("parlante")),
+        notify=lambda chat_id, text, actions=(): sent.append(actions),
+        fallback="parlante",
+        actions=(("Posponer 10 min", "posponer 10m"),),
+    )
+
+    announcer(JOB)
+
+    assert sent == [(("Posponer 10 min", "posponer 10m"),)]
+
+
+def test_without_actions_the_chat_gets_plain_text():
+    """HouseVoice y la API usan el mismo notificador con dos argumentos."""
+    announcer, _, sent = build()
+
+    announcer(JOB)
+
+    assert len(sent) == 1

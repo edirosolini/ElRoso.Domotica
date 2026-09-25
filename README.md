@@ -15,6 +15,7 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /alarma lun-vie 5:30 arriba     avisa solo esos días
 /lista                          lo que está programado
 /cancelar 3                     cancela por número
+/posponer                       repite en 10 minutos la alarma que acaba de sonar
 /silencio 2h                    no habla por un rato
 /hablar                         cancela el silencio
 /volumen 40                     0 a 100

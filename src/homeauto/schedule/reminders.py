@@ -10,10 +10,14 @@ import logging
 from datetime import datetime, timedelta
 from typing import Callable, Iterable, Protocol
 
+from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.store import DAILY, ONCE, WEEKLY, Job, Store
 from homeauto.timespec import next_weekday
 
 log = logging.getLogger(__name__)
+
+# Hasta cuánto después de sonar se puede posponer una alarma.
+SNOOZE_WINDOW = timedelta(minutes=30)
 
 
 class Timer(Protocol):
@@ -22,10 +26,19 @@ class Timer(Protocol):
 
 
 class Reminders:
-    def __init__(self, store: Store, timer: Timer, announce: Callable[[Job], None]):
+    def __init__(
+        self,
+        store: Store,
+        timer: Timer,
+        announce: Callable[[Job], None],
+        fired: FiredStore | None = None,
+        clock: Callable[[], datetime] = datetime.now,
+    ):
         self.store = store
         self.timer = timer
         self.announce = announce
+        self.fired = fired
+        self.clock = clock
 
     def start(self, now: datetime | None = None) -> None:
         """Rearma todo tras un reinicio, disparando lo que se haya perdido."""
@@ -60,6 +73,17 @@ class Reminders:
         self.timer.unschedule(str(job_id))
         return self.store.remove(job_id)
 
+    def snooze(self, chat_id: int, delay: timedelta) -> Job | None:
+        """Repite dentro de `delay` lo último que sonó en el chat, o None si no hay nada reciente."""
+        if self.fired is None:
+            return None
+        last = self.fired.last(chat_id)
+        now = self.clock()
+        if last is None or now - last.at > SNOOZE_WINDOW:
+            return None
+        self.fired.forget(chat_id)
+        return self.add(chat_id, now + delay, last.message, device=last.device)
+
     def _arm(self, job: Job) -> None:
         self.timer.schedule(str(job.id), job.when, lambda: self._fire(job.id))
 
@@ -67,6 +91,10 @@ class Reminders:
         job = self.store.get(job_id)
         if job is None:  # cancelled between the arming and the firing
             return
+
+        # Antes de anunciar: el botón de posponer llega con el aviso.
+        if self.fired is not None:
+            self.fired.remember(job.chat_id, job.message, job.device, self.clock())
 
         try:
             self.announce(job)

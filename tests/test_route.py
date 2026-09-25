@@ -150,3 +150,20 @@ def test_what_nobody_wrote_in_the_thread_is_still_invented():
     router = Router(model_saying("COMANDO: decir\nARGUMENTO: la cena está lista"))
 
     assert router.route("quiero que digas algo\nque bajen a comer").is_question
+
+
+def test_every_routable_command_is_described_in_the_prompt():
+    """Un comando que el prompt no nombra existe, pero el modelo no lo elige nunca."""
+    from homeauto.route import PROMPT
+
+    missing = [name for name in ROUTABLE if f"- {name}:" not in PROMPT]
+    assert missing == []
+
+
+def test_postponing_is_routable():
+    router = Router(model_saying("COMANDO: posponer\nARGUMENTO: 5m"))
+
+    decision = router.route("posponé la alarma cinco minutos")
+
+    assert decision.command == "posponer"
+    assert decision.argument == "5m"

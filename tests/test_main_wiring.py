@@ -707,3 +707,40 @@ def test_without_a_key_there_is_no_translator(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 
     assert got["translator"] is None
+
+
+def _spy_init(monkeypatch, cls):
+    seen = {}
+    original = cls.__init__
+
+    def spy(self, *args, **kwargs):
+        seen.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(cls, "__init__", spy)
+    return seen
+
+
+def test_an_alarm_offers_to_be_postponed(wired, tmp_path, monkeypatch):
+    seen = _spy_init(monkeypatch, main.Announcer)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert seen["actions"] == main.SNOOZE_ACTIONS
+
+
+def test_what_fired_is_kept_in_the_one_database(wired, tmp_path, monkeypatch):
+    seen = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    fired = seen["fired"]
+    assert fired.db_path == tmp_path / "jobs.db"
+    fired.remember(42, "arriba", None, main.datetime(2026, 9, 25, 7, 30))
+    assert fired.last(42).message == "arriba"
+
+
+def test_a_button_has_a_handler(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert any(isinstance(h, main.CallbackQueryHandler) for h in wired.handlers)

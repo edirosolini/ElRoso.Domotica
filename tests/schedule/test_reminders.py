@@ -154,3 +154,145 @@ def test_weekly_job_survives_the_firing(parts):
 
     assert store.get(job.id) is not None
     assert store.get(job.id).when == datetime(2026, 9, 7, 5, 30)
+
+
+# --- posponer --------------------------------------------------------------
+
+from homeauto.schedule.fired import FiredStore
+from homeauto.schedule.reminders import SNOOZE_WINDOW
+
+
+class Clock:
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+@pytest.fixture
+def snoozing(tmp_path):
+    path = tmp_path / "jobs.db"
+    store = Store(path)
+    fired = FiredStore(path)
+    timer = FakeTimer()
+    announced = []
+    clock = Clock(SOON)
+    reminders = Reminders(
+        store=store, timer=timer, announce=announced.append, fired=fired, clock=clock
+    )
+    return reminders, store, timer, fired, clock
+
+
+def test_what_fires_is_remembered_before_it_is_announced(tmp_path):
+    """El botón llega con el aviso: tiene que poder usarse apenas aparece."""
+    path = tmp_path / "jobs.db"
+    fired = FiredStore(path)
+    seen = []
+    timer = FakeTimer()
+    reminders = Reminders(
+        store=Store(path),
+        timer=timer,
+        announce=lambda job: seen.append(fired.last(job.chat_id)),
+        fired=fired,
+        clock=Clock(SOON),
+    )
+    job = reminders.add(OWNER, SOON, "arriba", device="comedor")
+
+    timer.fire(str(job.id))
+
+    assert seen[0].message == "arriba"
+    assert seen[0].device == "comedor"
+    assert seen[0].at == SOON
+
+
+def test_snoozing_schedules_the_same_thing_later(snoozing):
+    reminders, store, timer, _, clock = snoozing
+    job = reminders.add(OWNER, SOON, "arriba", device="comedor")
+    timer.fire(str(job.id))
+    clock.now = SOON + timedelta(minutes=1)
+
+    snoozed = reminders.snooze(OWNER, timedelta(minutes=10))
+
+    assert snoozed.message == "arriba"
+    assert snoozed.device == "comedor"
+    assert snoozed.repeat == "once"
+    assert snoozed.when == clock.now + timedelta(minutes=10)
+    assert timer.armed[str(snoozed.id)][0] == snoozed.when
+
+
+def test_snoozing_a_daily_alarm_leaves_the_daily_alone(snoozing):
+    reminders, store, timer, _, _ = snoozing
+    daily = reminders.add(OWNER, SOON, "arriba", repeat="daily")
+    timer.fire(str(daily.id))
+
+    reminders.snooze(OWNER, timedelta(minutes=10))
+
+    assert store.get(daily.id).when == SOON + timedelta(days=1)
+    assert len(reminders.list(OWNER)) == 2
+
+
+def test_nothing_to_snooze_when_nothing_fired(snoozing):
+    reminders, _, _, _, _ = snoozing
+
+    assert reminders.snooze(OWNER, timedelta(minutes=10)) is None
+    assert reminders.list(OWNER) == []
+
+
+def test_an_old_alarm_cannot_be_snoozed(snoozing):
+    reminders, _, timer, _, clock = snoozing
+    job = reminders.add(OWNER, SOON, "arriba")
+    timer.fire(str(job.id))
+    clock.now = SOON + SNOOZE_WINDOW + timedelta(seconds=1)
+
+    assert reminders.snooze(OWNER, timedelta(minutes=10)) is None
+    assert reminders.list(OWNER) == []
+
+
+def test_the_edge_of_the_window_still_counts(snoozing):
+    reminders, _, timer, _, clock = snoozing
+    job = reminders.add(OWNER, SOON, "arriba")
+    timer.fire(str(job.id))
+    clock.now = SOON + SNOOZE_WINDOW
+
+    assert reminders.snooze(OWNER, timedelta(minutes=10)) is not None
+
+
+def test_a_second_tap_does_not_schedule_it_twice(snoozing):
+    reminders, _, timer, _, _ = snoozing
+    job = reminders.add(OWNER, SOON, "arriba")
+    timer.fire(str(job.id))
+
+    reminders.snooze(OWNER, timedelta(minutes=10))
+
+    assert reminders.snooze(OWNER, timedelta(minutes=10)) is None
+    assert len(reminders.list(OWNER)) == 1
+
+
+def test_a_snoozed_alarm_can_be_snoozed_again(snoozing):
+    reminders, _, timer, _, clock = snoozing
+    job = reminders.add(OWNER, SOON, "arriba")
+    timer.fire(str(job.id))
+    snoozed = reminders.snooze(OWNER, timedelta(minutes=10))
+    clock.now = snoozed.when
+    timer.fire(str(snoozed.id))
+
+    again = reminders.snooze(OWNER, timedelta(minutes=5))
+
+    assert again.message == "arriba"
+
+
+def test_someone_elses_alarm_is_not_yours_to_snooze(snoozing):
+    reminders, _, timer, _, _ = snoozing
+    job = reminders.add(STRANGER, SOON, "ajena")
+    timer.fire(str(job.id))
+
+    assert reminders.snooze(OWNER, timedelta(minutes=10)) is None
+
+
+def test_without_memory_there_is_nothing_to_snooze(parts):
+    reminders, _, timer, _ = parts
+    job = reminders.add(OWNER, SOON, "arriba")
+    timer.fire(str(job.id))
+
+    assert reminders.snooze(OWNER, timedelta(minutes=10)) is None

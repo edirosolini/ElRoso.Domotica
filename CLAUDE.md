@@ -92,7 +92,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con siete tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con nueve tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -104,6 +104,8 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `watch.Marks` | marcas de tiempo de los watchers |
 | `quiet.HushStore` | hasta cuándo dura el silencio pedido a mano |
 | `pending.PendingStore` | el comando a medio armar de cada chat |
+| `lists.ListStore` | las listas de compras y de pendientes |
+| `schedule.FiredStore` | la última alarma o timer que sonó en cada chat, para posponerla |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -819,6 +821,31 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
 - El reloj acepta `5.30` además de `5:30`. Es como la gente escribe la hora; no cambia nada
   más del parser.
 
+## Posponer
+
+`/posponer` repite la alarma o el timer que acaba de sonar, y el aviso de Telegram trae un
+botón «Posponer 10 min» que hace lo mismo.
+
+- **Se pospone lo último que sonó en ese chat**, no un número de `/lista`. Quien acaba de
+  escuchar el aviso no sabe qué número tenía.
+- **Crea un job de una sola vez**, con el mismo mensaje y los mismos equipos. Una alarma que
+  repite sigue su curso: posponer el lunes no mueve el martes.
+- **Solo vale media hora** después de sonar (`SNOOZE_WINDOW`). Pasado eso contesta que no hay
+  nada que posponer, en vez de agendar algo que nadie espera. Sin duración son diez minutos.
+- 🔴 **Lo que sonó se guarda antes de anunciarlo.** El botón llega con el aviso y el anuncio
+  bloquea hasta que termina de sonar: guardado después, un toque rápido no encontraba nada.
+- 🔴 **Posponer olvida lo que sonó**, y el botón se saca del mensaje al tocarlo. Dos toques no
+  agendan dos veces. Lo pospuesto, cuando suena, se puede volver a posponer.
+- **Se guarda en SQLite**, `schedule.FiredStore`, por lo mismo que el silencio: un reinicio
+  justo después de la alarma no puede dejar el botón sin nada atrás.
+- **El botón no sabe de Telegram hacia adentro.** `Announcer` recibe `actions` como pares
+  (etiqueta, comando con argumento); `ChatNotifier` los dibuja y `Commands.press()` los
+  ejecuta por `_dispatch()`, así que un botón solo puede correr un comando que ya existe.
+  `HouseVoice` y la API siguen llamando al notificador con dos argumentos.
+- ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
+- ⚠️ **Se tocó el prompt del router** para sumar `posponer`, así que hay que volver a medirlo
+  con `deploy/measure_router.py`, que ahora tiene treinta y un casos.
+
 ## Texto libre
 
 `route.py` interpreta un mensaje **sin barra adelante**: decide qué comando quiso la persona
@@ -1016,15 +1043,15 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 35 nombres: 24 comandos y 11 **alias** (`help`, `recordar`, `tiempo`,
+`ALL_COMMANDS` tiene 36 nombres: 25 comandos y 11 **alias** (`help`, `recordar`, `tiempo`,
 `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
 funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
 
-🔴 **El menú de Telegram tiene 9, no los 24.** Con los 18, la lista que sale al escribir `/`
+🔴 **El menú de Telegram tiene 9, no los 25.** Con los 18, la lista que sale al escribir `/`
 era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
 argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
 `parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
-`sacar`, `traducir`— **siguen andando escritos** y se alcanzan sin barra por el router.
+`sacar`, `traducir`, `posponer`— **siguen andando escritos** y se alcanzan sin barra por el router.
 
 - **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
   va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
