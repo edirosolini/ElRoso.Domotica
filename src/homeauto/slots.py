@@ -38,12 +38,22 @@ class Slot:
 
     name: str
     question: str
+    # Respuestas para ofrecer como botones: (etiqueta, texto que se contesta).
+    choices: tuple[tuple[str, str], ...] = ()
 
 
 TIME = Slot("hora", "¿A qué hora?")
 DELAY = Slot("hora", "¿Dentro de cuánto?")
 MESSAGE = Slot("mensaje", "¿Qué querés que diga?")
-REPEAT = Slot("repeticion", "¿Una sola vez, todos los días, o algunos días?")
+REPEAT = Slot(
+    "repeticion",
+    "¿Una sola vez, todos los días, o algunos días?",
+    (
+        ("Una sola vez", "una sola vez"),
+        ("Todos los días", "todos los días"),
+        ("De lunes a viernes", "de lunes a viernes"),
+    ),
+)
 NUMBER = Slot("numero", "¿Cuál cancelo? El número sale en /lista.")
 VOLUME = Slot("volumen", "¿Qué volumen? De cero a cien.")
 DEVICE = Slot("equipo", "¿En qué equipo?")

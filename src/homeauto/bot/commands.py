@@ -59,6 +59,12 @@ _ITEMS = re.compile(r"\s*,\s*|\s+y\s+")
 _LIST_SUFFIX = re.compile(r"\s+(?:de|en)\s+(.+)$", re.IGNORECASE)
 ALL_ITEMS = "todo"
 SNOOZE_DEFAULT = "10m"
+# Un botón que contesta la pregunta pendiente en vez de correr un comando.
+ANSWER_MARK = "»"
+# Un ítem de lista referido por id, como lo manda un botón: «id:17».
+ITEM_ID = "id:"
+MAX_BUTTONS = 20
+MAX_LABEL = 40
 
 
 class TargetError(Exception):
@@ -72,6 +78,9 @@ _ALOUD = contextvars.ContextVar("aloud", default=False)
 # La respuesta sin el «Entendí: /clima», que grabado era el eco del pedido.
 _SPOKEN = contextvars.ContextVar("spoken", default="")
 
+# Los botones que ofrece la respuesta en curso.
+_ACTIONS = contextvars.ContextVar("actions", default=())
+
 
 @dataclass(frozen=True)
 class Reply:
@@ -79,6 +88,29 @@ class Reply:
 
     text: str
     audio: Path | None = None
+    actions: tuple[tuple[str, str], ...] = ()
+
+
+def offer(*actions: tuple[str, str]) -> None:
+    """Suma botones (etiqueta, comando con argumento) a la respuesta en curso."""
+    _ACTIONS.set(_ACTIONS.get() + actions)
+
+
+def with_actions(run: Callable[..., str | Reply], *args) -> Reply:
+    """Corre un comando y junta su respuesta con los botones que ofreció."""
+    token = _ACTIONS.set(())
+    try:
+        answer = run(*args)
+        actions = _ACTIONS.get()
+    finally:
+        _ACTIONS.reset(token)
+    if isinstance(answer, Reply):
+        return Reply(answer.text, answer.audio, actions or answer.actions)
+    return Reply(answer, actions=actions)
+
+
+def _label(text: str) -> str:
+    return text if len(text) <= MAX_LABEL else text[: MAX_LABEL - 1] + "…"
 
 HELP = """Hola. Manejo los equipos de casa.
 
@@ -121,6 +153,10 @@ y sale por los equipos. /decir y /llamar suenan siempre, y las alarmas también.
 También me hablás sin barra: «creá una alarma» y te pregunto lo que falte.
 «olvidalo» deja lo que estábamos armando.
 Y me mandás una nota de voz: la escucho, hago lo que pidas y te contesto con otro audio."""
+
+
+def _cancel_button(job_id: int) -> tuple[str, str]:
+    return (f"Cancelar #{job_id}", f"cancelar {job_id}")
 
 
 def format_when(when: datetime, now: datetime) -> str:
@@ -563,12 +599,19 @@ class Commands:
         if self.lists is None:
             return self._no_lists()
 
-        items = self.lists.items(list_name)
-        if not items:
+        entries = self.lists.entries(list_name)
+        if not entries:
             return f"La lista de {list_name} está vacía."
 
-        lines = [f"{list_name.capitalize()} ({len(items)})"]
-        lines += [f"{position}. {item}" for position, item in enumerate(items, start=1)]
+        suffix = "" if list_name == SHOPPING else f" de {list_name}"
+        offer(*(
+            (_label(f"✓ {item}"), f"sacar {ITEM_ID}{item_id}{suffix}")
+            for item_id, item in entries[:MAX_BUTTONS]
+        ))
+        offer(("Vaciar", f"sacar {ALL_ITEMS}{suffix}"))
+
+        lines = [f"{list_name.capitalize()} ({len(entries)})"]
+        lines += [f"{position}. {item}" for position, (_, item) in enumerate(entries, start=1)]
         lines.append("\nSacá uno con /sacar <número>")
         return "\n".join(lines)
 
@@ -588,6 +631,16 @@ class Commands:
                 what = what[: suffix.start()].strip()
             except ListError:
                 pass
+
+        if what.lower().startswith(ITEM_ID):
+            try:
+                item_id = int(what[len(ITEM_ID):])
+            except ValueError:
+                return "Decime el número. Ej: /sacar 2 (lo ves con /compras)"
+            removed = self.lists.remove_id(list_name, item_id)
+            if removed is None:
+                return f"Ese ya no estaba en {list_name}."
+            return f"Saqué de {list_name}: {removed}"
 
         if what.lower() == ALL_ITEMS:
             emptied = self.lists.clear(list_name)
@@ -644,6 +697,9 @@ class Commands:
         if denial:
             return denial
 
+        if data.startswith(ANSWER_MARK):
+            return self.free_text(chat_id, data[len(ANSWER_MARK):].strip())
+
         command, _, argument = data.strip().partition(" ")
         run = self._dispatch().get(command)
         if run is None:
@@ -667,23 +723,25 @@ class Commands:
 
         token = _SPOKEN.set("")
         try:
-            answer = self.free_text(chat_id, said)
+            reply = with_actions(self.free_text, chat_id, said)
+            answer = reply.text
             spoken = _SPOKEN.get() or answer
         finally:
             _SPOKEN.reset(token)
 
+        actions = reply.actions
         text = f"🎤 «{said}»\n{answer}"
         # Piper lee «500 g» como «quinientos ge»: eso se lee, no se escucha. Y
         # grabar el puntero al chat sin mandar el chat sería una burla.
         unsayable = any(c.isdigit() for c in spoken) or spoken.strip() == NOT_SPOKEN
         if self.voicemail is None or unsayable:
-            return Reply(text)
+            return Reply(text, actions=actions)
 
         try:
-            return Reply(text, self.voicemail(spoken))
+            return Reply(text, self.voicemail(spoken), actions)
         except VoicemailError as exc:
             log.warning("no pude grabar la respuesta: %s", exc)
-            return Reply(text)
+            return Reply(text, actions=actions)
 
     def free_text(self, chat_id: int, text: str) -> str:
         """Ejecuta lo que pedía un mensaje sin barra.
@@ -748,6 +806,7 @@ class Commands:
         question = self._still_missing(decision, asked)
         if question:
             self.conversation.remember(chat_id, decision.command, thread, asked + (question.name,))
+            offer(*((label, f"{ANSWER_MARK} {text}") for label, text in question.choices))
             return note + question.question
 
         if self.conversation:
@@ -981,6 +1040,7 @@ class Commands:
         job = self.reminders.add(
             chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days
         )
+        offer(_cancel_button(job.id))
         return (
             f"{label} #{job.id} en {', '.join(aliases)} "
             f"para {format_when(when, now)}: «{message}»"
@@ -1026,6 +1086,7 @@ class Commands:
         job = self.reminders.snooze(chat_id, delay)
         if job is None:
             return "No sonó nada en la última media hora: no hay nada que posponer."
+        offer(_cancel_button(job.id))
         return f"Pospuesto #{job.id} para {format_when(job.when, self.clock())}: «{job.message}»"
 
     def list(self, chat_id: int) -> str:
@@ -1037,6 +1098,7 @@ class Commands:
         if not jobs:
             return "No hay nada programado"
 
+        offer(*(_cancel_button(job.id) for job in jobs[:MAX_BUTTONS]))
         now = self.clock()
         lines = [
             f"#{job.id} · {format_when(job.when, now)} · {', '.join(job.devices) or self.config.default_device}"

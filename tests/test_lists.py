@@ -83,3 +83,32 @@ def test_the_names_people_use(store):
 def test_an_unknown_list_is_named_in_the_error():
     with pytest.raises(ListError, match="ferretería"):
         resolve("ferretería")
+
+
+def test_entries_carry_an_id_that_does_not_move(store):
+    store.add(SHOPPING, ["leche", "pan"])
+    before = dict(store.entries(SHOPPING))
+
+    store.remove(SHOPPING, 1)
+
+    assert store.entries(SHOPPING) == [(next(k for k, v in before.items() if v == "pan"), "pan")]
+
+
+def test_an_item_is_removed_by_its_id(store):
+    store.add(SHOPPING, ["leche", "pan"])
+    pan = store.entries(SHOPPING)[1][0]
+
+    assert store.remove_id(SHOPPING, pan) == "pan"
+    assert store.items(SHOPPING) == ["leche"]
+
+
+def test_an_id_from_another_list_is_not_removed(store):
+    store.add(SHOPPING, ["leche"])
+    leche = store.entries(SHOPPING)[0][0]
+
+    assert store.remove_id(TODO, leche) is None
+    assert store.items(SHOPPING) == ["leche"]
+
+
+def test_an_id_that_is_gone_says_so(store):
+    assert store.remove_id(SHOPPING, 999) is None

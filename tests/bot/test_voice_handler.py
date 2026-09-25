@@ -43,7 +43,7 @@ class FakeSent:
         self.text = text
         self.message = message
 
-    async def edit_text(self, answer):
+    async def edit_text(self, answer, reply_markup=None):
         self.message.edits.append(answer)
 
     async def delete(self):
@@ -58,13 +58,15 @@ class FakeMessage:
         self.edits = []
         self.deleted = []
         self.voices = []
+        self.voice_markups = []
 
-    async def reply_text(self, answer):
+    async def reply_text(self, answer, reply_markup=None):
         self.replies.append(answer)
         return FakeSent(answer, self)
 
-    async def reply_voice(self, recorded):
+    async def reply_voice(self, recorded, reply_markup=None):
         self.voices.append(recorded.read())
+        self.voice_markups.append(reply_markup)
 
 
 class FakeUpdate:
@@ -179,3 +181,22 @@ async def test_without_audio_the_answer_comes_back_in_writing():
 
     assert update.message.edits, "sin audio, el texto no puede faltar"
     assert update.message.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_the_voice_answer_carries_its_buttons(tmp_path):
+    recorded = tmp_path / "respuesta.ogg"
+    recorded.write_bytes(b"OggS")
+
+    class Offering(SpyCommands):
+        def heard(self, chat_id, audio, mime="audio/ogg"):
+            return Reply("Programado #3", recorded, (("Cancelar #3", "cancelar 3"),))
+
+    app = Recorder()
+    main.register(app, Offering())
+    update = FakeUpdate(voice=FakeVoice())
+
+    await voice_callback(app)(update, None)
+
+    markup = update.message.voice_markups[0]
+    assert markup.inline_keyboard[0][0].callback_data == "cancelar 3"

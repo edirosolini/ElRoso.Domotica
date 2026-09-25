@@ -115,6 +115,27 @@ class ListStore:
             conn.execute("DELETE FROM list_items WHERE id = ?", (row["id"],))
         return row["item"]
 
+    def entries(self, list_name: str) -> list[tuple[int, str]]:
+        """Los ítems con su id, que no cambia cuando se saca otro."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, item FROM list_items WHERE list_name = ? ORDER BY id",
+                (list_name,),
+            ).fetchall()
+        return [(row["id"], row["item"]) for row in rows]
+
+    def remove_id(self, list_name: str, item_id: int) -> str | None:
+        """Saca el ítem con ese id de esa lista, o None si ya no está."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT item FROM list_items WHERE id = ? AND list_name = ?",
+                (item_id, list_name),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute("DELETE FROM list_items WHERE id = ?", (item_id,))
+        return row["item"]
+
     def clear(self, list_name: str) -> int:
         with self._connect() as conn:
             cursor = conn.execute("DELETE FROM list_items WHERE list_name = ?", (list_name,))
