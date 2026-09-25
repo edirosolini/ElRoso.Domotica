@@ -68,7 +68,7 @@ class FakeMessage:
     def __init__(self):
         self.replies = []
 
-    async def reply_text(self, text):
+    async def reply_text(self, text, reply_markup=None):
         self.replies.append(text)
 
 
@@ -207,3 +207,87 @@ async def test_a_tap_only_takes_away_the_button_it_used():
 
     rows = kept[0].inline_keyboard
     assert [[button.callback_data for button in row] for row in rows] == [["silencio 1h"]]
+
+
+# --- botones en la respuesta de un comando ------------------------------------
+
+from homeauto.bot.commands import offer
+
+
+class MessageRecorder:
+    def __init__(self):
+        self.callbacks = []
+
+    def add_handler(self, handler):
+        if not isinstance(handler, CallbackQueryHandler):
+            self.callbacks.append(handler.callback)
+
+
+class Sent:
+    def __init__(self, message):
+        self.message = message
+
+    async def edit_text(self, text, reply_markup=None):
+        self.message.edits.append((text, reply_markup))
+
+
+class CommandMessage:
+    def __init__(self):
+        self.text = "/lista"
+        self.voice = None
+        self.replies = []
+        self.edits = []
+
+    async def reply_text(self, text, reply_markup=None):
+        self.replies.append((text, reply_markup))
+        return Sent(self)
+
+
+class CommandUpdate:
+    def __init__(self):
+        self.message = CommandMessage()
+        self.effective_chat = type("Chat", (), {"id": 42})()
+
+
+class OfferingCommands:
+    def _offering(self, *_args):
+        offer(("Cancelar #5", "cancelar 5"), ("Cancelar #6", "cancelar 6"))
+        return "#5 · #6"
+
+    def press(self, chat_id, data):
+        offer(("Cancelar #7", "cancelar 7"))
+        return "Programado #7"
+
+    def __getattr__(self, _name):
+        return self._offering
+
+
+@pytest.mark.asyncio
+async def test_a_command_answer_carries_its_buttons_one_per_row():
+    app = MessageRecorder()
+    main.register(app, OfferingCommands())
+    update = CommandUpdate()
+
+    await app.callbacks[0](update, None)
+
+    text, markup = update.message.edits[0]
+    assert text == "#5 · #6"
+    assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [
+        ["cancelar 5"], ["cancelar 6"],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_answer_to_a_tap_carries_its_buttons():
+    tap = register(OfferingCommands())
+    update = FakeUpdate("» todos los días")
+    replies = []
+
+    async def reply_text(text, reply_markup=None):
+        replies.append(reply_markup)
+
+    update.callback_query.message.reply_text = reply_text
+
+    await tap(update, None)
+
+    assert replies[0].inline_keyboard[0][0].callback_data == "cancelar 7"

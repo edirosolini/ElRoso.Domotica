@@ -30,7 +30,7 @@ from homeauto.agenda.watcher import EventWatcher
 from homeauto.ask import ASK_TIMEOUT, Asker
 from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
-from homeauto.bot.commands import Commands
+from homeauto.bot.commands import Commands, with_actions
 from homeauto.bible import VerseOfTheDay
 from homeauto.briefing import Briefing
 from homeauto.closing import Closing
@@ -240,11 +240,7 @@ class ChatNotifier:
     def __call__(self, chat_id: int, text: str, actions: tuple[tuple[str, str], ...] = ()) -> None:
         if self.loop is None:
             raise RuntimeError("todavía no hay event loop al que mandarle el aviso")
-        markup = None
-        if actions:
-            markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(label, callback_data=data) for label, data in actions]]
-            )
+        markup = _keyboard(actions, per_row=len(actions))
         future = asyncio.run_coroutine_threadsafe(
             self.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup), self.loop
         )
@@ -485,16 +481,16 @@ async def _say_working(message):
         return None
 
 
-async def _answer(waiting, message, text: str) -> None:
+async def _answer(waiting, message, text: str, markup=None) -> None:
     """Convierte la burbuja de «procesando» en la respuesta, o la manda aparte."""
     if waiting is None:
-        await message.reply_text(text)
+        await message.reply_text(text, reply_markup=markup)
         return
     try:
-        await waiting.edit_text(text)
+        await waiting.edit_text(text, reply_markup=markup)
     except Exception:  # noqa: BLE001 - editar puede fallar, contestar no
         log.warning("no pude editar el mensaje de espera")
-        await message.reply_text(text)
+        await message.reply_text(text, reply_markup=markup)
 
 
 async def _drop(waiting, message, fallback: str) -> None:
@@ -506,6 +502,16 @@ async def _drop(waiting, message, fallback: str) -> None:
     except Exception:  # noqa: BLE001 - si no se puede borrar, que diga algo
         log.warning("no pude borrar el mensaje de espera")
         await _answer(waiting, message, fallback)
+
+
+def _keyboard(actions, per_row: int = 1) -> InlineKeyboardMarkup | None:
+    """Los botones (etiqueta, comando) como teclado de Telegram, o None si no hay."""
+    if not actions:
+        return None
+    buttons = [InlineKeyboardButton(label, callback_data=data) for label, data in actions]
+    return InlineKeyboardMarkup(
+        [buttons[start:start + per_row] for start in range(0, len(buttons), per_row)]
+    )
 
 
 def _without(query) -> InlineKeyboardMarkup | None:
@@ -538,12 +544,14 @@ def register(app: Application, commands: Commands) -> None:
             chat_id = update.effective_chat.id
             text = _argument_text(update)
             waiting = await _say_working(update.message)
+            markup = None
             try:
-                answer = await asyncio.to_thread(run_command, chat_id, text)
+                reply = await asyncio.to_thread(with_actions, run_command, chat_id, text)
+                answer, markup = reply.text, _keyboard(reply.actions)
             except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
                 log.exception("el comando se rompió")
                 answer = BROKEN.format(reason=exc)
-            await _answer(waiting, update.message, answer)
+            await _answer(waiting, update.message, answer, markup)
 
         return callback
 
@@ -606,13 +614,14 @@ def register(app: Application, commands: Commands) -> None:
             await _answer(waiting, update.message, BROKEN.format(reason=exc))
             return
 
+        markup = _keyboard(reply.actions)
         if reply.audio is None:
-            await _answer(waiting, update.message, reply.text)
+            await _answer(waiting, update.message, reply.text, markup)
             return
 
         # A un audio le alcanza el audio: el texto sería leerlo dos veces.
         with open(reply.audio, "rb") as recorded:
-            await update.message.reply_voice(recorded)
+            await update.message.reply_voice(recorded, reply_markup=markup)
         await _drop(waiting, update.message, reply.text)
 
     app.add_handler(MessageHandler(filters.VOICE, listen))
@@ -629,12 +638,16 @@ def register(app: Application, commands: Commands) -> None:
         except Exception:  # noqa: BLE001 - el botón que queda no impide contestar
             log.warning("no pude sacar el botón del aviso")
 
+        markup = None
         try:
-            answer = await asyncio.to_thread(commands.press, update.effective_chat.id, query.data)
+            reply = await asyncio.to_thread(
+                with_actions, commands.press, update.effective_chat.id, query.data
+            )
+            answer, markup = reply.text, _keyboard(reply.actions)
         except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
             log.exception("el botón se rompió")
             answer = BROKEN.format(reason=exc)
-        await query.message.reply_text(answer)
+        await query.message.reply_text(answer, reply_markup=markup)
 
     app.add_handler(CallbackQueryHandler(tap))
 
