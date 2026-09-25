@@ -855,6 +855,33 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
   treinta y uno de treinta y uno. Ver **Texto libre**.
 
+## Botones en las respuestas
+
+Además de los avisos, la respuesta de un comando puede traer botones. Los comandos siguen
+devolviendo un string: los botones van aparte.
+
+- 🔴 **Un comando ofrece botones con `offer()`, y `with_actions()` los junta con la
+  respuesta** en un `Reply`. Van en un `contextvars.ContextVar`, como la coletilla del
+  parlante, porque son del pedido y dos mensajes se atienden a la vez. Así ningún comando
+  cambió de firma, y el «Entendí: /alarma …» del texto libre y la nota de voz heredan los
+  botones del comando que corrieron sin hacer nada.
+- **Qué ofrece cada uno**: lo programado —`/timer`, `/alarma`, `/posponer`— trae «Cancelar
+  #N», que es el deshacer que ya prometía el «Entendí:»; `/lista`, un «Cancelar #N» por
+  cada uno; `/compras` y `/pendientes`, un «✓ ítem» por cada uno y «Vaciar».
+- 🔴 **Tachar va por id, no por posición.** Con `sacar 1`, tachar el primero corría los
+  demás y el botón siguiente sacaba otro ítem. El botón manda `sacar id:17`, que
+  `ListStore.remove_id()` borra solo si sigue en esa lista. Escrito a mano, `/sacar 2` sigue
+  siendo la posición.
+- ⚠️ **«Vaciar» es un toque sin deshacer**, igual que `/sacar todo` escrito.
+- 🔴 **La pregunta de la repetición de una alarma trae sus respuestas**: «Una sola vez»,
+  «Todos los días», «De lunes a viernes». Son las `choices` de `slots.REPEAT`. El botón no
+  corre un comando: manda `» todos los días` y `Commands.press()` lo entrega a
+  `free_text()` como si se hubiera escrito, así sigue el mismo hilo y el mismo prompt medido.
+- **Como mucho veinte botones** (`MAX_BUTTONS`) y etiquetas de cuarenta caracteres: una
+  lista larga no puede volverse una pared. `callback_data` lleva el id, no el texto, así que
+  un ítem largo entra igual en los 64 bytes.
+- **En las respuestas va un botón por renglón**; en los avisos, todos en uno.
+
 ## Texto libre
 
 `route.py` interpreta un mensaje **sin barra adelante**: decide qué comando quiso la persona

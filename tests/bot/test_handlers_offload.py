@@ -49,7 +49,7 @@ class FakeSent:
         self.text = text
         self.message = message
 
-    async def edit_text(self, answer):
+    async def edit_text(self, answer, reply_markup=None):
         self.message.edits.append(answer)
 
 
@@ -60,7 +60,7 @@ class FakeMessage:
         self.replies = []
         self.edits = []
 
-    async def reply_text(self, answer):
+    async def reply_text(self, answer, reply_markup=None):
         self.replies.append(answer)
         return FakeSent(answer, self)
 
