@@ -744,3 +744,24 @@ def test_a_button_has_a_handler(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 
     assert any(isinstance(h, main.CallbackQueryHandler) for h in wired.handlers)
+
+
+def test_the_watchers_alert_with_their_buttons(wired, tmp_path, monkeypatch):
+    monitor = _spy_init(monkeypatch, main.Monitor)
+    seq = _spy_init(monkeypatch, main.SeqWatcher)
+    checks = tmp_path / "checks.json"
+    checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
+    run_main(
+        monkeypatch,
+        config_file(
+            tmp_path,
+            f"CHECKS_FILE={checks}\nSEQ_URL=http://172.68.0.7\nSEQ_API_KEY=una-clave\n",
+        ),
+    )
+    alerted = []
+    monkeypatch.setattr(main, "_alert", lambda *args: alerted.append(args[-1]))
+
+    monitor["announce"]("vpn no responde", True)
+    seq["announce"]("errores en Seq")
+
+    assert alerted == [main.MONITOR_ACTIONS, main.SEQ_ACTIONS]

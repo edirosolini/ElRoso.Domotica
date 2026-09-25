@@ -168,8 +168,10 @@ COMMAND_MENU = (
 )
 
 
-# El botón abajo del aviso de una alarma o un timer.
-SNOOZE_ACTIONS = (("Posponer 10 min", "posponer 10m"),)
+# Los botones abajo de cada aviso: (etiqueta, comando con su argumento).
+SNOOZE_ACTIONS = (("Posponer 10 min", "posponer 10m"), ("Posponer 30 min", "posponer 30m"))
+MONITOR_ACTIONS = (("Ver estado", "estado"), ("Silenciar 1 h", "silencio 1h"))
+SEQ_ACTIONS = (("Silenciar 1 h", "silencio 1h"),)
 
 # Un error que no llega al chat se ve igual que un bot colgado.
 BROKEN = "🔴 No pude procesar la solicitud: {reason}"
@@ -326,16 +328,22 @@ def build_post_init(notifier, reminders, api=None):
     return post_init
 
 
-def _alert(house: HouseVoice, text: str, urgent: bool, detail: str = "") -> None:
+def _alert(
+    house: HouseVoice,
+    text: str,
+    urgent: bool,
+    detail: str = "",
+    actions: tuple[tuple[str, str], ...] = (),
+) -> None:
     """Lo dice si se puede, y siempre lo deja escrito en el chat.
 
     El detalle se escribe, nunca se dice: un estado HTTP o la cita de un log es
     lo que hay que leer y lo último que querés escuchar.
     """
     written = f"{text}\n{detail}" if detail else text
-    result = house.announce(text, urgent=urgent, written=written)
+    result = house.announce(text, urgent=urgent, written=written, actions=actions)
     if result["spoken"]:
-        house.tell_everyone(f"{'🚨' if urgent else '⚠️'} {written}")
+        house.tell_everyone(f"{'🚨' if urgent else '⚠️'} {written}", actions)
 
 
 def _announce(house: HouseVoice, text: str, written: str | None = None) -> None:
@@ -500,6 +508,18 @@ async def _drop(waiting, message, fallback: str) -> None:
         await _answer(waiting, message, fallback)
 
 
+def _without(query) -> InlineKeyboardMarkup | None:
+    """Los botones del mensaje menos el que se tocó, o None si no queda ninguno."""
+    markup = getattr(query.message, "reply_markup", None)
+    rows = [
+        [InlineKeyboardButton(button.text, callback_data=button.callback_data)
+         for button in row if button.callback_data != query.data]
+        for row in (markup.inline_keyboard if markup else [])
+    ]
+    rows = [row for row in rows if row]
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
 def register(app: Application, commands: Commands) -> None:
     """Cablea todos los comandos, corriendo el trabajo fuera del event loop.
 
@@ -605,7 +625,7 @@ def register(app: Application, commands: Commands) -> None:
 
         await query.answer()
         try:
-            await query.edit_message_reply_markup(reply_markup=None)
+            await query.edit_message_reply_markup(reply_markup=_without(query))
         except Exception:  # noqa: BLE001 - el botón que queda no impide contestar
             log.warning("no pude sacar el botón del aviso")
 
@@ -699,7 +719,9 @@ def main() -> None:
         monitor = Monitor(
             checks=checks,
             store=StatusStore(db_path),
-            announce=lambda text, urgent, detail="": _alert(house, text, urgent, detail),
+            announce=lambda text, urgent, detail="": _alert(
+                house, text, urgent, detail, MONITOR_ACTIONS
+            ),
             polish=polish,
         )
         log.info("vigilando %s servicios: %s", len(checks), ", ".join(c.name for c in checks))
@@ -712,7 +734,7 @@ def main() -> None:
         SeqWatcher(
             client=SeqClient(base_url=instance.url, api_key=instance.api_key),
             marks=Marks(db_path),
-            announce=lambda text, detail="": _alert(house, text, False, detail),
+            announce=lambda text, detail="": _alert(house, text, False, detail, SEQ_ACTIONS),
             polish=polish,
             cooldown_minutes=config.seq_cooldown,
             alias=instance.alias,
