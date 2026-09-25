@@ -32,6 +32,7 @@ class Announcer:
         quiet=None,
         clock: Callable[[], datetime] = datetime.now,
         polish: Callable[..., str] = as_is,
+        actions: tuple[tuple[str, str], ...] = (),
     ):
         self.speakers = speakers
         self.notify = notify
@@ -40,6 +41,8 @@ class Announcer:
         self.quiet = quiet
         self.clock = clock
         self.polish = polish
+        # Botones del aviso: (etiqueta, comando con su argumento).
+        self.actions = actions
 
     def __call__(self, job: Job) -> None:
         problem = None
@@ -58,8 +61,12 @@ class Announcer:
                     log.warning("el job %s no sonó en %s: %s", job.id, alias, exc)
             problem = "; ".join(problems) if problems else None
 
+        text = self._text(message, job, problem, resting)
         try:
-            self.notify(job.chat_id, self._text(message, job, problem, resting))
+            if self.actions:
+                self.notify(job.chat_id, text, self.actions)
+            else:
+                self.notify(job.chat_id, text)
         except Exception:
             # El parlante puede ya haber hablado; un chat roto no deshace eso.
             log.exception("no se pudo avisar por chat del job %s", job.id)

@@ -24,7 +24,7 @@ ROUTABLE = (
     "decir", "llamar", "timer", "alarma", "lista", "cancelar", "silencio", "hablar",
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
-    "agregar", "compras", "pendientes", "sacar", "traducir",
+    "agregar", "compras", "pendientes", "sacar", "traducir", "posponer",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -48,6 +48,8 @@ Comandos y qué lleva cada uno:
   o los días adelante, "lun-vie 5:30 arriba"
 - lista: sin argumento, lo que está programado
 - cancelar: el número a cancelar
+- posponer: cuánto posponer la alarma que acaba de sonar, así: "10m"; sin argumento, diez
+  minutos
 - silencio: cuánto rato callarse, así: "2h"
 - hablar: sin argumento, cancela el silencio
 - volumen: un número de 0 a 100

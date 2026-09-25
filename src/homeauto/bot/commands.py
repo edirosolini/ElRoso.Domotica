@@ -58,6 +58,7 @@ _ITEMS = re.compile(r"\s*,\s*|\s+y\s+")
 # «de pendientes» al final de un /sacar.
 _LIST_SUFFIX = re.compile(r"\s+(?:de|en)\s+(.+)$", re.IGNORECASE)
 ALL_ITEMS = "todo"
+SNOOZE_DEFAULT = "10m"
 
 
 class TargetError(Exception):
@@ -92,6 +93,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /alarma lun-vie 5:30 arriba — solo esos días
 /lista — lo que está programado
 /cancelar <n> — cancela uno
+/posponer — repite en 10 minutos la alarma que acaba de sonar · /posponer 30m
 /silencio 2h — no habla por un rato · /hablar lo cancela
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
@@ -633,7 +635,21 @@ class Commands:
             "pendientes": self.todo,
             "sacar": self.remove_item,
             "traducir": self.translate,
+            "posponer": self.postpone,
         }
+
+    def press(self, chat_id: int, data: str) -> str:
+        """Un botón tocado: `data` es el comando y su argumento, como en `_dispatch`."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        command, _, argument = data.strip().partition(" ")
+        run = self._dispatch().get(command)
+        if run is None:
+            log.warning("botón desconocido: %r", data)
+            return "No sé qué hacer con ese botón."
+        return run(chat_id, argument)
 
     def heard(self, chat_id: int, audio: bytes, mime: str = "audio/ogg") -> Reply:
         """Una nota de voz: se transcribe, se ejecuta y se contesta con otra."""
@@ -995,6 +1011,22 @@ class Commands:
             )
 
         return self._schedule(chat_id, prefix + rest, ONCE, "Alarma")
+
+    def postpone(self, chat_id: int, text: str = "") -> str:
+        """Vuelve a agendar la alarma o el timer que acaba de sonar."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        try:
+            delay = parse_duration(text.strip() or SNOOZE_DEFAULT)
+        except TimeSpecError as exc:
+            return str(exc)
+
+        job = self.reminders.snooze(chat_id, delay)
+        if job is None:
+            return "No sonó nada en la última media hora: no hay nada que posponer."
+        return f"Pospuesto #{job.id} para {format_when(job.when, self.clock())}: «{job.message}»"
 
     def list(self, chat_id: int) -> str:
         denial = self._denial(chat_id)

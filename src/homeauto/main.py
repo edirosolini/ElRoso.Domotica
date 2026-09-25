@@ -13,8 +13,15 @@ import socket
 from datetime import datetime, time as clock_time
 from pathlib import Path
 
-from telegram import BotCommand, Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from homeauto.agenda.ical import CalendarClient
 from homeauto.agenda.seen import SeenStore
@@ -40,6 +47,7 @@ from homeauto.lists import ListStore
 from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import Hush, HushStore
 from homeauto.schedule.announcer import Announcer
+from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
@@ -119,6 +127,7 @@ TIMER_COMMANDS = ("timer", "recordar")
 ALARM_COMMANDS = ("alarma",)
 LIST_COMMANDS = ("lista",)
 CANCEL_COMMANDS = ("cancelar",)
+POSTPONE_COMMANDS = ("posponer",)
 DEVICES_COMMANDS = ("equipos",)
 USE_COMMANDS = ("usar",)
 OFF_COMMANDS = ("apagar",)
@@ -141,7 +150,7 @@ ALL_COMMANDS = (
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
     + ASK_COMMANDS + CALC_COMMANDS
     + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
-    + TRANSLATE_COMMANDS
+    + TRANSLATE_COMMANDS + POSTPONE_COMMANDS
 )
 
 # Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
@@ -158,6 +167,9 @@ COMMAND_MENU = (
     ("ayuda", "Todos los comandos y cómo se usan"),
 )
 
+
+# El botón abajo del aviso de una alarma o un timer.
+SNOOZE_ACTIONS = (("Posponer 10 min", "posponer 10m"),)
 
 # Un error que no llega al chat se ve igual que un bot colgado.
 BROKEN = "🔴 No pude procesar la solicitud: {reason}"
@@ -223,11 +235,16 @@ class ChatNotifier:
     def bind(self, loop) -> None:
         self.loop = loop
 
-    def __call__(self, chat_id: int, text: str) -> None:
+    def __call__(self, chat_id: int, text: str, actions: tuple[tuple[str, str], ...] = ()) -> None:
         if self.loop is None:
             raise RuntimeError("todavía no hay event loop al que mandarle el aviso")
+        markup = None
+        if actions:
+            markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(label, callback_data=data) for label, data in actions]]
+            )
         future = asyncio.run_coroutine_threadsafe(
-            self.bot.send_message(chat_id=chat_id, text=text), self.loop
+            self.bot.send_message(chat_id=chat_id, text=text, reply_markup=markup), self.loop
         )
         future.result(timeout=30)
 
@@ -521,6 +538,7 @@ def register(app: Application, commands: Commands) -> None:
         (ALARM_COMMANDS, commands.alarm),
         (LIST_COMMANDS, lambda chat_id, _text: commands.list(chat_id)),
         (CANCEL_COMMANDS, commands.cancel),
+        (POSTPONE_COMMANDS, commands.postpone),
         (DEVICES_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
         (USE_COMMANDS, commands.use),
         (OFF_COMMANDS, commands.turn_off),
@@ -579,6 +597,27 @@ def register(app: Application, commands: Commands) -> None:
 
     app.add_handler(MessageHandler(filters.VOICE, listen))
 
+    async def tap(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        """Un botón tocado: se saca el botón y se contesta abajo del aviso."""
+        query = getattr(update, "callback_query", None)
+        if query is None or query.data is None or update.effective_chat is None:
+            return
+
+        await query.answer()
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:  # noqa: BLE001 - el botón que queda no impide contestar
+            log.warning("no pude sacar el botón del aviso")
+
+        try:
+            answer = await asyncio.to_thread(commands.press, update.effective_chat.id, query.data)
+        except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
+            log.exception("el botón se rompió")
+            answer = BROKEN.format(reason=exc)
+        await query.message.reply_text(answer)
+
+    app.add_handler(CallbackQueryHandler(tap))
+
     # Todo lo que viene sin barra. Se registra último, así un comando de verdad
     # nunca llega al intérprete ni paga la llamada al modelo.
     app.add_handler(
@@ -623,7 +662,9 @@ def main() -> None:
             fallback=config.default_device,
             quiet=hush,
             polish=polish,
+            actions=SNOOZE_ACTIONS,
         ),
+        fired=FiredStore(db_path),
     )
     calendar = None
     agenda = None
