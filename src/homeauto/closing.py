@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
+from homeauto.briefing import Summary
 from homeauto.lists import SHOPPING
 from homeauto.polish import as_is
 from homeauto.verbalize import FEMININE, number
@@ -39,17 +40,15 @@ class Closing:
 
     def text(self) -> str:
         """Lo que la casa dice antes de dormir, o nada si no juntó nada."""
-        parts = [
-            said
-            for said in (
-                self._safe(self._tomorrow),
-                self._safe(self._sky),
-                self._safe(self._trouble),
-                self._safe(self._shopping),
-            )
-            if said
-        ]
-        return " ".join(parts)
+        return self.speech().spoken
+
+    def speech(self) -> Summary:
+        """Lo hablado, igual a lo escrito, y la copia sin servicios caídos."""
+        tomorrow, sky = self._safe(self._tomorrow), self._safe(self._sky)
+        trouble, shopping = self._safe(self._trouble), self._safe(self._shopping)
+        said = " ".join(part for part in (tomorrow, sky, trouble, shopping) if part)
+        public = " ".join(part for part in (tomorrow, sky, shopping) if part)
+        return Summary(spoken=said, written=said, public=public)
 
     @staticmethod
     def _safe(source: Callable[[], str]) -> str:

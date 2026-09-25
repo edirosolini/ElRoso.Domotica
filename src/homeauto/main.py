@@ -54,7 +54,7 @@ from homeauto.schedule.store import Store
 from homeauto.strangers import Strangers, StrangerStore
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
-from homeauto.voice.broadcast import HouseVoice
+from homeauto.voice.broadcast import SAME, HouseVoice
 from homeauto.voice.registry import SpeakerRegistry
 from homeauto.voice.speaker import Speaker
 from homeauto.voice.tts import (
@@ -285,7 +285,7 @@ def schedule_briefing(app, config, briefing, announce) -> None:
 
     def speak() -> None:
         summary = briefing.speech()
-        announce(summary.spoken, summary.written)
+        announce(summary.spoken, summary.written, summary.public)
 
     _schedule_daily(app, config.briefing_at, speak, name="briefing", label="resumen diario")
 
@@ -296,9 +296,9 @@ def schedule_closing(app, config, closing, announce) -> None:
         return
 
     def speak() -> None:
-        said = closing.text()
-        if said:
-            announce(said)
+        summary = closing.speech()
+        if summary.spoken:
+            announce(summary.spoken, summary.written, summary.public)
 
     _schedule_daily(app, config.closing_at, speak, name="closing", label="cierre del día")
 
@@ -338,21 +338,24 @@ def _alert(
     lo que hay que leer y lo último que querés escuchar.
     """
     written = f"{text}\n{detail}" if detail else text
-    result = house.announce(text, urgent=urgent, written=written, actions=actions)
+    # Solo los chats de alertas: `others=None` no le escribe al resto.
+    result = house.announce(text, urgent=urgent, written=written, actions=actions, others=None)
     if result["spoken"]:
-        house.tell_everyone(f"{'🚨' if urgent else '⚠️'} {written}", actions)
+        house.tell(f"{'🚨' if urgent else '⚠️'} {written}", None, actions)
 
 
-def _announce(house: HouseVoice, text: str, written: str | None = None) -> None:
+def _announce(house: HouseVoice, text: str, written: str | None = None, others=SAME) -> None:
     """Lo dice en voz alta si se puede, y siempre lo deja escrito en el chat.
 
     `written` lleva más que lo hablado cuando la fuente tiene las dos mitades:
     el resumen de la mañana escribe los titulares tal como los publicaron los
-    medios, con dígitos y todo.
+    medios, con dígitos y todo. `others` es la copia de los chats sin alertas.
     """
-    result = house.announce(text, written=written)
+    result = house.announce(text, written=written, others=others)
     if result["spoken"]:
-        house.tell_everyone(f"🔔 {written or text}")
+        if others is not SAME:
+            others = f"🔔 {others}" if others else others
+        house.tell(f"🔔 {written or text}", others)
 
 
 def build_polisher(config: Config):
@@ -718,8 +721,10 @@ def main() -> None:
             quiet=hush,
             polish=polish,
             actions=SNOOZE_ACTIONS,
+            chat_ids=config.allowed_chat_ids,
         ),
         fired=FiredStore(db_path),
+        chat_ids=config.allowed_chat_ids,
     )
     calendar = None
     agenda = None
@@ -740,6 +745,7 @@ def main() -> None:
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
         quiet=hush,
+        alert_chat_ids=config.alert_recipients,
     )
 
     monitor = None
@@ -873,7 +879,7 @@ def main() -> None:
             seq=[watcher.client for watcher in seq_watchers],
             polish=polish,
         ),
-        lambda text, written=None: _announce(house, text, written),
+        lambda text, written=None, others=SAME: _announce(house, text, written, others),
     )
 
     schedule_closing(
@@ -886,7 +892,7 @@ def main() -> None:
             lists=ListStore(db_path),
             polish=polish,
         ),
-        lambda text: _announce(house, text),
+        lambda text, written=None, others=SAME: _announce(house, text, written, others),
     )
 
     rain = RainWatcher(

@@ -9,11 +9,11 @@ class FakeHouse:
         self.announced = []
         self.told = []
 
-    def announce(self, text, urgent=False, written=None, actions=()):
+    def announce(self, text, urgent=False, written=None, actions=(), others=main.SAME):
         self.announced.append(actions)
         return {"spoken": self.spoken}
 
-    def tell_everyone(self, text, actions=()):
+    def tell(self, text, others=main.SAME, actions=()):
         self.told.append(actions)
 
 

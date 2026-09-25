@@ -774,3 +774,44 @@ def test_newcomers_are_announced_from_the_one_database(wired, tmp_path, monkeypa
 
     assert seen["store"].db_path == tmp_path / "jobs.db"
     assert seen["config"].allowed_chat_ids == frozenset({42})
+
+
+# --- a quién le llega cada aviso ---------------------------------------------
+
+
+def test_an_alarm_reaches_every_allowed_chat(wired, tmp_path, monkeypatch):
+    announcer = _spy_init(monkeypatch, main.Announcer)
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\n"))
+
+    assert set(announcer["chat_ids"]) == {42, 77}
+    assert set(reminders["chat_ids"]) == {42, 77}
+
+
+def test_the_alerts_reach_only_the_alert_chats(wired, tmp_path, monkeypatch):
+    seen = _spy_init(monkeypatch, main.HouseVoice)
+
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\nALERT_CHAT_IDS=42\n"))
+
+    assert set(seen["chat_ids"]) == {42, 77}
+    assert set(seen["alert_chat_ids"]) == {42}
+
+
+@pytest.mark.parametrize("schedule", ["schedule_briefing", "schedule_closing"])
+def test_the_summaries_hand_over_the_copy_for_the_others(schedule, wired, tmp_path, monkeypatch):
+    handed = {}
+    original = getattr(main, schedule)
+
+    def spy(app, config, source, announce):
+        handed["announce"] = announce
+        return original(app, config, source, announce)
+
+    monkeypatch.setattr(main, schedule, spy)
+    announced = []
+    monkeypatch.setattr(main, "_announce", lambda *args: announced.append(args[1:]))
+
+    run_main(monkeypatch, config_file(tmp_path))
+    handed["announce"]("dicho", "completo", "sin servicios")
+
+    assert announced == [("dicho", "completo", "sin servicios")]

@@ -410,6 +410,7 @@ El servicio lee un archivo de entorno (en el contenedor, `/etc/domotica/domotica
 ```ini
 TELEGRAM_TOKEN=          # token de @BotFather
 ALLOWED_CHAT_IDS=        # vacío = el primero que escriba queda registrado
+ALERT_CHAT_IDS=          # quién recibe monitor y Seq; vacío = todos los de arriba
 CAST_DEVICES=parlante:d17e8311-...,tv:083e8ba4-...   # alias:uuid, por coma
 CAST_DEFAULT=parlante    # cuál se usa si no se dice otro
 WEATHER_LAT=-34.6037     # opcional; por defecto, Buenos Aires
@@ -454,6 +455,11 @@ systemctl restart domotica
 
 `ALLOWED_CHAT_IDS` vacío deja el bot **abierto**: cualquiera que lo encuentre puede usarlo.
 Se deja así solo para el alta inicial; una vez que sabés tu chat ID, se completa y se reinicia.
+
+Con más de una persona en la lista, las alarmas, los timers, la agenda y el clima les llegan a
+todas. Los avisos del monitor y de Seq, a `ALERT_CHAT_IDS`, que tiene que ser parte de
+`ALLOWED_CHAT_IDS`. Esos chats también son los únicos que leen los servicios caídos y los
+errores de la noche en el resumen y el cierre; el parlante los dice igual.
 
 **Cómo habla.** Piper no deja pausa entre oraciones si no se le pide, y eso hace que un
 aviso de dos frases suene apurado. Se ajusta por entorno, sin tocar código:
