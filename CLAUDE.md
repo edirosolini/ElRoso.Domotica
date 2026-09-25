@@ -162,7 +162,7 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son treinta llamadas al
+en el historial del shell, igual que el token de `domotica-say`. Son treinta y una llamadas al
 modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
@@ -564,7 +564,7 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
   la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
 - ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
   comportamiento medido. Un ejemplo nuevo puede correrle la atención al modelo en los otros
-  comandos, así que se vuelve a medir: la última corrida dio treinta de treinta.
+  comandos, así que se vuelve a medir: la última corrida dio treinta y uno de treinta y uno.
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
@@ -843,8 +843,8 @@ botón «Posponer 10 min» que hace lo mismo.
   ejecuta por `_dispatch()`, así que un botón solo puede correr un comando que ya existe.
   `HouseVoice` y la API siguen llamando al notificador con dos argumentos.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
-- ⚠️ **Se tocó el prompt del router** para sumar `posponer`, así que hay que volver a medirlo
-  con `deploy/measure_router.py`, que ahora tiene treinta y un casos.
+- **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
+  treinta y uno de treinta y uno. Ver **Texto libre**.
 
 ## Texto libre
 
@@ -863,10 +863,10 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
-- 🔴 **Medido el 2026-09-22 contra el endpoint real: treinta de treinta comandos y veinte
-  de veinte payloads**, con `gemini-3.1-flash-lite` y un caso por comando ruteable. Reemplaza
-  a los dieciséis de dieciséis, que se habían medido antes de que entraran `calcular`,
-  `agregar`, `compras`, `pendientes`, `sacar` y `traducir`. `deploy/measure_router.py` es esa
+- 🔴 **Medido el 2026-09-25 contra el endpoint real: treinta y uno de treinta y uno comandos
+  y veintiuno de veintiuno payloads**, con `gemini-3.1-flash-lite` y un caso por comando
+  ruteable. Es la corrida de después de sumar `posponer`; la anterior, del 2026-09-22, había
+  dado treinta de treinta sin él. `deploy/measure_router.py` es esa
   corrida: vive en el repo porque la regla de volver a medir no sirve si medir es un trabajo.
   Corre **adentro del CT**, que es donde está la clave.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
@@ -878,7 +878,7 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; hoy son treinta de treinta con los comandos que se sumaron después. Si se toca el
+  limpios; hoy son treinta y uno de treinta y uno con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -1010,7 +1010,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (treinta de treinta) y un segundo prompt es un segundo
+  prompt del router **está medido** (treinta y uno de treinta y uno) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
