@@ -123,3 +123,10 @@ def test_a_button_from_a_stranger_is_turned_away(cmd):
 
     assert "No estás en la lista" in reply
     assert cmd.reminders.list(OWNER) == []
+
+
+def test_a_stranger_gets_its_id_alone_on_the_last_line(cmd):
+    """Un toque largo copia el renglón entero: el número solo, sin el texto."""
+    reply = cmd.start(STRANGER)
+
+    assert reply.splitlines()[-1] == str(STRANGER)

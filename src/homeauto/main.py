@@ -51,6 +51,7 @@ from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
+from homeauto.strangers import Strangers, StrangerStore
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
 from homeauto.voice.broadcast import HouseVoice
@@ -526,7 +527,26 @@ def _without(query) -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(rows) if rows else None
 
 
-def register(app: Application, commands: Commands) -> None:
+def _who(update: Update) -> str:
+    """Quién escribió, como se lo nombra en el aviso a los dueños."""
+    user = getattr(update, "effective_user", None)
+    if user is None:
+        return "sin nombre"
+    name = " ".join(part for part in (user.first_name, user.last_name) if part) or "sin nombre"
+    return f"{name} (@{user.username})" if user.username else name
+
+
+async def _knock(strangers, update: Update) -> None:
+    """Avisa de un chat nuevo sin que la falla del aviso cueste la respuesta."""
+    if strangers is None or update.effective_chat is None:
+        return
+    try:
+        await asyncio.to_thread(strangers.knock, update.effective_chat.id, _who(update))
+    except Exception:  # noqa: BLE001 - avisar al dueño no puede costar la respuesta
+        log.exception("no pude avisar del chat nuevo")
+
+
+def register(app: Application, commands: Commands, strangers=None) -> None:
     """Cablea todos los comandos, corriendo el trabajo fuera del event loop.
 
     El descubrimiento (zeroconf) y la síntesis (Piper) bloquean: en el loop no
@@ -543,6 +563,7 @@ def register(app: Application, commands: Commands) -> None:
 
             chat_id = update.effective_chat.id
             text = _argument_text(update)
+            await _knock(strangers, update)
             waiting = await _say_working(update.message)
             markup = None
             try:
@@ -600,6 +621,7 @@ def register(app: Application, commands: Commands) -> None:
             )
             return
 
+        await _knock(strangers, update)
         waiting = await _say_working(update.message)
         try:
             audio = bytes(await (await voice.get_file()).download_as_bytearray())
@@ -788,7 +810,11 @@ def main() -> None:
         polish=polish,
         clock=datetime.now,
     )
-    register(app, commands)
+    register(
+        app,
+        commands,
+        Strangers(config=config, store=StrangerStore(db_path), notify=notifier),
+    )
 
     watcher = None
     if calendar is not None:

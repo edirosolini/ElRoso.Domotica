@@ -291,3 +291,57 @@ async def test_the_answer_to_a_tap_carries_its_buttons():
     await tap(update, None)
 
     assert replies[0].inline_keyboard[0][0].callback_data == "cancelar 7"
+
+
+# --- el que golpea la puerta ---------------------------------------------------
+
+
+class Knocks:
+    def __init__(self, boom=None):
+        self.knocks = []
+        self.threads = []
+        self.boom = boom
+
+    def knock(self, chat_id, who):
+        self.knocks.append((chat_id, who))
+        self.threads.append(threading.current_thread().name)
+        if self.boom:
+            raise self.boom
+
+
+class User:
+    first_name = "Diego"
+    last_name = "Pérez"
+    username = "diego"
+
+
+@pytest.mark.asyncio
+async def test_every_message_knocks_with_who_sent_it_off_the_loop():
+    app = MessageRecorder()
+    strangers = Knocks()
+    main.register(app, OfferingCommands(), strangers)
+    update = CommandUpdate()
+    update.effective_user = User()
+
+    await app.callbacks[0](update, None)
+
+    assert strangers.knocks == [(42, "Diego Pérez (@diego)")]
+    assert strangers.threads[0] != threading.current_thread().name
+
+
+@pytest.mark.asyncio
+async def test_a_knock_that_blows_up_does_not_cost_the_answer():
+    app = MessageRecorder()
+    main.register(app, OfferingCommands(), Knocks(boom=RuntimeError("sqlite")))
+    update = CommandUpdate()
+
+    await app.callbacks[0](update, None)
+
+    assert update.message.edits[0][0] == "#5 · #6"
+
+
+def test_who_falls_back_to_the_id_when_there_is_no_name():
+    update = CommandUpdate()
+    update.effective_user = None
+
+    assert main._who(update) == "sin nombre"

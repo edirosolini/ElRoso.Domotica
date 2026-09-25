@@ -200,3 +200,19 @@ async def test_the_voice_answer_carries_its_buttons(tmp_path):
 
     markup = update.message.voice_markups[0]
     assert markup.inline_keyboard[0][0].callback_data == "cancelar 3"
+
+
+@pytest.mark.asyncio
+async def test_a_voice_note_also_knocks():
+    knocks = []
+
+    class Strangers:
+        def knock(self, chat_id, who):
+            knocks.append(chat_id)
+
+    app = Recorder()
+    main.register(app, SpyCommands(), Strangers())
+
+    await voice_callback(app)(FakeUpdate(voice=FakeVoice()), None)
+
+    assert knocks == [42]
