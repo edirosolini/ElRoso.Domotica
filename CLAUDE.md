@@ -92,7 +92,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con nueve tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con diez tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -106,6 +106,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `pending.PendingStore` | el comando a medio armar de cada chat |
 | `lists.ListStore` | las listas de compras y de pendientes |
 | `schedule.FiredStore` | la última alarma o timer que sonó en cada chat, para posponerla |
+| `strangers.StrangerStore` | los chats fuera de la lista de los que ya se avisó al dueño |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -412,6 +413,25 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
 La topología, que no es obvia: el CT de domótica manda `172.68.0.0/23` al router `.1`, que
 tiene una ruta estática al CT 202, que hace MASQUERADE sobre `wg0`. El túnel del VPS es
 **WireGuard**, no OpenVPN como los otros.
+
+## Quién puede usar el bot
+
+`ALLOWED_CHAT_IDS` es la lista blanca. Un chat que no está recibe su ID y nada más, sea
+por `/start`, cualquier comando, texto suelto, nota de voz o un botón.
+
+- **El ID va solo en el último renglón**: un toque largo en Telegram copia el renglón
+  entero, y así sale el número sin el texto.
+- 🔴 **Los dueños se enteran solos.** `strangers.Strangers` les manda nombre, @usuario e ID
+  de quien escribió, con la línea `ALLOWED_CHAT_IDS=…` ya armada para pegar. La persona no
+  tiene que mandar el número por otro lado.
+- **Una sola vez por chat**, guardado en `StrangerStore`: un desconocido insistente no puede
+  llenar el chat del dueño. Un aviso que no llegó a ningún dueño no se marca y se reintenta
+  con el mensaje siguiente, como en la agenda.
+- **Sin lista blanca no hay a quién avisar**: el bot está abierto, todos entran, y
+  `/start` ya le dice al primero que se cargue.
+- **El aviso corre fuera del event loop y su falla no cuesta la respuesta.** El nombre sale
+  del `update` en `main._who()`; `Strangers` no sabe de Telegram.
+- ⚠️ Cargar el ID pide **reiniciar el servicio**: la config se lee una sola vez.
 
 ## API
 

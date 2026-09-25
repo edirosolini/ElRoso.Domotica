@@ -765,3 +765,12 @@ def test_the_watchers_alert_with_their_buttons(wired, tmp_path, monkeypatch):
     seq["announce"]("errores en Seq")
 
     assert alerted == [main.MONITOR_ACTIONS, main.SEQ_ACTIONS]
+
+
+def test_newcomers_are_announced_from_the_one_database(wired, tmp_path, monkeypatch):
+    seen = _spy_init(monkeypatch, main.Strangers)
+
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42\n"))
+
+    assert seen["store"].db_path == tmp_path / "jobs.db"
+    assert seen["config"].allowed_chat_ids == frozenset({42})

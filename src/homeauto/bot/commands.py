@@ -218,7 +218,7 @@ class Commands:
         if self.config.is_allowed(chat_id):
             return None
         log.warning("chat %s rechazado", chat_id)
-        return "No estás en la lista. Pedile al dueño que agregue tu ID: " + str(chat_id)
+        return f"No estás en la lista. Pasale este ID al dueño para que te agregue:\n\n{chat_id}"
 
     def _enrollment_hint(self, chat_id: int) -> str:
         # Con la lista blanca vacía cualquiera maneja los parlantes. Se avisa y
