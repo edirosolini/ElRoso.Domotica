@@ -383,6 +383,12 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   responde") y ahí **no hay validación** que lo frene, a diferencia del alias de Seq. Un
   nombre con dígitos o guiones se va a escuchar mal.
 - **La recuperación nunca es urgente.** Nadie se despierta por una buena noticia.
+- **Los avisos traen botones**: el del monitor, «Ver estado» y «Silenciar 1 h»; el de Seq,
+  solo «Silenciar 1 h», porque `/estado` muestra los chequeos y no Seq. `HouseVoice` los pasa
+  también cuando el aviso cae en descanso y solo se escribe.
+- 🔴 **«Silenciar 1 h» no calla lo urgente**, decisión del dueño. Es `/silencio 1h`, y lo
+  urgente pasa por encima de cualquier silencio, fijo o pedido: la próxima caída urgente
+  suena igual. Lo que calla es lo demás —la recuperación, Seq, la lluvia, la agenda—.
 - Un campo desconocido en `checks.json` **hace fallar el arranque**. Un typo silencioso en
   `urgent` significaría que nunca te despierta.
 - 🔴 **El aviso dice el ambiente y la aplicación, y salen del evento.** "Hay dos errores en Seq
@@ -823,8 +829,8 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
 
 ## Posponer
 
-`/posponer` repite la alarma o el timer que acaba de sonar, y el aviso de Telegram trae un
-botón «Posponer 10 min» que hace lo mismo.
+`/posponer` repite la alarma o el timer que acaba de sonar, y el aviso de Telegram trae dos
+botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 
 - **Se pospone lo último que sonó en ese chat**, no un número de `/lista`. Quien acaba de
   escuchar el aviso no sabe qué número tenía.
@@ -834,14 +840,17 @@ botón «Posponer 10 min» que hace lo mismo.
   nada que posponer, en vez de agendar algo que nadie espera. Sin duración son diez minutos.
 - 🔴 **Lo que sonó se guarda antes de anunciarlo.** El botón llega con el aviso y el anuncio
   bloquea hasta que termina de sonar: guardado después, un toque rápido no encontraba nada.
-- 🔴 **Posponer olvida lo que sonó**, y el botón se saca del mensaje al tocarlo. Dos toques no
-  agendan dos veces. Lo pospuesto, cuando suena, se puede volver a posponer.
+- 🔴 **Posponer olvida lo que sonó**, y el botón tocado se saca del mensaje. Dos toques no
+  agendan dos veces: el segundo, aunque sea el otro botón, contesta que no hay nada que
+  posponer. Lo pospuesto, cuando suena, se puede volver a posponer.
 - **Se guarda en SQLite**, `schedule.FiredStore`, por lo mismo que el silencio: un reinicio
   justo después de la alarma no puede dejar el botón sin nada atrás.
 - **El botón no sabe de Telegram hacia adentro.** `Announcer` recibe `actions` como pares
   (etiqueta, comando con argumento); `ChatNotifier` los dibuja y `Commands.press()` los
   ejecuta por `_dispatch()`, así que un botón solo puede correr un comando que ya existe.
-  `HouseVoice` y la API siguen llamando al notificador con dos argumentos.
+  Sin botones, el notificador se sigue llamando con dos argumentos, como lo llama la API.
+- **Se saca solo el botón tocado**, no todos: ver el estado no puede llevarse puesto el botón
+  de silenciar.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
   treinta y uno de treinta y uno. Ver **Texto libre**.

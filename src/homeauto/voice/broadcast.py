@@ -40,6 +40,7 @@ class HouseVoice:
         devices: list[str] | None = None,
         urgent: bool = False,
         written: str | None = None,
+        actions: tuple[tuple[str, str], ...] = (),
     ) -> dict:
         """`written` es la copia del chat cuando lleva más que lo hablado.
 
@@ -52,7 +53,8 @@ class HouseVoice:
         if self.resting() and not urgent:
             log.info("aviso en horario de descanso: solo va al chat")
             self.tell_everyone(
-                f"🔔 {written or text}\n\n(horario de descanso: no se dijo en voz alta)"
+                f"🔔 {written or text}\n\n(horario de descanso: no se dijo en voz alta)",
+                actions,
             )
             return {"spoken": False, "notified": True, "devices": targets, "problems": []}
 
@@ -72,9 +74,13 @@ class HouseVoice:
             "problems": problems,
         }
 
-    def tell_everyone(self, text: str) -> None:
+    def tell_everyone(self, text: str, actions: tuple[tuple[str, str], ...] = ()) -> None:
+        """Lo escribe en todos los chats, con los botones de `actions` si hay."""
         for chat_id in self.chat_ids:
             try:
-                self.notify(chat_id, text)
+                if actions:
+                    self.notify(chat_id, text, actions)
+                else:
+                    self.notify(chat_id, text)
             except Exception:
                 log.exception("no se pudo avisar al chat %s", chat_id)

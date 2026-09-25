@@ -51,3 +51,47 @@ def test_an_urgent_announcement_sounds_before_it_speaks():
     house.announce("veinte grados")
 
     assert speaker.chimes == [True, False]
+
+
+# --- botones -----------------------------------------------------------------
+
+ACTIONS = (("Ver estado", "estado"),)
+
+
+def build_with_buttons(clock=lambda: NOON, quiet=None):
+    sent = []
+    house = HouseVoice(
+        speakers=StubRegistry(parlante=FakeSpeaker("parlante")),
+        default_devices=["parlante"],
+        notify=lambda chat_id, text, actions=(): sent.append((text, actions)),
+        chat_ids=[42],
+        quiet=quiet,
+        clock=clock,
+    )
+    return house, sent
+
+
+def test_telling_everyone_can_carry_buttons():
+    house, sent = build_with_buttons()
+
+    house.tell_everyone("⚠️ vps no responde", actions=ACTIONS)
+
+    assert sent == [("⚠️ vps no responde", ACTIONS)]
+
+
+def test_a_resting_announcement_keeps_its_buttons():
+    house, sent = build_with_buttons(clock=lambda: NIGHT, quiet=QuietHours.parse("23:00", "07:00"))
+
+    house.announce("vps no responde", actions=ACTIONS)
+
+    assert sent[0][1] == ACTIONS
+
+
+def test_without_buttons_the_notifier_gets_two_arguments():
+    """La API y los tests viejos usan un notificador de dos argumentos."""
+    house, _, written = build(clock=lambda: NIGHT, quiet=QuietHours.parse("23:00", "07:00"))
+
+    house.announce("veinte grados")
+    house.tell_everyone("hola")
+
+    assert len(written) == 2
