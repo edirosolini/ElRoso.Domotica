@@ -85,7 +85,7 @@ sin que nada de esto se entere.
 
 `HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat.
 Las alarmas son la excepción: pasan por `Announcer`, que aplica la misma regla de descanso
-pero avisa al chat que las pidió, no a todos.
+y escribe en todos los chats de `ALLOWED_CHAT_IDS`, no solo en el que la pidió.
 
 `Speaker` es la unidad de "decir algo en un equipo": sintetiza, publica el wav por HTTP y le
 pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda un archivo.
@@ -271,6 +271,10 @@ día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
   clima, la economía y lo que esté caído, "en Sanatorio Colegiales" era lo que lo hacía
   arrastrarse. `/agenda`, que se pide a propósito, lo sigue diciendo: es el argumento `place`
   de `speech.describe()`.
+- 🔴 **Los servicios caídos y los errores de la noche solo se escriben a los chats de
+  alertas** (`ALERT_CHAT_IDS`). `Summary.public` es la copia del resto: sin esas dos
+  fuentes y, si no queda nada, con el "No tengo nada" de siempre. ⚠️ **Lo hablado no cambia**:
+  el parlante los dice igual y se escuchan en toda la casa.
 - **Un párrafo por fuente, escrito y hablado.** En el chat es una línea en blanco; en el
   parlante, la pausa de punto y aparte de `VoiceSynth`. Pegado, el resumen era un bloque que
   no se podía leer de un vistazo ni seguir de oído.
@@ -298,6 +302,9 @@ defecto): lo agendado para **mañana**, el pronóstico de **mañana** y lo que s
 - 🔴 **Mira para adelante, no para atrás.** Por eso no lleva economía, titulares ni los
   errores de Seq: el día ya pasó y esas tres son noticias de la mañana. Lo que entra es lo
   que cambia un plan antes de dormir, y por eso se sumó **cuánto falta comprar**.
+- 🔴 **La línea de los servicios caídos solo se escribe a los chats de alertas**, igual que
+  en el resumen: `speech()` devuelve la copia del resto en `public`. Si lo único que había
+  era un servicio caído, al resto no le llega nada, por la misma regla del cierre vacío.
 - ⚠️ **De la lista de compras solo se dice el conteo**, en palabras. Los ítems se leen en
   `/compras`: dictar quince productos es exactamente el error que se evitó con los titulares.
 - **La agenda se pide con `place=False`**, igual que en el resumen y por lo mismo: escuchado
@@ -416,7 +423,8 @@ tiene una ruta estática al CT 202, que hace MASQUERADE sobre `wg0`. El túnel d
 
 ## Quién puede usar el bot
 
-`ALLOWED_CHAT_IDS` es la lista blanca. Un chat que no está recibe su ID y nada más, sea
+`ALLOWED_CHAT_IDS` es la lista blanca. `ALERT_CHAT_IDS`, un subconjunto, dice quién recibe
+los avisos del monitor y de Seq; ver **A quién le llega cada aviso**. Un chat que no está recibe su ID y nada más, sea
 por `/start`, cualquier comando, texto suelto, nota de voz o un botón.
 
 - **El ID va solo en el último renglón**: un toque largo en Telegram copia el renglón
@@ -432,6 +440,32 @@ por `/start`, cualquier comando, texto suelto, nota de voz o un botón.
 - **El aviso corre fuera del event loop y su falla no cuesta la respuesta.** El nombre sale
   del `update` en `main._who()`; `Strangers` no sabe de Telegram.
 - ⚠️ Cargar el ID pide **reiniciar el servicio**: la config se lee una sola vez.
+
+## A quién le llega cada aviso
+
+Todos los chats de `ALLOWED_CHAT_IDS` son iguales salvo por una cosa: los avisos de
+vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
+
+| Aviso | Llega a |
+| --- | --- |
+| monitor y Seq, dichos o en descanso | `ALERT_CHAT_IDS` |
+| resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
+| alarmas y timers | todos, con los botones de posponer |
+| agenda, clima, lluvia, API | todos |
+| respuesta de un comando | el chat que lo escribió |
+| aviso de un desconocido | todos (`Strangers`) |
+
+- **`ALERT_CHAT_IDS` vacía es todos**, que es como se comportaba antes de existir. Un
+  despliegue viejo no cambia nada.
+- 🔴 **Un ID de alertas fuera de `ALLOWED_CHAT_IDS` hace fallar el arranque.** El aviso le
+  llegaría con botones que el bot le rechaza.
+- **`HouseVoice.tell(text, others)`** es la única puerta: `text` va a los chats de alertas y
+  `others` al resto. `SAME` repite el texto, `None` o vacío no escribe nada.
+  `tell_everyone()` es `tell(text, SAME)`.
+- **El parlante no sabe de chats.** Lo que suena, suena en toda la casa: separar los chats no
+  hace privado un aviso dicho en voz alta.
+- `/lista` y `/cancelar` siguen siendo de quien creó la alarma, aunque el aviso le llegue a
+  todos.
 
 ## API
 
@@ -854,6 +888,9 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 
 - **Se pospone lo último que sonó en ese chat**, no un número de `/lista`. Quien acaba de
   escuchar el aviso no sabe qué número tenía.
+- 🔴 **Cualquiera la pospone, una sola vez.** El aviso le llega a todos los chats, así que lo
+  que sonó se guarda para todos, y posponer lo borra para todos: el botón del otro contesta
+  que no hay nada que posponer. El job nuevo queda a nombre de quien tocó.
 - **Crea un job de una sola vez**, con el mismo mensaje y los mismos equipos. Una alarma que
   repite sigue su curso: posponer el lunes no mueve el martes.
 - **Solo vale media hora** después de sonar (`SNOOZE_WINDOW`). Pasado eso contesta que no hay

@@ -33,12 +33,15 @@ class Reminders:
         announce: Callable[[Job], None],
         fired: FiredStore | None = None,
         clock: Callable[[], datetime] = datetime.now,
+        chat_ids: Iterable[int] = (),
     ):
         self.store = store
         self.timer = timer
         self.announce = announce
         self.fired = fired
         self.clock = clock
+        # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
+        self.chat_ids = list(chat_ids)
 
     def start(self, now: datetime | None = None) -> None:
         """Rearma todo tras un reinicio, disparando lo que se haya perdido."""
@@ -81,8 +84,12 @@ class Reminders:
         now = self.clock()
         if last is None or now - last.at > SNOOZE_WINDOW:
             return None
-        self.fired.forget(chat_id)
+        for chat in self._audience(chat_id):
+            self.fired.forget(chat)
         return self.add(chat_id, now + delay, last.message, device=last.device)
+
+    def _audience(self, chat_id: int) -> list[int]:
+        return self.chat_ids or [chat_id]
 
     def _arm(self, job: Job) -> None:
         self.timer.schedule(str(job.id), job.when, lambda: self._fire(job.id))
@@ -94,7 +101,9 @@ class Reminders:
 
         # Antes de anunciar: el botón de posponer llega con el aviso.
         if self.fired is not None:
-            self.fired.remember(job.chat_id, job.message, job.device, self.clock())
+            at = self.clock()
+            for chat in self._audience(job.chat_id):
+                self.fired.remember(chat, job.message, job.device, at)
 
         try:
             self.announce(job)

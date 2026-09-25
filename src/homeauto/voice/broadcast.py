@@ -13,6 +13,9 @@ from typing import Callable, Iterable
 
 log = logging.getLogger(__name__)
 
+# Marca que los chats fuera de los de alertas reciben la misma copia.
+SAME = object()
+
 
 class HouseVoice:
     def __init__(
@@ -23,11 +26,14 @@ class HouseVoice:
         chat_ids: Iterable[int],
         quiet=None,
         clock: Callable[[], datetime] = datetime.now,
+        alert_chat_ids: Iterable[int] = (),
     ):
         self.speakers = speakers
         self.default_devices = list(default_devices)
         self.notify = notify
         self.chat_ids = list(chat_ids)
+        # Vacío: todos los chats reciben las alertas.
+        self.alert_chat_ids = set(alert_chat_ids) or set(self.chat_ids)
         self.quiet = quiet
         self.clock = clock
 
@@ -41,21 +47,23 @@ class HouseVoice:
         urgent: bool = False,
         written: str | None = None,
         actions: tuple[tuple[str, str], ...] = (),
+        others=SAME,
     ) -> dict:
         """`written` es la copia del chat cuando lleva más que lo hablado.
 
         El aviso del monitor cita un estado HTTP y una traza: sirve leído, es
         ilegible dicho y está lleno de dígitos que Piper lee mal.
+        `others` es la copia de los chats que no reciben alertas, como en `tell()`.
         """
         targets = list(devices or self.default_devices)
 
         # Lo urgente es lo único que pasa por encima del horario de descanso.
         if self.resting() and not urgent:
             log.info("aviso en horario de descanso: solo va al chat")
-            self.tell_everyone(
-                f"🔔 {written or text}\n\n(horario de descanso: no se dijo en voz alta)",
-                actions,
-            )
+            note = "\n\n(horario de descanso: no se dijo en voz alta)"
+            if others is not SAME:
+                others = f"🔔 {others}{note}" if others else None
+            self.tell(f"🔔 {written or text}{note}", others, actions)
             return {"spoken": False, "notified": True, "devices": targets, "problems": []}
 
         problems = []
@@ -76,11 +84,21 @@ class HouseVoice:
 
     def tell_everyone(self, text: str, actions: tuple[tuple[str, str], ...] = ()) -> None:
         """Lo escribe en todos los chats, con los botones de `actions` si hay."""
+        self.tell(text, SAME, actions)
+
+    def tell(self, text: str, others=SAME, actions: tuple[tuple[str, str], ...] = ()) -> None:
+        """Escribe `text` en los chats de alertas y `others` en el resto.
+
+        `others` en SAME repite `text`; vacío o None no les escribe nada.
+        """
         for chat_id in self.chat_ids:
+            message = text if others is SAME or chat_id in self.alert_chat_ids else others
+            if not message:
+                continue
             try:
                 if actions:
-                    self.notify(chat_id, text, actions)
+                    self.notify(chat_id, message, actions)
                 else:
-                    self.notify(chat_id, text)
+                    self.notify(chat_id, message)
             except Exception:
                 log.exception("no se pudo avisar al chat %s", chat_id)

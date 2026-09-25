@@ -24,10 +24,14 @@ NIGHT_HOURS = 12
 
 @dataclass(frozen=True)
 class Summary:
-    """Lo que dice la casa y lo que queda en el chat."""
+    """Lo que dice la casa, lo que queda en el chat y la copia sin servicios ni Seq.
+
+    `public` es la copia de los chats que no reciben alertas.
+    """
 
     spoken: str
     written: str
+    public: str
 
 
 class Briefing:
@@ -60,37 +64,29 @@ class Briefing:
         return self.speech().spoken
 
     def speech(self) -> Summary:
-        """El resumen hablado y la copia que queda en el chat.
+        """El resumen hablado, la copia que queda en el chat y la que no lleva alertas.
 
-        Se diferencian en los titulares, que van solo al chat.
+        Lo hablado y lo escrito se diferencian en los titulares, que van solo al chat.
         """
-        parts = [
-            said
-            for said in (
-                self._safe(self._day),
-                self._safe(self._sky),
-                self._safe(self._money),
-                self._safe(self._trouble),
-            )
-            if said
-        ]
+        day, sky, money = self._safe(self._day), self._safe(self._sky), self._safe(self._money)
+        trouble = self._safe(self._trouble)
         night = self._safe_night()
-        if night is not None:
-            parts.append(night.spoken)
         verse = self._safe_verse()
-        if verse is not None and verse.spoken:
-            parts.append(verse.spoken)
-        said = "\n\n".join(parts) if parts else NOTHING
-
-        written = said
-        if night is not None:
-            written = f"{written}\n\n{night.detail}"
-        if verse is not None and not verse.spoken:
-            written = f"{written}\n\n{verse.written}"
         headlines = self._safe_news()
-        if headlines:
-            written = f"{written}\n\n{headlines}"
-        return Summary(spoken=said, written=written)
+
+        spoken_verse = verse.spoken if verse is not None else ""
+        said = self._join(day, sky, money, trouble, night.spoken if night else "", spoken_verse)
+        calm = self._join(day, sky, money, spoken_verse)
+
+        tail = verse.written if verse is not None and not verse.spoken else ""
+        written = self._join(said, night.detail if night else "", tail, headlines)
+        public = self._join(calm, tail, headlines)
+        return Summary(spoken=said, written=written, public=public)
+
+    @staticmethod
+    def _join(*parts: str) -> str:
+        """Un párrafo por parte no vacía; sin ninguna, el resumen vacío."""
+        return "\n\n".join(part for part in parts if part) or NOTHING
 
     @staticmethod
     def _safe(source: Callable[[], str]) -> str:

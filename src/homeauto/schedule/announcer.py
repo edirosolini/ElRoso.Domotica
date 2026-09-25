@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Callable
+from typing import Callable, Iterable
 
 from homeauto.polish import as_is
 from homeauto.schedule.store import Job
@@ -33,6 +33,7 @@ class Announcer:
         clock: Callable[[], datetime] = datetime.now,
         polish: Callable[..., str] = as_is,
         actions: tuple[tuple[str, str], ...] = (),
+        chat_ids: Iterable[int] = (),
     ):
         self.speakers = speakers
         self.notify = notify
@@ -43,6 +44,8 @@ class Announcer:
         self.polish = polish
         # Botones del aviso: (etiqueta, comando con su argumento).
         self.actions = actions
+        # Los chats que reciben el aviso; vacío es solo el que lo pidió.
+        self.chat_ids = list(chat_ids)
 
     def __call__(self, job: Job) -> None:
         problem = None
@@ -62,14 +65,15 @@ class Announcer:
             problem = "; ".join(problems) if problems else None
 
         text = self._text(message, job, problem, resting)
-        try:
-            if self.actions:
-                self.notify(job.chat_id, text, self.actions)
-            else:
-                self.notify(job.chat_id, text)
-        except Exception:
-            # El parlante puede ya haber hablado; un chat roto no deshace eso.
-            log.exception("no se pudo avisar por chat del job %s", job.id)
+        for chat_id in self.chat_ids or [job.chat_id]:
+            try:
+                if self.actions:
+                    self.notify(chat_id, text, self.actions)
+                else:
+                    self.notify(chat_id, text)
+            except Exception:
+                # El parlante puede ya haber hablado; un chat roto no deshace eso.
+                log.exception("no se pudo avisar al chat %s del job %s", chat_id, job.id)
 
     def _text(self, message: str, job: Job, problem: str | None, resting: bool = False) -> str:
         text = f"⏰ {message}"

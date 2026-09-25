@@ -314,7 +314,7 @@ def _parse_quiet(pairs: dict[str, str]) -> QuietHours:
         raise ConfigError(f"QUIET_FROM/QUIET_TO: {exc}") from exc
 
 
-def _parse_chat_ids(raw: str) -> frozenset[int]:
+def _parse_chat_ids(raw: str, key: str = "ALLOWED_CHAT_IDS") -> frozenset[int]:
     ids = set()
     for chunk in raw.split(","):
         chunk = chunk.strip()
@@ -323,8 +323,18 @@ def _parse_chat_ids(raw: str) -> frozenset[int]:
         try:
             ids.add(int(chunk))
         except ValueError as exc:
-            raise ConfigError(f"ALLOWED_CHAT_IDS: '{chunk}' no es un número") from exc
+            raise ConfigError(f"{key}: '{chunk}' no es un número") from exc
     return frozenset(ids)
+
+
+def _parse_alert_chat_ids(raw: str, allowed: frozenset[int]) -> frozenset[int]:
+    ids = _parse_chat_ids(raw, "ALERT_CHAT_IDS")
+    # Todo chat de alertas tiene que estar en la lista blanca.
+    outside = ids - allowed
+    if outside:
+        listed = ", ".join(str(i) for i in sorted(outside))
+        raise ConfigError(f"ALERT_CHAT_IDS: {listed} no está en ALLOWED_CHAT_IDS")
+    return ids
 
 
 @dataclass(frozen=True)
@@ -344,6 +354,8 @@ class Config:
     devices: dict[str, uuid.UUID]
     default_device: str
     allowed_chat_ids: frozenset[int]
+    # Quiénes reciben los avisos del monitor y de Seq; vacío es todos.
+    alert_chat_ids: frozenset[int] = frozenset()
     weather_lat: float = DEFAULT_LAT
     weather_lon: float = DEFAULT_LON
     weather_place: str = ""
@@ -399,11 +411,13 @@ class Config:
         if default not in devices:
             raise ConfigError(f"CAST_DEFAULT apunta a '{default}', que no está en CAST_DEVICES")
 
+        allowed = _parse_chat_ids(pairs.get("ALLOWED_CHAT_IDS", ""))
         return cls(
             telegram_token=token,
             devices=devices,
             default_device=default,
-            allowed_chat_ids=_parse_chat_ids(pairs.get("ALLOWED_CHAT_IDS", "")),
+            allowed_chat_ids=allowed,
+            alert_chat_ids=_parse_alert_chat_ids(pairs.get("ALERT_CHAT_IDS", ""), allowed),
             weather_lat=_parse_coordinate(pairs.get("WEATHER_LAT", ""), "WEATHER_LAT", DEFAULT_LAT, 90),
             weather_lon=_parse_coordinate(pairs.get("WEATHER_LON", ""), "WEATHER_LON", DEFAULT_LON, 180),
             weather_place=pairs.get("WEATHER_PLACE", "").strip(),
@@ -471,6 +485,11 @@ class Config:
     def is_open_enrollment(self) -> bool:
         """Todavía sin lista blanca: el bot espera a que aparezca su primer dueño."""
         return not self.allowed_chat_ids
+
+    @property
+    def alert_recipients(self) -> frozenset[int]:
+        """Los chats que reciben los avisos del monitor y de Seq."""
+        return self.alert_chat_ids or self.allowed_chat_ids
 
     def is_allowed(self, chat_id: int) -> bool:
         return self.is_open_enrollment or chat_id in self.allowed_chat_ids
