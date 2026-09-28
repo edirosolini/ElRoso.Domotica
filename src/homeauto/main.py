@@ -47,6 +47,7 @@ from homeauto.lists import ListStore
 from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import Hush, HushStore
 from homeauto.schedule.announcer import Announcer
+from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
@@ -124,8 +125,9 @@ CALL_COMMANDS = ("llamar", "llama")
 VOLUME_COMMANDS = ("volumen", "volume")
 STOP_COMMANDS = ("parar", "stop")
 WHERE_COMMANDS = ("donde",)
-TIMER_COMMANDS = ("timer", "recordar")
+TIMER_COMMANDS = ("timer",)
 ALARM_COMMANDS = ("alarma",)
+REMIND_COMMANDS = ("recordar",)
 LIST_COMMANDS = ("lista",)
 CANCEL_COMMANDS = ("cancelar",)
 POSTPONE_COMMANDS = ("posponer",)
@@ -146,7 +148,7 @@ SILENCE_COMMANDS = ("silencio", "siesta")
 SPEAK_COMMANDS = ("hablar",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
-    + TIMER_COMMANDS + ALARM_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
+    + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
     + ASK_COMMANDS + CALC_COMMANDS
@@ -159,7 +161,8 @@ ALL_COMMANDS = (
 COMMAND_MENU = (
     ("decir", "Decirlo en voz alta ahora"),
     ("llamar", "Llamar a la casa — /llamar a cenar"),
-    ("alarma", "Avisar a una hora — /alarma 7:30 arriba"),
+    ("alarma", "Despertar a una hora — /alarma 7:30 arriba"),
+    ("recordar", "Recordar algo los días que digas — /recordar lun-vie 7:30 colegio"),
     ("lista", "Ver y cancelar lo que está programado"),
     ("silencio", "No hablar por un rato — /silencio 2h"),
     ("preguntar", "Averiguar algo y contestarlo en voz alta"),
@@ -171,6 +174,8 @@ COMMAND_MENU = (
 
 # Los botones abajo de cada aviso: (etiqueta, comando con su argumento).
 SNOOZE_ACTIONS = (("Posponer 10 min", "posponer 10m"), ("Posponer 30 min", "posponer 30m"))
+# `{job}` lo completa el anunciador con el número del recordatorio.
+REMINDER_ACTIONS = (("✅ Hecho", "hecho {job}"),) + SNOOZE_ACTIONS
 MONITOR_ACTIONS = (("Ver estado", "estado"), ("Silenciar 1 h", "silencio 1h"))
 SEQ_ACTIONS = (("Silenciar 1 h", "silencio 1h"),)
 
@@ -588,6 +593,7 @@ def register(app: Application, commands: Commands, strangers=None) -> None:
         (WHERE_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
         (TIMER_COMMANDS, commands.timer),
         (ALARM_COMMANDS, commands.alarm),
+        (REMIND_COMMANDS, commands.remind),
         (LIST_COMMANDS, lambda chat_id, _text: commands.list(chat_id)),
         (CANCEL_COMMANDS, commands.cancel),
         (POSTPONE_COMMANDS, commands.postpone),
@@ -666,7 +672,7 @@ def register(app: Application, commands: Commands, strangers=None) -> None:
         markup = None
         try:
             reply = await asyncio.to_thread(
-                with_actions, commands.press, update.effective_chat.id, query.data
+                with_actions, commands.press, update.effective_chat.id, query.data, _who(update)
             )
             answer, markup = reply.text, _keyboard(reply.actions)
         except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
@@ -721,9 +727,12 @@ def main() -> None:
             quiet=hush,
             polish=polish,
             actions=SNOOZE_ACTIONS,
+            reminder_actions=REMINDER_ACTIONS,
             chat_ids=config.allowed_chat_ids,
         ),
         fired=FiredStore(db_path),
+        awaiting=AwaitingStore(db_path),
+        notify=notifier,
         chat_ids=config.allowed_chat_ids,
     )
     calendar = None

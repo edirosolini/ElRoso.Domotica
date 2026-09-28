@@ -1,4 +1,4 @@
-"""Los beeps que van delante de una alarma, con el formato del wav que los recibe."""
+"""Los beeps que van delante de un aviso, con el formato del wav que los recibe."""
 
 from __future__ import annotations
 
@@ -21,10 +21,31 @@ BEEPS = (
 )
 SECONDS = sum(length for _, length in BEEPS)
 
+# Un solo tono corto: llama la atención sin sonar a despertador.
+SOFT_BEEPS = (
+    (660, 0.22),
+    (0, 0.40),
+)
+
+ALARM = "alarm"
+SOFT = "soft"
+SOUNDS = {ALARM: BEEPS, SOFT: SOFT_BEEPS}
+
 AMPLITUDE = 0.35
 # Un tono que arranca a amplitud plena hace click.
 FADE_SECONDS = 0.006
 SUPPORTED_WIDTH = 2
+
+
+def sound(chime: bool | str) -> str | None:
+    """El nombre del sonido pedido: `True` es el de alarma, `False` ninguno."""
+    if chime is True:
+        return ALARM
+    if not chime:
+        return None
+    if chime not in SOUNDS:
+        raise ValueError(f"sonido desconocido: {chime}")
+    return chime
 
 
 def frames(rate: int, width: int, channels: int, beeps=BEEPS) -> bytes:
@@ -49,13 +70,13 @@ def frames(rate: int, width: int, channels: int, beeps=BEEPS) -> bytes:
     return samples.tobytes()
 
 
-def prepend(path: Path) -> None:
+def prepend(path: Path, name: str = ALARM) -> None:
     """Pega el chime delante de un wav, en el lugar. Un clip ilegible se deja como está."""
     try:
         with wave.open(str(path), "rb") as source:
             params = source.getparams()
             voice = source.readframes(source.getnframes())
-        beeps = frames(params.framerate, params.sampwidth, params.nchannels)
+        beeps = frames(params.framerate, params.sampwidth, params.nchannels, SOUNDS[name])
     except Exception as exc:  # noqa: BLE001 - un chime no puede costar el aviso
         log.warning("no pude ponerle el sonido a %s: %s", path, exc)
         return

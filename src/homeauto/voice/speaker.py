@@ -27,11 +27,11 @@ class Speaker:
             self.media_server.start()
             self._serving = True
 
-    def say(self, text: str, chime: bool = False) -> Path:
+    def say(self, text: str, chime: bool | str = False) -> Path:
         """Sintetiza, publica y reproduce. Devuelve el archivo de audio usado.
 
         El piso de volumen se aplica acá, para todos los llamadores. `chime`
-        pega adelante los beeps de alarma, en el mismo clip y el mismo cast.
+        pega adelante un sonido, en el mismo clip y el mismo cast.
         """
         path = self.synth.say(text, chime=chime)
         self._ensure_serving()

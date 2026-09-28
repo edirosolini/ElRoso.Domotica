@@ -29,7 +29,7 @@ from homeauto.correct import as_written
 from homeauto.polish import as_is
 from homeauto.route import Decision, RouteError
 from homeauto.translate import TranslateError
-from homeauto.schedule.store import DAILY, ONCE, WEEKLY
+from homeauto.schedule.store import ALARM, DAILY, ONCE, REMINDER, WEEKLY
 from homeauto.quiet import Hush
 from homeauto.timespec import (
     TimeSpecError,
@@ -81,6 +81,9 @@ _SPOKEN = contextvars.ContextVar("spoken", default="")
 # Los botones que ofrece la respuesta en curso.
 _ACTIONS = contextvars.ContextVar("actions", default=())
 
+# Quién tocó el botón en curso, como lo nombra el aviso a los demás.
+_WHO = contextvars.ContextVar("who", default="")
+
 
 @dataclass(frozen=True)
 class Reply:
@@ -119,10 +122,11 @@ HELP = """Hola. Manejo los equipos de casa.
 /decir en comedor,recamara <texto> — en varios
 /decir en todos <texto> — en toda la casa
 /llamar a cenar — llama a la casa; sin nada, a la comida que toque
-/timer 10m sacá la pizza — avisa dentro de un rato
-/alarma 7:30 arriba — avisa a esa hora
-/alarma diaria 7:30 arriba — todos los días
-/alarma lun-vie 5:30 arriba — solo esos días
+/timer 10m sacá la pizza — avisa una vez · /timer mañana 10:00 llamar al médico
+/recordar diaria 8:00 la pastilla — un recordatorio todos los días
+/recordar lun-vie 7:30 salir al colegio — solo esos días
+/alarma 7:30 arriba — para despertarse; suena fuerte
+/alarma diaria 7:30 arriba — todos los días · /alarma lun-vie 5:30 arriba
 /lista — lo que está programado
 /cancelar <n> — cancela uno
 /posponer — repite en 10 minutos la alarma que acaba de sonar · /posponer 30m
@@ -145,7 +149,7 @@ HELP = """Hola. Manejo los equipos de casa.
 
 La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, 5.30, mañana 8:00.
 Una hora que ya pasó se entiende como la de mañana.
-Los días de una alarma van adelante de la hora: lun-vie, mar,jue, finde, sab.
+Los días de una alarma o un recordatorio van adelante de la hora: lun-vie, mar,jue, finde, sab.
 Cualquier comando acepta «en <equipo>» adelante para mandarlo a otro lado.
 Te contesto acá salvo que lo pidas: agregá «por el parlante» o «en voz alta» al final
 y sale por los equipos. /decir y /llamar suenan siempre, y las alarmas también.
@@ -669,6 +673,7 @@ class Commands:
             "llamar": self.call,
             "timer": self.timer,
             "alarma": self.alarm,
+            "recordar": self.remind,
             "lista": lambda chat_id, _text="": self.list(chat_id),
             "cancelar": self.cancel,
             "silencio": self.silence,
@@ -691,8 +696,11 @@ class Commands:
             "posponer": self.postpone,
         }
 
-    def press(self, chat_id: int, data: str) -> str:
-        """Un botón tocado: `data` es el comando y su argumento, como en `_dispatch`."""
+    def press(self, chat_id: int, data: str, who: str = "") -> str:
+        """Un botón tocado: `data` es el comando y su argumento, como en `_dispatch`.
+
+        `who` es el nombre de quien lo tocó.
+        """
         denial = self._denial(chat_id)
         if denial:
             return denial
@@ -701,11 +709,32 @@ class Commands:
             return self.free_text(chat_id, data[len(ANSWER_MARK):].strip())
 
         command, _, argument = data.strip().partition(" ")
-        run = self._dispatch().get(command)
+        # «hecho» solo existe como botón: el router nunca lo nombra.
+        run = {**self._dispatch(), "hecho": self.done}.get(command)
         if run is None:
             log.warning("botón desconocido: %r", data)
             return "No sé qué hacer con ese botón."
-        return run(chat_id, argument)
+        token = _WHO.set(who)
+        try:
+            return run(chat_id, argument)
+        finally:
+            _WHO.reset(token)
+
+    def done(self, chat_id: int, text: str) -> str:
+        """Marca como hecho el recordatorio que sonó y avisa a los demás chats."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        try:
+            job_id = int(text.strip().lstrip("#"))
+        except ValueError:
+            return "No sé cuál marcar."
+
+        message = self.reminders.done(chat_id, job_id, _WHO.get() or "Alguien")
+        if message is None:
+            return "Eso ya estaba marcado como hecho."
+        return f"✅ Hecho: «{message}»"
 
     def heard(self, chat_id: int, audio: bytes, mime: str = "audio/ogg") -> Reply:
         """Una nota de voz: se transcribe, se ejecuta y se contesta con otra."""
@@ -1017,6 +1046,7 @@ class Commands:
         repeat: str,
         label: str,
         days: tuple[int, ...] | None = None,
+        kind: str = ALARM,
     ) -> str:
         denial = self._denial(chat_id)
         if denial:
@@ -1038,7 +1068,7 @@ class Commands:
             when = next_weekday(when, days)
 
         job = self.reminders.add(
-            chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days
+            chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days, kind=kind
         )
         offer(_cancel_button(job.id))
         return (
@@ -1047,30 +1077,51 @@ class Commands:
         )
 
     def timer(self, chat_id: int, text: str) -> str:
-        return self._schedule(chat_id, text, ONCE, "Programado")
+        return self._schedule(chat_id, text, ONCE, "Programado", kind=REMINDER)
 
     def alarm(self, chat_id: int, text: str) -> str:
+        return self._repeating(chat_id, text, ALARM)
+
+    def remind(self, chat_id: int, text: str) -> str:
+        """Un recordatorio: repite siempre, en los días que se le marquen."""
+        return self._repeating(chat_id, text, REMINDER)
+
+    def _repeating(self, chat_id: int, text: str, kind: str) -> str:
+        """Alarma o recordatorio: los días, si los hay, van adelante de la hora."""
         try:
             aliases, rest = self._split_target(chat_id, text)
         except TargetError as exc:
             return str(exc)
 
+        noun, example = (
+            ("Recordatorio", "/recordar lun-vie 7:30 salir al colegio")
+            if kind == REMINDER
+            else ("Alarma", "/alarma lun-vie 5:30 arriba")
+        )
         head, _, tail = rest.strip().partition(" ")
         prefix = f"{TARGET_WORD} {','.join(aliases)} "
         if head.lower() in slots.DAILY_WORDS:
-            return self._schedule(chat_id, prefix + tail, DAILY, "Alarma todos los días")
+            return self._schedule(
+                chat_id, prefix + tail, DAILY, f"{noun} todos los días", kind=kind
+            )
 
         days = parse_weekdays(head)
         if days:
             # Los días eligen la ocurrencia, así que lo que sigue tiene que ser
             # una hora: "lun-vie 10m" significaría diez minutos desde ahora.
             if not _CLOCK.fullmatch(tail.strip().split(" ")[0]):
-                return "Con días de la semana necesito una hora. Ej: /alarma lun-vie 5:30 arriba"
+                return f"Con días de la semana necesito una hora. Ej: {example}"
             return self._schedule(
-                chat_id, prefix + tail, WEEKLY, f"Alarma {format_weekdays(days)}", days=days
+                chat_id, prefix + tail, WEEKLY, f"{noun} {format_weekdays(days)}",
+                days=days, kind=kind,
             )
 
-        return self._schedule(chat_id, prefix + rest, ONCE, "Alarma")
+        if kind == REMINDER:
+            return (
+                "Un recordatorio repite: decime qué días. Ej: /recordar diaria 8:00 la pastilla"
+                f" o {example}. Para una sola vez, /timer mañana 10:00 llamar al médico"
+            )
+        return self._schedule(chat_id, prefix + rest, ONCE, noun, kind=kind)
 
     def postpone(self, chat_id: int, text: str = "") -> str:
         """Vuelve a agendar la alarma o el timer que acaba de sonar."""
@@ -1101,7 +1152,7 @@ class Commands:
         offer(*(_cancel_button(job.id) for job in jobs[:MAX_BUTTONS]))
         now = self.clock()
         lines = [
-            f"#{job.id} · {format_when(job.when, now)} · {', '.join(job.devices) or self.config.default_device}"
+            f"{'🔔' if job.is_reminder else '⏰'} #{job.id} · {format_when(job.when, now)} · {', '.join(job.devices) or self.config.default_device}"
             f"{self._repetition(job)} — {job.message}"
             for job in jobs
         ]

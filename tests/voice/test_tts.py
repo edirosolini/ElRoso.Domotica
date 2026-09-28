@@ -186,3 +186,24 @@ def test_the_chime_version_is_reused_like_any_other(synth):
 
     assert first == again
     assert len(piper.calls) == 1
+
+
+def test_the_soft_chime_is_cached_apart_from_the_alarm(synth):
+    from homeauto.voice import chime
+
+    piper = FakePiper(seconds=3.0)
+    voice = synth(piper)
+
+    alarm = voice.say("arriba", chime=chime.ALARM)
+    soft = voice.say("arriba", chime=chime.SOFT)
+
+    assert soft != alarm
+    assert duration_of(soft) < duration_of(alarm)
+
+
+def test_the_alarm_keeps_the_cache_it_already_had(synth):
+    from homeauto.voice import chime
+
+    voice = synth(FakePiper(seconds=3.0))
+
+    assert voice.say("arriba", chime=True) == voice.say("arriba", chime=chime.ALARM)

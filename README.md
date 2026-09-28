@@ -1,7 +1,7 @@
 # Domótica
 
 Bot de Telegram que maneja dispositivos de casa. Hoy: hacer hablar al parlante Google Nest
-con voz sintetizada offline. Timers y alarmas incluidos.
+con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 
 ## Comandos
 
@@ -9,10 +9,13 @@ con voz sintetizada offline. Timers y alarmas incluidos.
 /decir buenas noches            habla ahora
 /decir en tv que bajen a comer  lo dice en ese equipo
 /llamar a cenar                 llama a toda la casa; sin nada, a lo que toque
-/timer 10m sacá la pizza        avisa dentro de 10 minutos
-/alarma 7:30 arriba             avisa a esa hora, una vez
-/alarma diaria 7:30 arriba      avisa todos los días
-/alarma lun-vie 5:30 arriba     avisa solo esos días
+/timer 10m sacá la pizza        avisa una vez, dentro de 10 minutos
+/timer mañana 10:00 médico      avisa una vez, a esa hora
+/recordar diaria 8:00 pastilla  recordatorio todos los días
+/recordar lun-vie 7:30 colegio  recordatorio solo esos días
+/alarma 7:30 arriba             para despertarse, una vez
+/alarma diaria 7:30 arriba      para despertarse, todos los días
+/alarma lun-vie 5:30 arriba     para despertarse, solo esos días
 /lista                          lo que está programado
 /cancelar 3                     cancela por número
 /posponer                       repite en 10 minutos la alarma que acaba de sonar
@@ -109,13 +112,20 @@ qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
 `en` solo se interpreta como destino si la palabra siguiente es un equipo conocido:
 `/decir en casa hace frío` dice la frase entera, no se come nada.
 
-Los timers y las alarmas se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
+**Alarma, recordatorio y timer suenan distinto.** La alarma es para despertarse: tres beeps
+y «Posponer». El recordatorio (`/recordar`) repite siempre en los días marcados —una
+medicación, salir al colegio— y el timer es de una sola vez; los dos suenan con un beep suave
+y traen «✅ Hecho» además de posponer. Tocar «Hecho» les avisa a los demás chats quién lo
+marcó, y ya no se puede posponer. Un recordatorio sin días no se agenda: para algo de una
+sola vez está `/timer`.
+
+Los timers, las alarmas y los recordatorios se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 
 Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `5.30`,
 `mañana 8:00`. Una hora que ya pasó se entiende como la de mañana.
 
-Una alarma puede repetirse los días que se le pidan, escribiéndolos antes de la hora:
+Una alarma o un recordatorio puede repetirse los días que se le pidan, escribiéndolos antes de la hora:
 rangos (`lun-vie`, `vie-lun` cruza el fin de semana), listas (`mar,jue`), un día suelto
 (`sab`) o los atajos `finde` y `habiles`. Se aceptan nombres completos y con acento
 (`miércoles`). Los días eligen qué ocurrencia de la hora dispara, así que ahí la hora es
@@ -131,6 +141,7 @@ decí que ya llegué                        →  /decir que ya llegué
 decile a todos que la comida está lista   →  /decir en todos que la comida está lista
 poneme un timer de 10 minutos para la pizza  →  /timer 10m sacar la pizza
 despertame a las 7 y media                →  /alarma 7:30 despertame
+recordame la pastilla todos los días a las 8  →  /recordar diaria 8:00 la pastilla
 bajá el volumen a 40                      →  /volumen 40
 callate una hora                          →  /silencio 1h
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
@@ -456,7 +467,7 @@ systemctl restart domotica
 `ALLOWED_CHAT_IDS` vacío deja el bot **abierto**: cualquiera que lo encuentre puede usarlo.
 Se deja así solo para el alta inicial; una vez que sabés tu chat ID, se completa y se reinicia.
 
-Con más de una persona en la lista, las alarmas, los timers, la agenda y el clima les llegan a
+Con más de una persona en la lista, las alarmas, los recordatorios, los timers, la agenda y el clima les llegan a
 todas. Los avisos del monitor y de Seq, a `ALERT_CHAT_IDS`, que tiene que ser parte de
 `ALLOWED_CHAT_IDS`. Esos chats también son los únicos que leen los servicios caídos y los
 errores de la noche en el resumen y el cierre; el parlante los dice igual.

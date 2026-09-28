@@ -59,3 +59,17 @@ def test_an_unsupported_sample_width_says_it_without_beeps(tmp_path):
 
     _, frames = read(path)
     assert frames == voice
+
+
+def test_the_soft_chime_is_a_single_short_tone():
+    soft = chime.frames(rate=22050, width=2, channels=1, beeps=chime.SOUNDS[chime.SOFT])
+    alarm = chime.frames(rate=22050, width=2, channels=1, beeps=chime.SOUNDS[chime.ALARM])
+
+    assert 0 < len(soft) < len(alarm)
+    assert sum(1 for hertz, _ in chime.SOUNDS[chime.SOFT] if hertz) == 1
+
+
+def test_true_still_means_the_alarm_beeps():
+    assert chime.sound(True) == chime.ALARM
+    assert chime.sound(False) is None
+    assert chime.sound(chime.SOFT) == chime.SOFT
