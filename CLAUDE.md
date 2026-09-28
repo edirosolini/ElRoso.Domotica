@@ -625,7 +625,7 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
   la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
 - ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
   comportamiento medido. Un ejemplo nuevo puede correrle la atención al modelo en los otros
-  comandos, así que se vuelve a medir: la última corrida dio treinta y uno de treinta y uno.
+  comandos, así que se vuelve a medir: la última corrida dio treinta y cuatro de treinta y cuatro.
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
@@ -892,8 +892,8 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 - **Posponer conserva el tipo**: `FiredStore` guarda `kind`, y un recordatorio pospuesto
   vuelve a sonar como recordatorio.
 - ⚠️ **Se tocó el prompt del router** para sumar `recordar` y el ejemplo "recordame mañana a
-  las diez" → `timer`. Falta volver a medir: `deploy/measure_router.py` tiene treinta y
-  cuatro casos.
+  las diez" → `timer`. Medido el 2026-09-28: treinta y cuatro de treinta y cuatro, después
+  de acotar la regla de las duraciones (ver **Texto libre**).
 
 ## Alarmas y repetición
 
@@ -949,7 +949,7 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
   de silenciar.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
-  treinta y uno de treinta y uno. Ver **Texto libre**.
+  treinta y uno de treinta y uno (hoy treinta y cuatro). Ver **Texto libre**.
 
 ## Botones en las respuestas
 
@@ -995,10 +995,10 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
-- 🔴 **Medido el 2026-09-25 contra el endpoint real: treinta y uno de treinta y uno comandos
-  y veintiuno de veintiuno payloads**, con `gemini-3.1-flash-lite` y un caso por comando
-  ruteable. Es la corrida de después de sumar `posponer`; la anterior, del 2026-09-22, había
-  dado treinta de treinta sin él. `deploy/measure_router.py` es esa
+- 🔴 **Medido el 2026-09-28 contra el endpoint real: treinta y cuatro de treinta y cuatro
+  comandos y veinticuatro de veinticuatro payloads**, con `gemini-3.1-flash-lite`. Es la
+  corrida de después de sumar `recordar`; la del 2026-09-25, con `posponer`, había dado
+  treinta y uno de treinta y uno. `deploy/measure_router.py` es esa
   corrida: vive en el repo porque la regla de volver a medir no sirve si medir es un trabajo.
   Corre **adentro del CT**, que es donde está la clave.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
@@ -1006,11 +1006,17 @@ existen ya saben rechazar un argumento malo.
   adelante: "traducí hola al francés" iba a traducir el texto *"hola al francés"* al inglés.
   Ningún test lo veía porque todos usan dobles, y el doble contestaba lo que esperábamos.
   Ver **Traducir**.
+- 🔴 **La regla de convertir duraciones no aplica a `decir` ni a `llamar`.** Al sumar los
+  ejemplos de `recordar`, "avisá en el comedor que salgo en cinco minutos" empezó a volver
+  como `decir → "... salgo en 5m"` seis de seis veces: `_faithful()` lo descartaba y el
+  mensaje terminaba en `preguntar`. La regla decía "las duraciones y horas" sin nombrar
+  comandos; ahora los nombra y excluye a los dos que llevan palabras de una persona. Un
+  ejemplo nuevo mueve comportamientos que no toca: por eso se mide todo, no solo lo nuevo.
 - 🔴 **Los ejemplos del prompt sostienen el comportamiento, no lo decoran.** Sin ellos el
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; hoy son treinta y uno de treinta y uno con los comandos que se sumaron después. Si se toca el
+  limpios; hoy son treinta y cuatro de treinta y cuatro con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -1142,7 +1148,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (treinta y uno de treinta y uno) y un segundo prompt es un segundo
+  prompt del router **está medido** (treinta y cuatro de treinta y cuatro) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
