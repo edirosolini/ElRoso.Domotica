@@ -121,3 +121,34 @@ def test_something_that_is_not_a_time_still_misses_the_time(argument):
 
 def test_tomorrow_with_a_clock_only_misses_the_message():
     assert slots.missing("alarma", "mañana 8:00").name == "mensaje"
+
+
+@pytest.mark.parametrize(
+    "argument, name",
+    [
+        ("", "hora"),
+        ("8:00", "mensaje"),
+        ("diaria", "hora"),
+        ("lun-vie 7:30", "mensaje"),
+        ("8:00 la pastilla", "dias"),
+        ("mañana 8:00 la pastilla", "dias"),
+    ],
+)
+def test_what_a_reminder_is_still_missing(argument, name):
+    slot = slots.missing("recordar", argument)
+    assert slot is not None and slot.name == name
+
+
+@pytest.mark.parametrize(
+    "argument", ["diaria 8:00 la pastilla", "lun-vie 7:30 al colegio", "en comedor mar,jue 9:00 x"]
+)
+def test_a_reminder_with_its_days_is_complete(argument):
+    assert slots.missing("recordar", argument) is None
+
+
+def test_a_reminder_never_offers_once():
+    """Una sola vez es un timer: el recordatorio siempre repite."""
+    slot = slots.missing("recordar", "8:00 la pastilla")
+
+    assert slot.choices
+    assert all("sola vez" not in answer for _, answer in slot.choices)

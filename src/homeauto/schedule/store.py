@@ -1,4 +1,4 @@
-"""Persistencia de timers y alarmas.
+"""Persistencia de timers, alarmas y recordatorios.
 
 Lo agendado tiene que sobrevivir un reinicio del contenedor: una alarma que
 desaparece porque el servicio se actualizó a medianoche es peor que no tenerla.
@@ -17,6 +17,10 @@ DAILY = "daily"
 WEEKLY = "weekly"
 REPEATS = (ONCE, DAILY, WEEKLY)
 
+ALARM = "alarm"
+REMINDER = "reminder"
+KINDS = (ALARM, REMINDER)
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +29,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     message  TEXT    NOT NULL,
     repeat   TEXT    NOT NULL DEFAULT 'once',
     device   TEXT,
-    days     TEXT
+    days     TEXT,
+    kind     TEXT    NOT NULL DEFAULT 'alarm'
 );
 CREATE INDEX IF NOT EXISTS jobs_by_time ON jobs (fires_at);
 """
@@ -40,6 +45,11 @@ class Job:
     repeat: str = ONCE
     device: str | None = None
     days: str | None = None
+    kind: str = ALARM
+
+    @property
+    def is_reminder(self) -> bool:
+        return self.kind == REMINDER
 
     @property
     def is_daily(self) -> bool:
@@ -69,6 +79,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         repeat=row["repeat"],
         device=row["device"],
         days=row["days"],
+        kind=row["kind"],
     )
 
 
@@ -88,6 +99,8 @@ class Store:
             conn.execute("ALTER TABLE jobs ADD COLUMN device TEXT")
         if "days" not in existing:
             conn.execute("ALTER TABLE jobs ADD COLUMN days TEXT")
+        if "kind" not in existing:
+            conn.execute(f"ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT '{ALARM}'")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -102,18 +115,21 @@ class Store:
         repeat: str = ONCE,
         device: str | None = None,
         days: Iterable[int] | None = None,
+        kind: str = ALARM,
     ) -> Job:
         if repeat not in REPEATS:
             raise ValueError(f"repeat inválido: {repeat}")
+        if kind not in KINDS:
+            raise ValueError(f"kind inválido: {kind}")
         stored_days = ",".join(str(day) for day in sorted(days)) if days else None
         # Un job semanal sin días no encontraría nunca un día para disparar.
         if repeat == WEEKLY and not stored_days:
             raise ValueError("una alarma semanal necesita días")
         with self._connect() as conn:
             cursor = conn.execute(
-                "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (chat_id, when.isoformat(), message, repeat, device, stored_days),
+                "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days, kind)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (chat_id, when.isoformat(), message, repeat, device, stored_days, kind),
             )
             return Job(
                 id=cursor.lastrowid,
@@ -123,6 +139,7 @@ class Store:
                 repeat=repeat,
                 device=device,
                 days=stored_days,
+                kind=kind,
             )
 
     def pending(self, chat_id: int | None = None) -> list[Job]:

@@ -5,6 +5,7 @@ import pytest
 from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.store import Job
 from homeauto.voice.caster import CastError
+from homeauto.voice import chime
 from homeauto.voice.tts import TtsError
 
 JOB = Job(id=7, chat_id=42, when=datetime(2026, 8, 30, 7, 30), message="arriba")
@@ -37,7 +38,7 @@ def test_an_alarm_sounds_before_it_speaks():
 
     announcer(JOB)
 
-    assert speaker.chimes == [True]
+    assert speaker.chimes == [chime.ALARM]
 
 
 def test_also_writes_to_the_chat():

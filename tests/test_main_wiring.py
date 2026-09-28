@@ -740,6 +740,22 @@ def test_what_fired_is_kept_in_the_one_database(wired, tmp_path, monkeypatch):
     assert fired.last(42).message == "arriba"
 
 
+def test_a_reminder_offers_done_and_waits_in_the_one_database(wired, tmp_path, monkeypatch):
+    announcer = _spy_init(monkeypatch, main.Announcer)
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    done, *snooze = announcer["reminder_actions"]
+    assert done[1].format(job=17) == "hecho 17"
+    assert tuple(snooze) == main.SNOOZE_ACTIONS
+    awaiting = reminders["awaiting"]
+    assert awaiting.db_path == tmp_path / "jobs.db"
+    awaiting.remember(17, "la pastilla", main.datetime(2026, 9, 28, 8, 0))
+    assert awaiting.take(17) == "la pastilla"
+    assert callable(reminders["notify"])
+
+
 def test_a_button_has_a_handler(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 

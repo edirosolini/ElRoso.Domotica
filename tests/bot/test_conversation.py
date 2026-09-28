@@ -38,7 +38,7 @@ class FakeReminders:
     def __init__(self):
         self.added = []
 
-    def add(self, chat_id, when, message, repeat="once", device="", days=None):
+    def add(self, chat_id, when, message, repeat="once", device="", days=None, kind="alarm"):
         self.added.append((chat_id, when, message, repeat, days))
 
         class Job:
@@ -213,6 +213,10 @@ def test_a_question_is_still_a_question(tmp_path):
         ("alarma", "lun-vie 5:30"),
         ("timer", ""),
         ("timer", "10m"),
+        ("recordar", ""),
+        ("recordar", "diaria"),
+        ("recordar", "lun-vie 7:30"),
+        ("recordar", "8:00 la pastilla"),
         ("decir", ""),
         ("cancelar", ""),
         ("volumen", ""),

@@ -1,4 +1,4 @@
-"""Timers y alarmas: qué decir, cuándo, y qué hacer después de decirlo.
+"""Timers, alarmas y recordatorios: qué decir, cuándo, y qué hacer después de decirlo.
 
 El reloj de verdad vive detrás de la interfaz `timer`, así que esta lógica se
 prueba sin esperar tiempo real.
@@ -10,8 +10,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Callable, Iterable, Protocol
 
+from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
-from homeauto.schedule.store import DAILY, ONCE, WEEKLY, Job, Store
+from homeauto.schedule.store import ALARM, DAILY, ONCE, WEEKLY, Job, Store
 from homeauto.timespec import next_weekday
 
 log = logging.getLogger(__name__)
@@ -34,11 +35,15 @@ class Reminders:
         fired: FiredStore | None = None,
         clock: Callable[[], datetime] = datetime.now,
         chat_ids: Iterable[int] = (),
+        awaiting: AwaitingStore | None = None,
+        notify: Callable[[int, str], None] | None = None,
     ):
         self.store = store
         self.timer = timer
         self.announce = announce
         self.fired = fired
+        self.awaiting = awaiting
+        self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
         self.chat_ids = list(chat_ids)
@@ -61,8 +66,9 @@ class Reminders:
         repeat: str = ONCE,
         device: str | None = None,
         days: Iterable[int] | None = None,
+        kind: str = ALARM,
     ) -> Job:
-        job = self.store.add(chat_id, when, message, repeat, device, days)
+        job = self.store.add(chat_id, when, message, repeat, device, days, kind)
         self._arm(job)
         return job
 
@@ -86,7 +92,27 @@ class Reminders:
             return None
         for chat in self._audience(chat_id):
             self.fired.forget(chat)
-        return self.add(chat_id, now + delay, last.message, device=last.device)
+        return self.add(chat_id, now + delay, last.message, device=last.device, kind=last.kind)
+
+    def done(self, chat_id: int, job_id: int, who: str) -> str | None:
+        """Cierra un recordatorio que sonó y avisa al resto; None si ya estaba cerrado."""
+        if self.awaiting is None:
+            return None
+        message = self.awaiting.take(job_id)
+        if message is None:
+            return None
+        audience = self._audience(chat_id)
+        for chat in audience:
+            if self.fired is not None and (last := self.fired.last(chat)) and last.message == message:
+                self.fired.forget(chat)
+        for chat in audience:
+            if chat == chat_id or self.notify is None:
+                continue
+            try:
+                self.notify(chat, f"✅ {who} marcó hecho: «{message}»")
+            except Exception:
+                log.exception("no se pudo avisar al chat %s del hecho %s", chat, job_id)
+        return message
 
     def _audience(self, chat_id: int) -> list[int]:
         return self.chat_ids or [chat_id]
@@ -103,7 +129,9 @@ class Reminders:
         if self.fired is not None:
             at = self.clock()
             for chat in self._audience(job.chat_id):
-                self.fired.remember(chat, job.message, job.device, at)
+                self.fired.remember(chat, job.message, job.device, at, job.kind)
+        if self.awaiting is not None and job.is_reminder:
+            self.awaiting.remember(job.id, job.message, self.clock())
 
         try:
             self.announce(job)

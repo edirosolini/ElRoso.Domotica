@@ -176,8 +176,8 @@ class VoiceSynth:
         # Varios equipos piden la misma frase desde varios hilos a la vez.
         self._lock = threading.Lock()
 
-    def say(self, text: str, chime: bool = False) -> Path:
-        """`chime` pega adelante los beeps de alarma. Va en la clave del cache.
+    def say(self, text: str, chime: bool | str = False) -> Path:
+        """`chime` pega adelante un sonido: `True` o el nombre de uno. Va en la clave del cache.
 
         Cada renglón es un párrafo y lleva una pausa de punto y aparte.
         """
@@ -186,7 +186,8 @@ class VoiceSynth:
             raise TtsError("El texto está vacío")
         text = "\n".join(paragraphs)
 
-        cached = self.cache_dir / f"{self._key(text, chime)}.wav"
+        sound = chime_audio.sound(chime)
+        cached = self.cache_dir / f"{self._key(text, sound)}.wav"
         if cached.is_file():
             return cached
 
@@ -200,8 +201,8 @@ class VoiceSynth:
             pending = cached.with_suffix(f".{threading.get_ident():x}.partial")
             try:
                 self._synthesize(paragraphs, pending)
-                if chime:
-                    chime_audio.prepend(pending)
+                if sound:
+                    chime_audio.prepend(pending, sound)
                 _pad_to_minimum(pending, self.min_seconds)
                 pending.replace(cached)
             finally:
@@ -222,9 +223,11 @@ class VoiceSynth:
             for part in parts:
                 part.unlink(missing_ok=True)
 
-    def _key(self, text: str, chime: bool = False) -> str:
+    def _key(self, text: str, sound: str | None = None) -> str:
         pacing = self.pacing
         if "\n" in text:
             pacing = f"{pacing}|{self.paragraph_silence}"
-        seed = f"{self.voice}\x00{pacing}\x00{'chime' if chime else ''}\x00{text}"
+        # La alarma conserva la clave de antes, así su cache sigue sirviendo.
+        mark = {None: "", chime_audio.ALARM: "chime"}.get(sound, f"chime:{sound}")
+        seed = f"{self.voice}\x00{pacing}\x00{mark}\x00{text}"
         return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]

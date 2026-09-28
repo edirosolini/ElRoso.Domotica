@@ -95,7 +95,7 @@ class ThreadSpyCommands:
         self.threads.append(threading.current_thread().name)
         return "ok"
 
-    start = say = call = volume = stop = where = timer = alarm = list = cancel = _record
+    start = say = call = volume = stop = where = timer = alarm = remind = list = cancel = _record
     devices = use = turn_off = weather = agenda_command = _record
     status = silence = speak = ask = calculate = free_text = _record
     add_item = shopping = todo = remove_item = translate = postpone = _record
@@ -166,7 +166,7 @@ class ExplodingCommands:
     def _boom(self, *_args, **_kwargs):
         raise RuntimeError("Address already in use")
 
-    start = say = call = volume = stop = where = timer = alarm = list = cancel = _boom
+    start = say = call = volume = stop = where = timer = alarm = remind = list = cancel = _boom
     devices = use = turn_off = weather = agenda_command = _boom
     status = silence = speak = ask = calculate = free_text = heard = _boom
     add_item = shopping = todo = remove_item = translate = postpone = _boom

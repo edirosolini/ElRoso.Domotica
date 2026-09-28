@@ -31,7 +31,7 @@ class SpyCommands:
         self.calls.append((chat_id, text))
         return "ok"
 
-    start = say = call = volume = stop = where = timer = alarm = list = cancel = _record
+    start = say = call = volume = stop = where = timer = alarm = remind = list = cancel = _record
     devices = use = turn_off = weather = agenda_command = _record
     status = silence = speak = ask = calculate = free_text = _record
     add_item = shopping = todo = remove_item = translate = postpone = press = _record

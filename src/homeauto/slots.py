@@ -4,7 +4,7 @@ El router nombra el comando; esto dice si tiene con qué trabajar, así media
 orden se vuelve una pregunta en vez del error del parser. Nunca completa nada:
 el dato sale de la persona.
 
-La forma de una alarma se mira acá y en `Commands.alarm`, y
+La forma de una alarma o un recordatorio se mira acá y en `Commands._repeating`, y
 `tests/bot/test_conversation.py` ata las dos mitades.
 """
 
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from homeauto.route import strip_target
 from homeauto.timespec import TOMORROW_WORDS, TimeSpecError, parse_duration, parse_weekdays
 
-# Las palabras que ya dicen cómo repite una alarma. `Commands.alarm` lee la
+# Las palabras que ya dicen cómo repite una alarma. `Commands._repeating` lee la
 # misma tupla, así que una nueva se agrega en un solo lugar.
 DAILY_WORDS = ("diaria", "diario", "daily")
 
@@ -50,6 +50,14 @@ REPEAT = Slot(
     "¿Una sola vez, todos los días, o algunos días?",
     (
         ("Una sola vez", "una sola vez"),
+        ("Todos los días", "todos los días"),
+        ("De lunes a viernes", "de lunes a viernes"),
+    ),
+)
+DAYS = Slot(
+    "dias",
+    "¿Qué días?",
+    (
         ("Todos los días", "todos los días"),
         ("De lunes a viernes", "de lunes a viernes"),
     ),
@@ -118,6 +126,17 @@ def _alarm(argument: str) -> Slot | None:
     return _timed(argument, TIME) or REPEAT
 
 
+def _reminder(argument: str) -> Slot | None:
+    """Como la alarma, pero sin la opción de una sola vez: eso es un timer."""
+    if not argument:
+        return TIME
+
+    head, _, tail = argument.partition(" ")
+    if head.lower() in DAILY_WORDS or parse_weekdays(head):
+        return _timed(tail, TIME)
+    return _timed(argument, TIME) or DAYS
+
+
 def _removal(argument: str) -> Slot | None:
     """Sacar pide un número, salvo que se pida vaciar la lista entera."""
     if "todo" in argument.lower():
@@ -135,6 +154,7 @@ def _needed(slot: Slot):
 
 _CHECKS = {
     "alarma": _alarm,
+    "recordar": _reminder,
     "timer": lambda argument: _timed(argument, DELAY),
     "decir": _needed(MESSAGE),
     "cancelar": _numbered(NUMBER),

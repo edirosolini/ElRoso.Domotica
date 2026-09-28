@@ -21,7 +21,7 @@ NONE_WORDS = {"ninguno", "ninguna", "nada", "none", ""}
 # Solo a estos se llega sin barra. El modelo puede contestar cualquier cosa, y
 # lo que esté fuera de esta lista se trata como pregunta en vez de adivinarlo.
 ROUTABLE = (
-    "decir", "llamar", "timer", "alarma", "lista", "cancelar", "silencio", "hablar",
+    "decir", "llamar", "timer", "alarma", "recordar", "lista", "cancelar", "silencio", "hablar",
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
     "agregar", "compras", "pendientes", "sacar", "traducir", "posponer",
@@ -43,9 +43,12 @@ Comandos y qué lleva cada uno:
 - llamar: convocar a la casa a algo, así: "a cenar"; sin argumento, a la comida que toque.
   Va acá cuando la persona pide llamar, avisar o convocar a alguien A algo, sin escribir
   la frase que hay que decir
-- timer: una duración y el mensaje, así: "10m sacá la pizza"
-- alarma: una hora y el mensaje, así: "7:30 arriba"; para repetir, "diaria 7:30 arriba"
-  o los días adelante, "lun-vie 5:30 arriba"
+- timer: un aviso de una sola vez, con una duración o una hora y el mensaje, así:
+  "10m sacá la pizza" o "mañana 10:00 llamar al médico"
+- alarma: para despertarse, una hora y el mensaje, así: "7:30 arriba"; para repetir,
+  "diaria 7:30 arriba" o los días adelante, "lun-vie 5:30 arriba"
+- recordar: algo que se repite, como una medicación o salir al colegio, con los días
+  adelante y la hora: "diaria 8:00 tomar la pastilla" o "lun-vie 7:30 salir al colegio"
 - lista: sin argumento, lo que está programado
 - cancelar: el número a cancelar
 - posponer: cuánto posponer la alarma que acaba de sonar, así: "10m"; sin argumento, diez
@@ -106,6 +109,14 @@ ARGUMENTO: en comedor que salgo en cinco minutos
 Mensaje: poneme un timer de diez minutos para sacar la pizza
 COMANDO: timer
 ARGUMENTO: 10m sacar la pizza
+
+Mensaje: recordame tomar la pastilla todos los días a las ocho
+COMANDO: recordar
+ARGUMENTO: diaria 8:00 tomar la pastilla
+
+Mensaje: recordame mañana a las diez llamar al médico
+COMANDO: timer
+ARGUMENTO: mañana 10:00 llamar al médico
 
 Mensaje: cuántos goles hizo Messi
 COMANDO: preguntar

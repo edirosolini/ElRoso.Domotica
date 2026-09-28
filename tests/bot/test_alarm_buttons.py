@@ -99,7 +99,7 @@ class PressSpy:
         self.threads = []
         self.answer = answer
 
-    def press(self, chat_id, data):
+    def press(self, chat_id, data, who=""):
         self.presses.append((chat_id, data))
         self.threads.append(threading.current_thread().name)
         if isinstance(self.answer, Exception):
@@ -254,7 +254,7 @@ class OfferingCommands:
         offer(("Cancelar #5", "cancelar 5"), ("Cancelar #6", "cancelar 6"))
         return "#5 · #6"
 
-    def press(self, chat_id, data):
+    def press(self, chat_id, data, who=""):
         offer(("Cancelar #7", "cancelar 7"))
         return "Programado #7"
 

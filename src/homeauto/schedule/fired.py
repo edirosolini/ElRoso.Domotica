@@ -1,4 +1,4 @@
-"""La última alarma o timer que sonó en cada chat, para poder posponerla."""
+"""La última alarma, timer o recordatorio que sonó en cada chat, para poder posponerla."""
 
 from __future__ import annotations
 
@@ -7,12 +7,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from homeauto.schedule.store import ALARM
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS last_fired (
     chat_id  INTEGER PRIMARY KEY,
     message  TEXT    NOT NULL,
     device   TEXT,
-    fired_at TEXT    NOT NULL
+    fired_at TEXT    NOT NULL,
+    kind     TEXT    NOT NULL DEFAULT 'alarm'
 );
 """
 
@@ -22,6 +25,7 @@ class Fired:
     message: str
     device: str | None
     at: datetime
+    kind: str = ALARM
 
 
 class FiredStore:
@@ -30,29 +34,38 @@ class FiredStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(last_fired)")}
+            if "kind" not in columns:
+                conn.execute(f"ALTER TABLE last_fired ADD COLUMN kind TEXT NOT NULL DEFAULT '{ALARM}'")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def remember(self, chat_id: int, message: str, device: str | None, at: datetime) -> None:
+    def remember(
+        self, chat_id: int, message: str, device: str | None, at: datetime, kind: str = ALARM
+    ) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO last_fired (chat_id, message, device, fired_at) VALUES (?, ?, ?, ?) "
+                "INSERT INTO last_fired (chat_id, message, device, fired_at, kind)"
+                " VALUES (?, ?, ?, ?, ?) "
                 "ON CONFLICT(chat_id) DO UPDATE SET message = excluded.message, "
-                "device = excluded.device, fired_at = excluded.fired_at",
-                (chat_id, message, device, at.isoformat()),
+                "device = excluded.device, fired_at = excluded.fired_at, kind = excluded.kind",
+                (chat_id, message, device, at.isoformat(), kind),
             )
 
     def last(self, chat_id: int) -> Fired | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT message, device, fired_at FROM last_fired WHERE chat_id = ?", (chat_id,)
+                "SELECT message, device, fired_at, kind FROM last_fired WHERE chat_id = ?",
+                (chat_id,),
             ).fetchone()
         if row is None:
             return None
-        return Fired(row["message"], row["device"], datetime.fromisoformat(row["fired_at"]))
+        return Fired(
+            row["message"], row["device"], datetime.fromisoformat(row["fired_at"]), row["kind"]
+        )
 
     def forget(self, chat_id: int) -> None:
         with self._connect() as conn:

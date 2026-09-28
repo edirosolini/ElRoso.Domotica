@@ -92,12 +92,12 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con diez tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con once tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
 | --- | --- |
-| `schedule.Store` | timers y alarmas |
+| `schedule.Store` | timers, alarmas y recordatorios |
 | `schedule.Preferences` | equipo por defecto de cada chat |
 | `agenda.SeenStore` | ocurrencias ya avisadas |
 | `watch.StatusStore` | último estado de cada chequeo |
@@ -105,7 +105,8 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `quiet.HushStore` | hasta cuándo dura el silencio pedido a mano |
 | `pending.PendingStore` | el comando a medio armar de cada chat |
 | `lists.ListStore` | las listas de compras y de pendientes |
-| `schedule.FiredStore` | la última alarma o timer que sonó en cada chat, para posponerla |
+| `schedule.FiredStore` | lo último que sonó en cada chat, para posponerlo |
+| `schedule.AwaitingStore` | los recordatorios que sonaron y esperan su «Hecho» |
 | `strangers.StrangerStore` | los chats fuera de la lista de los que ya se avisó al dueño |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
@@ -450,7 +451,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | --- | --- |
 | monitor y Seq, dichos o en descanso | `ALERT_CHAT_IDS` |
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
-| alarmas y timers | todos, con los botones de posponer |
+| alarmas, recordatorios y timers | todos, con posponer; recordatorios y timers también con «Hecho» |
 | agenda, clima, lluvia, API | todos |
 | respuesta de un comando | el chat que lo escribió |
 | aviso de un desconocido | todos (`Strangers`) |
@@ -817,8 +818,9 @@ escribe, y cierra el resumen.
 
 ## Sonido de alarma
 
-Una alarma, un timer y un aviso **urgente** suenan antes de hablar: `voice/chime.py` arma tres
-beeps y los pega adelante del wav de Piper.
+Una alarma y un aviso **urgente** suenan antes de hablar: `voice/chime.py` arma tres beeps y
+los pega adelante del wav de Piper. Un recordatorio o un timer llevan un solo beep suave
+(`chime.SOFT`). Ver **Alarma, recordatorio y timer**.
 
 - 🔴 **Va en el mismo wav, no en un segundo cast.** Dos clips son dos conexiones, dos esperas
   y dos confirmaciones de que sonó, con la app ajena pudiendo meterse en el medio.
@@ -826,8 +828,10 @@ beeps y los pega adelante del wav de Piper.
   voz: nada que copiar al CT y nada que resamplear, que ahí no hay ffmpeg.
 - 🔴 **El chime va en la clave del cache**, como la voz y el ritmo. Sin eso, la primera alarma
   que dice una frase deja esa frase con beeps para siempre, también desde `/decir`.
-- **Suena lo que interrumpe**: alarmas y timers (`Announcer`) y todo `announce(urgent=True)`
-  —monitor y API—. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
+- ⚠️ **La alarma conserva la clave de antes** (`chime`) y el beep suave usa `chime:soft`: el
+  audio con beeps ya sintetizado en el CT sigue sirviendo. `chime=True` sigue siendo la alarma.
+- **Suena lo que interrumpe**: alarmas, recordatorios y timers (`Announcer`) y todo
+  `announce(urgent=True)` —monitor y API—. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
   descanso no se habla, así que tampoco suena.
 
 ## Horario de descanso
@@ -856,9 +860,44 @@ reunión. `quiet.Hush` la implementa.
 - Los comandos verifican con `isinstance` que haya un `Hush` de verdad: con unas `QuietHours`
   sueltas no hay nada que mover y contestan que no está configurado, en vez de reventar.
 
+## Alarma, recordatorio y timer
+
+Tres tipos de programado, pedidos por el dueño el 2026-09-28: una medicación o salir al
+colegio sonaban con los tres beeps de despertador y decían "(alarma de todos los días)".
+
+| | Repite | Sonido | Botones |
+| --- | --- | --- | --- |
+| `/alarma` | una vez, diaria o por días | tres beeps | posponer |
+| `/recordar` | **siempre**, en los días marcados | un beep suave | «✅ Hecho» y posponer |
+| `/timer` | nunca | un beep suave | «✅ Hecho» y posponer |
+
+- 🔴 **El tipo es la columna `kind` de `jobs`** (`alarm` / `reminder`). Entra por
+  `_add_missing_columns` con default `alarm`: lo agendado antes de existir sigue siendo
+  alarma, incluidos los timers pendientes, que suenan con beeps una última vez.
+- 🔴 **Un recordatorio sin días no se agenda.** Una sola vez es un timer, y `/timer` ya
+  acepta una hora (`mañana 10:00`). Sin barra, la pregunta que falta es `slots.DAYS`, sin la
+  opción «Una sola vez».
+- **`/recordar` dejó de ser alias de `/timer`.** Es su propio comando, con la misma forma que
+  `/alarma` (`Commands._repeating`).
+- 🔴 **«Hecho» cierra por número de job, no por lo último que sonó.** La pastilla y el
+  colegio suenan con minutos de diferencia; marcar el primero no puede depender del orden.
+  El aviso manda `hecho <id>` y `AwaitingStore` guarda el mensaje de cada job que sonó hasta
+  que alguien lo marca, así un timer ya borrado de `jobs` igual se puede cerrar.
+- **«Hecho» se marca una sola vez** y avisa a los demás chats «✅ <nombre> marcó hecho». El
+  segundo toque contesta que ya estaba. También borra lo que sonó, así ya no se pospone.
+- **Lo que espera un «Hecho» vence al día** (`awaiting.KEEP`): se poda cada vez que suena otro.
+- 🔴 **`hecho` es solo un botón**: está en `Commands.press()` y no en `_dispatch()`, así el
+  router nunca lo nombra y el test que ata las dos listas sigue en pie. El nombre de quien
+  tocó sale de `main._who()` y entra a `press(who=...)`.
+- **Posponer conserva el tipo**: `FiredStore` guarda `kind`, y un recordatorio pospuesto
+  vuelve a sonar como recordatorio.
+- ⚠️ **Se tocó el prompt del router** para sumar `recordar` y el ejemplo "recordame mañana a
+  las diez" → `timer`. Falta volver a medir: `deploy/measure_router.py` tiene treinta y
+  cuatro casos.
+
 ## Alarmas y repetición
 
-Una alarma repite de tres formas: `once`, `daily` y `weekly`. La semanal guarda los días en
+Una alarma o un recordatorio repite de tres formas: `once`, `daily` y `weekly`. La semanal guarda los días en
 la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración que
 `datetime.isoweekday()`.
 
@@ -883,7 +922,7 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
 
 ## Posponer
 
-`/posponer` repite la alarma o el timer que acaba de sonar, y el aviso de Telegram trae dos
+`/posponer` repite la alarma, el recordatorio o el timer que acaba de sonar, y el aviso de Telegram trae dos
 botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 
 - **Se pospone lo último que sonó en ese chat**, no un número de `/lista`. Quien acaba de
@@ -1136,11 +1175,12 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 36 nombres: 25 comandos y 11 **alias** (`help`, `recordar`, `tiempo`,
+`ALL_COMMANDS` tiene 36 nombres: 26 comandos y 10 **alias** (`help`, `tiempo`,
 `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
 funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
 
-🔴 **El menú de Telegram tiene 9, no los 25.** Con los 18, la lista que sale al escribir `/`
+🔴 **El menú de Telegram tiene 10, no los 26.** `recordar` entró como el décimo, y es el
+tope que fija el test. Con los 18, la lista que sale al escribir `/`
 era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
 argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
 `parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
