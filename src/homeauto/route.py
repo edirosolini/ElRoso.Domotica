@@ -81,8 +81,9 @@ Reglas:
 - 🔴 En "decir", el texto tiene que ser EXACTAMENTE las palabras del mensaje, pero
   SIN el verbo con que te lo pidieron y SIN el equipo. Eso va aparte. No lo
   reescribas, no lo completes, no lo corrijas.
-- Las duraciones y horas convertilas al formato de arriba: "diez minutos" es "10m",
-  "las siete y media" es "7:30".
+- Las duraciones y horas de timer, alarma, recordar, posponer y silencio convertilas al
+  formato de arriba: "diez minutos" es "10m", "las siete y media" es "7:30". En decir y
+  llamar no: ahí los números quedan escritos como los escribió la persona.
 
 Ejemplos:
 

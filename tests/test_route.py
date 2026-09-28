@@ -167,3 +167,13 @@ def test_postponing_is_routable():
 
     assert decision.command == "posponer"
     assert decision.argument == "5m"
+
+
+def test_the_prompt_does_not_convert_times_inside_what_is_said():
+    """Sin la excepción, «salgo en cinco minutos» volvía como «salgo en 5m» y se descartaba."""
+    from homeauto.route import PROMPT
+
+    start = PROMPT.index("Las duraciones y horas")
+    rule = PROMPT[start:PROMPT.index("\n\n", start)]
+    assert "timer" in rule and "recordar" in rule
+    assert "En decir y\n  llamar no" in rule
