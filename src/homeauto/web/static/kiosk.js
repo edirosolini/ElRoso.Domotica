@@ -169,6 +169,49 @@
       });
   }
 
+  // Suma a la lista lo escrito y vuelve a pedir la pantalla.
+  function addItems(name, input, button) {
+    var text = input.value.trim();
+    if (!text) {
+      return;
+    }
+    button.disabled = true;
+    fetch("/api/lists/" + encodeURIComponent(name), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error(String(response.status));
+        }
+        input.value = "";
+        button.disabled = false;
+        poll();
+      })
+      .catch(function () {
+        button.disabled = false;
+        byId("problems").textContent = "No pude agregar «" + text + "».";
+      });
+  }
+
+  function wireAdder(name) {
+    var form = byId("add-" + name);
+    var input = byId("add-" + name + "-text");
+    var button = form.querySelector("button");
+    form.addEventListener("submit", function (submit) {
+      submit.preventDefault();
+      addItems(name, input, button);
+    });
+  }
+
+  function showAdders() {
+    byId("add-compras").hidden = !writable;
+    byId("add-pendientes").hidden = !writable;
+  }
+
   function fillList(name, items) {
     var list = byId("list-" + name);
     clear(list);
@@ -297,6 +340,7 @@
       })
       .then(function (data) {
         writable = Boolean(data.writable);
+        showAdders();
         poll();
       })
       .catch(function () {
@@ -317,6 +361,8 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     document.addEventListener("click", goFullscreen);
+    wireAdder("compras");
+    wireAdder("pendientes");
     tick();
     poll();
     loadWritable();

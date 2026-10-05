@@ -327,3 +327,31 @@ def test_crossing_out_is_read_only_without_allowed_chats(parts):
     with pytest.raises(ReadOnly):
         parts["build"](chat_ids=()).cross_out("compras", milk)
     assert parts["lists"].items("compras") == ["leche"]
+
+
+def test_items_are_added_split_like_the_chat_without_telling_anyone(parts):
+    parts["lists"].add("compras", ["pan"])
+
+    result = parts["build"]().add_items("compras", "leche y pan, queso")
+
+    assert result == {"added": ["leche", "queso"], "repeated": ["pan"]}
+    assert parts["lists"].items("compras") == ["pan", "leche", "queso"]
+    assert parts["told"] == []
+
+
+@pytest.mark.parametrize("text", ["", "  , , ", None, 7, "x" * 501])
+def test_adding_nothing_or_too_much_is_refused(parts, text):
+    with pytest.raises(WebError):
+        parts["build"]().add_items("compras", text)
+    assert parts["lists"].items("compras") == []
+
+
+def test_adding_to_a_list_that_does_not_exist_is_not_found(parts):
+    with pytest.raises(NotFound):
+        parts["build"]().add_items("ferreteria", "clavos")
+
+
+def test_adding_is_read_only_without_allowed_chats(parts):
+    with pytest.raises(ReadOnly):
+        parts["build"](chat_ids=()).add_items("compras", "leche")
+    assert parts["lists"].items("compras") == []

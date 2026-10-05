@@ -86,6 +86,12 @@ button { font: inherit; color: inherit; }
 .timeline li.empty, .checklist li.empty { display: block; color: var(--faint); }
 
 .checklist { list-style: none; margin: 0; padding: 0; }
+.add-item { display: flex; gap: 8px; margin-bottom: 8px; }
+.add-item[hidden] { display: none; }
+.add-item input { flex: 1; min-width: 0; font: inherit; font-size: clamp(15px, 2.2vh, 22px); color: var(--text); background: var(--card-2); border: 1px solid transparent; border-radius: 12px; padding: 8px 12px; }
+.add-item input:focus { outline: none; border-color: var(--accent); }
+.add-item button { flex: none; width: 2.4em; font: inherit; font-size: clamp(18px, 2.6vh, 26px); color: #fff; background: var(--accent); border: 0; border-radius: 12px; cursor: pointer; }
+.add-item button:disabled { opacity: .5; }
 .checklist li { display: flex; align-items: center; gap: 14px; padding: clamp(6px, 1.1vh, 12px) 0; border-bottom: 1px solid var(--line); font-size: clamp(16px, 2.6vh, 28px); }
 .checklist li:last-child { border-bottom: 0; }
 .checklist span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

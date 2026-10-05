@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Callable, Iterable
 
 from homeauto.bot.commands import format_when
-from homeauto.lists import LISTS
+from homeauto.lists import LISTS, split_items
 from homeauto.people import display_name
 from homeauto.schedule.month import item_kind
 from homeauto.schedule.spec import SpecError, classify, resolve
@@ -138,6 +138,21 @@ class JobsService:
         if removed is None:
             raise NotFound("Ese ítem ya no está en la lista.")
         return removed
+
+    def add_items(self, list_name: str, text: object) -> dict:
+        """Suma a una lista lo escrito, partido como en el chat. Devuelve lo agregado y lo repetido."""
+        self._check_writable()
+        if self.lists is None or list_name not in LISTS:
+            raise NotFound("No existe esa lista.")
+        if not isinstance(text, str):
+            raise WebError("Falta qué agregar.")
+        if len(text) > MAX_MESSAGE:
+            raise WebError(f"No puede pasar de {MAX_MESSAGE} caracteres.")
+        wanted = split_items(text)
+        if not wanted:
+            raise WebError("Falta qué agregar.")
+        added = self.lists.add(list_name, wanted)
+        return {"added": added, "repeated": [item for item in wanted if item not in added]}
 
     def _check_writable(self) -> None:
         if not self.writable:
