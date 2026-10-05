@@ -37,10 +37,42 @@ PALETTE = (
 KIND_ICONS = {ALARM_ITEM: "⏰", REMINDER_ITEM: "📌", TIMER_ITEM: "⏲️"}
 KIND_COLORS = {ALARM_ITEM: "#d93025", REMINDER_ITEM: "#1a73e8", TIMER_ITEM: "#e37400"}
 PAST_COLOR = "#9aa0a6"
+HOUSE_NAME = "La casa"
+
+# El ícono de cada código WMO de Open-Meteo; lo que no figura es cielo variable.
+SKY_ICONS = (
+    ((0,), "☀️"),
+    ((1,), "🌤️"),
+    ((2,), "⛅"),
+    ((3,), "☁️"),
+    ((45, 48), "🌫️"),
+    ((51, 53, 55, 56, 57, 80, 81, 82), "🌦️"),
+    ((61, 63, 65, 66, 67), "🌧️"),
+    ((71, 73, 75, 77, 85, 86), "❄️"),
+    ((95, 96, 99), "⛈️"),
+)
+VARIABLE_SKY = "⛅"
 
 
 class RangeError(ValueError):
     """El rango pedido está invertido o es demasiado largo."""
+
+
+def sky_icon(code: int) -> str:
+    """El emoji del estado del cielo para un código WMO."""
+    for codes, icon in SKY_ICONS:
+        if code in codes:
+            return icon
+    return VARIABLE_SKY
+
+
+def _ending(item: Item, found: list[str]) -> str:
+    """Cómo se muestra en el kiosco el final de un aviso que ya sonó."""
+    if item.done:
+        return f"✓ {item.done_by or ''}".rstrip()
+    if not item.past:
+        return ""
+    return " ".join(found) or "✓"
 
 
 def marks(item: Item) -> list[str]:
@@ -78,6 +110,8 @@ def _house_event(item: Item) -> dict:
             "past": item.past,
             "marks": found,
             "job": item.job_id,
+            "label": f"{KIND_ICONS[item.kind]} {item.message}",
+            "ending": _ending(item, found),
         },
     }
 
@@ -217,6 +251,7 @@ class Board:
             else now.isoformat(),
             "quiet": bool(self.quiet.is_quiet(now)) if self.quiet is not None else False,
             "weather": weather,
+            "next": self._next(now),
             "lists": self._lists(),
             "problems": problems,
         }
@@ -247,10 +282,39 @@ class Board:
                     past = event["extendedProps"]["past"]
                 else:
                     past = datetime.fromisoformat(event["end"]) <= local
+            props = event["extendedProps"]
             today.append(
-                {"time": time, "title": event["title"], "past": past, "color": event["color"]}
+                {
+                    "time": time,
+                    "title": event["title"],
+                    "past": past,
+                    "color": event["color"],
+                    "label": props.get("label", event["title"]),
+                    "mark": props.get("ending", ""),
+                }
             )
         return today, list(found["problems"])
+
+    def _next(self, now: datetime) -> dict | None:
+        """Lo primero con hora que todavía no empezó, de hoy o de mañana."""
+        local = self._naive(now)
+        start = local.replace(hour=0, minute=0, second=0, microsecond=0)
+        for event in self.events(start, start + timedelta(days=2))["events"]:
+            if event["allDay"]:
+                continue
+            props = event["extendedProps"]
+            begins = datetime.fromisoformat(event["start"])
+            if begins <= local or props.get("past"):
+                continue
+            return {
+                "title": event["title"],
+                "start": begins.replace(tzinfo=self.timezone).isoformat(),
+                "time": begins.strftime("%H:%M"),
+                "tomorrow": begins.date() > local.date(),
+                "color": event["color"],
+                "source": HOUSE_NAME if props["source"] == HOUSE else props["calendar"],
+            }
+        return None
 
     def _forecast(self, now: datetime) -> dict | None:
         """El clima del día, cacheado; una falla no se cachea."""
@@ -271,6 +335,7 @@ class Board:
             "minimum": forecast.minimum,
             "rain_chance": forecast.rain_chance,
             "sky": describe_code(forecast.code),
+            "icon": sky_icon(forecast.code),
         }
         with self._lock:
             self._weather_cache = (now, data)

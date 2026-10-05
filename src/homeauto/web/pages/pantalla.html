@@ -11,31 +11,46 @@
 <script src="/static/kiosk.js" defer></script>
 </head>
 <body class="kiosk">
-<main class="screen">
-  <section class="clock">
+<main class="board">
+  <section class="card clock-card">
     <div id="time" class="time">--:--</div>
     <div id="date" class="date"></div>
   </section>
-  <section id="weather" class="weather" hidden>
-    <div id="temperature" class="temperature"></div>
+
+  <section id="weather" class="card weather-card">
+    <div class="weather-main">
+      <span id="weather-icon" class="weather-icon" aria-hidden="true"></span>
+      <span id="temperature" class="temperature">--°</span>
+    </div>
     <div id="sky" class="sky"></div>
-    <div id="range" class="range"></div>
-  </section>
-  <section class="today">
-    <h2>Hoy</h2>
-    <ul id="today"></ul>
-  </section>
-  <section class="lists">
-    <div class="list">
-      <h2>Compras</h2>
-      <ul id="list-compras"></ul>
-    </div>
-    <div class="list">
-      <h2>Pendientes</h2>
-      <ul id="list-pendientes"></ul>
+    <div class="chips">
+      <span id="chip-max" class="chip"></span>
+      <span id="chip-min" class="chip"></span>
+      <span id="chip-rain" class="chip"></span>
     </div>
   </section>
-  <p id="problems" class="problems"></p>
+
+  <section class="card next-card">
+    <div class="eyebrow">Lo próximo</div>
+    <div id="next-title" class="next-title"></div>
+    <div id="next-meta" class="next-meta"></div>
+  </section>
+
+  <section class="card today-card">
+    <div class="card-head"><h2>Hoy</h2><span id="count-today" class="count">0</span></div>
+    <ul id="today" class="timeline"></ul>
+  </section>
+
+  <section class="card list-card compras-card">
+    <div class="card-head"><h2>🛒 Compras</h2><span id="count-compras" class="count">0</span></div>
+    <ul id="list-compras" class="checklist"></ul>
+  </section>
+
+  <section class="card list-card pendientes-card">
+    <div class="card-head"><h2>✅ Pendientes</h2><span id="count-pendientes" class="count">0</span></div>
+    <ul id="list-pendientes" class="checklist"></ul>
+  </section>
 </main>
+<p id="problems" class="problems"></p>
 </body>
 </html>

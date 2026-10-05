@@ -1,10 +1,14 @@
-// Agenda de la casa: FullCalendar contra /api/events, con alta, edición y baja de avisos por formulario.
+// Agenda de la casa: FullCalendar contra /api/events, con alta, edición y baja de avisos desde un panel.
 (function () {
   "use strict";
 
   var HOUR = { hour: "2-digit", minute: "2-digit", hour12: false };
   var MONTH_VIEW = "dayGridMonth";
+  var WIDE = "(min-width: 720px)";
+  var MIN_HEIGHT = 480;
+  var BOTTOM_GAP = 40;
   var TICK_MS = 60000;
+  var TOAST_MS = 2600;
 
   function pad(number) {
     return number < 10 ? "0" + number : String(number);
@@ -33,8 +37,13 @@
       "T" + pad(date.getHours()) + ":" + pad(date.getMinutes());
   }
 
+  // A qué hora abren semana y día: una antes de la actual.
+  function nowScroll(now) {
+    return pad(Math.max(0, now.getHours() - 1)) + ":00:00";
+  }
+
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { isPastToday: isPastToday, toLocalInput: toLocalInput };
+    module.exports = { isPastToday: isPastToday, toLocalInput: toLocalInput, nowScroll: nowScroll };
   }
   if (typeof document === "undefined") {
     return;
@@ -47,6 +56,7 @@
     detailJob: null,
     showPastToday: false,
     todayToggle: null,
+    toastTimer: null,
   };
 
   function byId(id) {
@@ -84,13 +94,24 @@
     var legend = byId("legend");
     clear(legend);
     calendars.forEach(function (calendar) {
-      var item = line("li", calendar.name);
-      var swatch = document.createElement("span");
-      swatch.className = "swatch";
-      swatch.style.backgroundColor = calendar.color;
-      item.insertBefore(swatch, item.firstChild);
+      var item = document.createElement("li");
+      var pill = line("span", calendar.name);
+      pill.className = "pill";
+      pill.style.setProperty("--c", calendar.color);
+      item.appendChild(pill);
       legend.appendChild(item);
     });
+  }
+
+  // Un aviso breve abajo de la pantalla, que se va solo.
+  function toast(text) {
+    var box = byId("toast");
+    box.textContent = text;
+    box.hidden = false;
+    clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(function () {
+      box.hidden = true;
+    }, TOAST_MS);
   }
 
   // Pide JSON a la casa; una respuesta de error se vuelve un Error con su texto.
@@ -171,7 +192,7 @@
         if (past) {
           count += 1;
         }
-        var display = past && !state.showPastToday ? "none" : "auto";
+        var display = past && !state.showPastToday ? "none" : "block";
         if (event.display !== display) {
           event.setProp("display", display);
         }
@@ -247,9 +268,10 @@
     send("DELETE", "/api/jobs/" + job).then(function () {
       closeDetail();
       state.calendar.refetchEvents();
+      toast("Aviso borrado.");
     }).catch(function (error) {
       closeDetail();
-      showProblems([error.message]);
+      toast(error.message);
     });
   }
 
@@ -263,14 +285,29 @@
       openEditor(data, null);
     }).catch(function (error) {
       closeDetail();
-      showProblems([error.message]);
+      toast(error.message);
     });
   }
 
   // --- el formulario ---
 
-  function dayBoxes() {
-    return Array.prototype.slice.call(byId("editor-days").querySelectorAll("input"));
+  function buttonsIn(id) {
+    return Array.prototype.slice.call(byId(id).querySelectorAll("button"));
+  }
+
+  function press(button, on) {
+    button.classList.toggle("on", on);
+    if (button.hasAttribute("aria-pressed")) {
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+
+  function setType(type) {
+    byId("editor-type").value = type;
+    buttonsIn("editor-types").forEach(function (button) {
+      press(button, button.getAttribute("data-type") === type);
+    });
+    syncRepeat();
   }
 
   // Ajusta repetición y días a lo que permite cada tipo.
@@ -304,17 +341,16 @@
   function openEditor(job, when) {
     state.editing = job ? job.id : null;
     byId("editor-title").textContent = job ? "Editar aviso #" + job.id : "Nuevo aviso";
-    byId("editor-type").value = job ? job.type : "alarm";
     byId("editor-message").value = job ? job.message : "";
     byId("editor-when").value = job ? job.when : toLocalInput(when || nextHour());
     byId("editor-repeat").value = job ? job.repeat : "once";
     var days = job ? job.days : [];
-    dayBoxes().forEach(function (box) {
-      box.checked = days.indexOf(parseInt(box.value, 10)) !== -1;
+    buttonsIn("editor-days").forEach(function (button) {
+      press(button, days.indexOf(parseInt(button.getAttribute("data-day"), 10)) !== -1);
     });
     byId("editor-device").value = job ? job.device : "";
     byId("editor-author-label").hidden = Boolean(job);
-    syncRepeat();
+    setType(job ? job.type : "alarm");
     showEditorError("");
     byId("editor").hidden = false;
     byId("editor-message").focus();
@@ -327,9 +363,9 @@
 
   function collect() {
     var days = [];
-    dayBoxes().forEach(function (box) {
-      if (box.checked) {
-        days.push(parseInt(box.value, 10));
+    buttonsIn("editor-days").forEach(function (button) {
+      if (button.classList.contains("on")) {
+        days.push(parseInt(button.getAttribute("data-day"), 10));
       }
     });
     return {
@@ -354,6 +390,7 @@
     asked.then(function () {
       closeEditor();
       state.calendar.refetchEvents();
+      toast(editing === null ? "Aviso guardado." : "Aviso cambiado.");
     }).catch(function (error) {
       showEditorError(error.message);
     }).then(function () {
@@ -410,32 +447,87 @@
     });
   }
 
+  // El título del período y la vista marcada en el selector.
+  // En pantalla ancha el calendario ocupa el alto de la ventana y cada día muestra lo que entra.
+  function fitHeight(calendar) {
+    var wide = window.matchMedia(WIDE).matches;
+    if (!wide) {
+      calendar.setOption("height", "auto");
+      calendar.setOption("dayMaxEvents", 5);
+      return;
+    }
+    var top = byId("calendar").getBoundingClientRect().top + window.pageYOffset;
+    calendar.setOption("height", Math.max(MIN_HEIGHT, window.innerHeight - top - BOTTOM_GAP));
+    calendar.setOption("dayMaxEvents", true);
+  }
+
+  function showPeriod(info) {
+    byId("title").textContent = info.view.title;
+    buttonsIn("views").forEach(function (button) {
+      press(button, button.getAttribute("data-view") === info.view.type);
+    });
+  }
+
+  function wireBar(calendar) {
+    byId("prev").addEventListener("click", function () {
+      calendar.prev();
+    });
+    byId("next").addEventListener("click", function () {
+      calendar.next();
+    });
+    byId("today").addEventListener("click", function () {
+      calendar.today();
+    });
+    buttonsIn("views").forEach(function (button) {
+      button.addEventListener("click", function () {
+        calendar.setOption("scrollTime", nowScroll(new Date()));
+        calendar.changeView(button.getAttribute("data-view"));
+      });
+    });
+  }
+
+  // Le pasa al evento su color para la piel del tablero.
+  function paintEvent(info) {
+    var color = info.event.backgroundColor || info.event.borderColor;
+    info.el.classList.add("ev");
+    if (color) {
+      info.el.style.setProperty("--ev", color);
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     byId("detail-close").addEventListener("click", closeDetail);
     byId("detail-edit").addEventListener("click", editJob);
     byId("detail-delete").addEventListener("click", deleteJob);
     byId("editor-cancel").addEventListener("click", closeEditor);
     byId("editor-form").addEventListener("submit", save);
-    byId("editor-type").addEventListener("change", syncRepeat);
     byId("editor-repeat").addEventListener("change", syncRepeat);
+    buttonsIn("editor-types").forEach(function (button) {
+      button.addEventListener("click", function () {
+        setType(button.getAttribute("data-type"));
+      });
+    });
+    buttonsIn("editor-days").forEach(function (button) {
+      button.addEventListener("click", function () {
+        press(button, !button.classList.contains("on"));
+      });
+    });
     byId("new-job").addEventListener("click", function () {
       openEditor(null, null);
     });
     closeOnBackdrop("detail", closeDetail);
     closeOnBackdrop("editor", closeEditor);
 
-    var narrow = window.matchMedia("(max-width: 700px)").matches;
     var calendar = new FullCalendar.Calendar(byId("calendar"), {
       locale: "es",
       timeZone: "local",
       initialView: MONTH_VIEW,
       initialDate: initialDate(),
-      headerToolbar: narrow
-        ? { left: "prev,next", center: "title", right: "today" }
-        : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay" },
-      footerToolbar: narrow ? { center: "dayGridMonth,timeGridWeek,timeGridDay" } : false,
+      headerToolbar: false,
+      footerToolbar: false,
       height: "auto",
       nowIndicator: true,
+      scrollTime: nowScroll(new Date()),
       editable: false,
       dayMaxEvents: 5,
       navLinks: true,
@@ -453,6 +545,7 @@
         var now = new Date();
         var fold = folding();
         return (content.events || []).map(function (raw) {
+          raw.display = "block";
           if (fold && isPastToday(rawItem(raw), now)) {
             raw.display = "none";
           }
@@ -462,9 +555,11 @@
       eventsSet: function () {
         applyPastToday();
       },
-      datesSet: function () {
+      datesSet: function (info) {
+        showPeriod(info);
         applyPastToday();
       },
+      eventDidMount: paintEvent,
       dayCellDidMount: mountTodayToggle,
       dateClick: clickedDay,
       eventClick: function (info) {
@@ -473,7 +568,12 @@
       },
     });
     state.calendar = calendar;
+    wireBar(calendar);
     calendar.render();
+    fitHeight(calendar);
+    window.addEventListener("resize", function () {
+      fitHeight(calendar);
+    });
     loadPeople();
     setInterval(applyPastToday, TICK_MS);
   });

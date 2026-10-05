@@ -93,6 +93,26 @@ def test_the_kiosk_has_a_place_for_today(app):
     assert "innerHTML" not in script
 
 
+def test_the_kiosk_shows_what_comes_next_and_the_sky_icon(app):
+    page = get(app, "/pantalla").body.decode("utf-8")
+    script = get(app, "/static/kiosk.js").body.decode("utf-8")
+
+    for place in ("next-title", "next-meta", "weather-icon", "chip-max", "chip-min", "chip-rain",
+                  "count-today", "count-compras", "count-pendientes"):
+        assert f'id="{place}"' in page, place
+    assert "data.next" in script
+    assert "weather.icon" in script
+    assert "Nada más por hoy" in script
+
+
+def test_the_kiosk_goes_to_night_tokens_in_the_quiet_hours(app):
+    script = get(app, "/static/kiosk.js").body.decode("utf-8")
+    css = get(app, "/static/app.css").body.decode()
+
+    assert 'setAttribute("data-theme", "night")' in script
+    assert ':root[data-theme="night"]' in css
+
+
 def test_the_agenda_has_a_form_to_write_and_the_script_uses_it(app):
     page = get(app, "/agenda").body.decode("utf-8")
     script = get(app, "/static/app.js").body.decode("utf-8")
@@ -106,11 +126,59 @@ def test_the_agenda_has_a_form_to_write_and_the_script_uses_it(app):
     assert "innerHTML" not in script
 
 
+def test_the_agenda_has_its_own_bar_and_four_views(app):
+    page = get(app, "/agenda").body.decode("utf-8")
+    script = get(app, "/static/app.js").body.decode("utf-8")
+
+    for place in ("title", "prev", "next", "today", "views", "toast"):
+        assert f'id="{place}"' in page, place
+    for view in ("dayGridMonth", "timeGridWeek", "timeGridDay", "listWeek"):
+        assert f'data-view="{view}"' in page, view
+    assert "headerToolbar: false" in script
+    assert "eventDidMount" in script and '"--ev"' in script
+    assert 'display = "block"' in script
+
+
+def test_the_agenda_tells_with_a_toast_not_an_alert(app):
+    script = get(app, "/static/app.js").body.decode("utf-8")
+
+    assert "alert(" not in script
+    assert "toast(" in script
+
+
+def test_the_form_picks_type_and_days_with_buttons(app):
+    page = get(app, "/agenda").body.decode("utf-8")
+
+    for kind in ("alarm", "reminder", "timer"):
+        assert f'data-type="{kind}"' in page, kind
+    for day in range(1, 8):
+        assert f'data-day="{day}"' in page, day
+
+
 def test_the_month_shows_five_per_day_and_folds_what_already_passed_today(app):
     script = get(app, "/static/app.js").body.decode("utf-8")
 
     assert "dayMaxEvents: 5" in script
     assert "isPastToday" in script
+
+
+def test_on_a_wide_screen_the_calendar_fits_the_window_without_page_scroll(app):
+    script = get(app, "/static/app.js").body.decode("utf-8")
+    css = get(app, "/static/app.css").body.decode("utf-8")
+
+    assert "fitHeight" in script
+    assert 'setOption("height"' in script
+    assert 'setOption("dayMaxEvents", true)' in script
+    assert '"resize"' in script
+    wide = css.split("@media (min-width: 720px)")[1]
+    assert "min-height: 0" in wide
+
+
+def test_week_and_day_open_scrolled_to_the_current_hour(app):
+    script = get(app, "/static/app.js").body.decode("utf-8")
+
+    assert "scrollTime: nowScroll(new Date())" in script
+    assert 'setOption("scrollTime", nowScroll(new Date()))' in script
     assert 'setProp("display"' in script
     assert "dayCellDidMount" in script
 
@@ -127,8 +195,23 @@ def test_the_kiosk_crosses_items_out(app):
 def test_our_scripts_stay_in_old_javascript(app, name):
     script = get(app, f"/static/{name}").body.decode("utf-8")
 
-    for modern in ("=>", "let ", "const ", "`", "async ", "?.", "??"):
+    for modern in ("=>", "let ", "const ", "`", "async ", "?.", "??", "replaceChildren"):
         assert modern not in script, modern
+    assert "innerHTML" not in script
+
+
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js"])
+def test_our_scripts_style_only_through_set_property(app, name):
+    script = get(app, f"/static/{name}").body.decode("utf-8")
+
+    assert script.count(".style.") == script.count(".style.setProperty(")
+
+
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
+def test_the_pages_have_no_inline_styles(app, path):
+    page = get(app, path).body.decode("utf-8").lower()
+
+    assert "style=" not in page and "<style" not in page
 
 
 @pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
@@ -283,10 +366,17 @@ def test_the_style_follows_the_device_theme_also_inside_fullcalendar(app):
     css = get(app, "/static/app.css").body.decode()
     dark = css.split("@media (prefers-color-scheme: dark)")[1]
 
-    assert "--bg:" in dark and "--text:" in dark
-    assert "--fc-page-bg-color: var(--bg)" in css
+    assert "--bg:" in dark and "--text:" in dark and "--card:" in dark
+    assert "--fc-page-bg-color: var(--card)" in css
     assert "--fc-border-color: var(--line)" in css
-    assert ".kiosk.dark" in css
+    assert "data-theme=\"light\"" not in css
+
+
+def test_the_events_take_their_color_with_a_fallback(app):
+    css = get(app, "/static/app.css").body.decode()
+
+    assert "border-left: 4px solid var(--ev)" in css
+    assert "@supports (background: color-mix(" in css
 
 
 def test_the_vendored_bundle_is_cached_for_long_and_ours_revalidate(app):
