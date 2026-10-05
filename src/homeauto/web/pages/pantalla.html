@@ -43,11 +43,19 @@
 
   <section class="card list-card compras-card">
     <div class="card-head"><h2>🛒 Compras</h2><span id="count-compras" class="count">0</span></div>
+    <form id="add-compras" class="add-item" hidden>
+      <input id="add-compras-text" type="text" maxlength="500" autocomplete="off" enterkeyhint="done" placeholder="Agregar…" aria-label="Agregar a compras">
+      <button type="submit" aria-label="Agregar">+</button>
+    </form>
     <ul id="list-compras" class="checklist"></ul>
   </section>
 
   <section class="card list-card pendientes-card">
     <div class="card-head"><h2>✅ Pendientes</h2><span id="count-pendientes" class="count">0</span></div>
+    <form id="add-pendientes" class="add-item" hidden>
+      <input id="add-pendientes-text" type="text" maxlength="500" autocomplete="off" enterkeyhint="done" placeholder="Agregar…" aria-label="Agregar a pendientes">
+      <button type="submit" aria-label="Agregar">+</button>
+    </form>
     <ul id="list-pendientes" class="checklist"></ul>
   </section>
 </main>

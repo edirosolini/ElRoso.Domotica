@@ -192,6 +192,17 @@ def test_week_and_day_open_scrolled_to_the_current_hour(app):
     assert "dayCellDidMount" in script
 
 
+def test_the_kiosk_adds_items_to_both_lists(app):
+    page = get(app, "/pantalla").body.decode("utf-8")
+    script = get(app, "/static/kiosk.js").body.decode("utf-8")
+
+    for name in ("compras", "pendientes"):
+        assert f'id="add-{name}"' in page, name
+        assert f'id="add-{name}-text"' in page, name
+    assert '"/api/lists/" + encodeURIComponent(name), {' in script
+    assert '"submit"' in script
+
+
 def test_the_kiosk_crosses_items_out(app):
     script = get(app, "/static/kiosk.js").body.decode("utf-8")
 
@@ -492,6 +503,9 @@ class StubJobs:
     def cross_out(self, list_name, item_id):
         return self._answer(("cross_out", list_name, item_id), "leche")
 
+    def add_items(self, list_name, text):
+        return self._answer(("add_items", list_name, text), {"added": ["leche"], "repeated": []})
+
 
 HOST = "192.168.68.10:8080"
 JSON_HEADERS = {"Content-Type": "application/json", "Host": HOST, "Origin": f"http://{HOST}"}
@@ -550,6 +564,22 @@ def test_an_item_is_crossed_out(writer, jobs):
     assert response.status == 200
     assert body_json(response) == {"removed": "leche"}
     assert jobs.asked == [("cross_out", "compras", 17)]
+
+
+def test_items_are_added_to_a_list(writer, jobs):
+    response = send(writer, "POST", "/api/lists/compras", {"text": "leche"})
+
+    assert response.status == 201
+    assert body_json(response) == {"added": ["leche"], "repeated": []}
+    assert jobs.asked == [("add_items", "compras", "leche")]
+
+
+def test_a_list_only_accepts_post(writer, jobs):
+    response = get(writer, "/api/lists/compras")
+
+    assert response.status == 405
+    assert response.headers["Allow"] == "POST"
+    assert jobs.asked == []
 
 
 @pytest.mark.parametrize(
@@ -636,7 +666,7 @@ def test_the_wrong_method_gets_405(writer, method, path, allow):
 
 
 @pytest.mark.parametrize(
-    "path", ["/api/jobs/abc", "/api/jobs/7/8", "/api/lists/compras/x/done", "/api/lists/compras"]
+    "path", ["/api/jobs/abc", "/api/jobs/7/8", "/api/lists/compras/x/done", "/api/lists/compras/17"]
 )
 def test_a_malformed_id_gets_404(writer, jobs, path):
     assert send(writer, "POST", path, {}).status in (404, 405)

@@ -22,7 +22,7 @@ from homeauto.calc import CalcError, evaluate
 from homeauto.aloud import strip_aloud
 from homeauto.config import Config
 from homeauto.listen import ListenError
-from homeauto.lists import LISTS, SHOPPING, TODO, ListError, resolve
+from homeauto.lists import LISTS, SHOPPING, TODO, ListError, resolve, split_items
 from homeauto.voice.voicemail import VoicemailError
 from homeauto import slots, summon
 from homeauto.correct import as_written
@@ -53,8 +53,6 @@ ALL_WORD = "todos"
 # Una tanda de alias adelante: "comedor", "comedor,recamara", "comedor, recamara".
 _TARGET_LIST = re.compile(r"^([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
 _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
-# Los ítems de una lista, como los separa una persona: "leche, pan y yerba".
-_ITEMS = re.compile(r"\s*,\s*|\s+y\s+")
 # «de pendientes» al final de un /sacar.
 _LIST_SUFFIX = re.compile(r"\s+(?:de|en)\s+(.+)$", re.IGNORECASE)
 ALL_ITEMS = "todo"
@@ -576,7 +574,7 @@ class Commands:
             return self._no_lists()
 
         list_name, rest = self._split_list(text.strip())
-        wanted = [item for item in _ITEMS.split(rest) if item.strip()]
+        wanted = split_items(rest)
         if not wanted:
             return "Decime qué agrego: /agregar leche, pan"
 

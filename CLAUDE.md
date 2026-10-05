@@ -679,7 +679,8 @@ con el mismo patrón que las otras siete.
   lista; "a comprar pan" no, y entra entero como ítem. Es la misma lección que `en <equipo>`:
   un prefijo que también puede ser texto real se come parte del mensaje.
 - **Se separa por comas y por "y".** Dictado, "leche y pan" son dos cosas; obligar a la coma
-  hacía que una nota de voz guardara un solo ítem con todo adentro.
+  hacía que una nota de voz guardara un solo ítem con todo adentro. La regla es una sola,
+  `lists.split_items()`, y la usan el chat y la pantalla.
 - **Un duplicado se avisa, no se repite**, comparando sin mayúsculas.
 - 🔴 **La lista se lee, no se escucha.** `/compras` y `/pendientes` contestan al chat como
   `/lista`: números y cantidades son de leer. Lo único hablado es el conteo del cierre del
@@ -1019,6 +1020,7 @@ cancelado, con `closed_at`. `Reminders` es el único que escribe.
 | `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre y los equipos |
 | `POST /api/jobs` | crea un aviso de la casa |
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
+| `POST /api/lists/<lista>` | suma a compras o pendientes lo escrito, partido como en el chat |
 | `POST /api/lists/<lista>/<id>/done` | tacha un ítem de compras o pendientes |
 
 `Board` arma los datos y `WebApp.handle(Request) -> Response` rutea; ninguno de los dos
@@ -1132,6 +1134,10 @@ reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres column
 - **Cada ítem de las listas trae un círculo para tacharlo**, solo si `/api/people` dice que la
   pantalla escribe. Tacha por id, como el botón del chat, así que un toque no se lleva otro
   ítem. Tachar no avisa a los chats.
+- **Cada tarjeta de lista trae un campo para agregar**, con la misma condición. Se parte por
+  comas y por «y», como `/agregar`, y un repetido no entra. Agregar tampoco avisa a los
+  chats, decisión del dueño: es una lista, no un aviso. ⚠️ El campo lleva el teclado del
+  dispositivo: en uno sin teclado en pantalla no sirve.
 
 **Escribir desde la pantalla.** `/agenda` crea, edita y borra avisos de la casa con un
 formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.

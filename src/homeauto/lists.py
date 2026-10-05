@@ -6,6 +6,7 @@ adivinar dónde termina el nombre. Una tercera es una línea en `_NAMES`.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -29,6 +30,8 @@ _NAMES = {
     "hacer": TODO,
 }
 _NOISE = ("la ", "el ", "las ", "los ", "lista de ", "lista ", "mi ")
+# Los ítems de una lista, como los separa una persona: "leche, pan y yerba".
+_ITEMS = re.compile(r"\s*,\s*|\s+y\s+")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS list_items (
@@ -59,6 +62,11 @@ def resolve(name: str) -> str:
         raise ListError(
             f"No tengo una lista de {name.strip()}. Tengo: {', '.join(LISTS)}."
         ) from None
+
+
+def split_items(text: str) -> list[str]:
+    """Los ítems de un texto, separados por comas y por «y», sin vacíos."""
+    return [item.strip() for item in _ITEMS.split(text) if item.strip()]
 
 
 class ListStore:

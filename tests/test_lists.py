@@ -2,7 +2,7 @@
 
 import pytest
 
-from homeauto.lists import ListError, ListStore, SHOPPING, TODO, resolve
+from homeauto.lists import ListError, ListStore, SHOPPING, TODO, resolve, split_items
 
 
 @pytest.fixture
@@ -112,3 +112,16 @@ def test_an_id_from_another_list_is_not_removed(store):
 
 def test_an_id_that_is_gone_says_so(store):
     assert store.remove_id(SHOPPING, 999) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "items"),
+    [
+        ("leche y pan, queso", ["leche", "pan", "queso"]),
+        ("  yerba ,, ", ["yerba"]),
+        ("", []),
+        ("mayonesa", ["mayonesa"]),
+    ],
+)
+def test_text_is_split_by_commas_and_y(text, items):
+    assert split_items(text) == items

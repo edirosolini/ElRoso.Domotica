@@ -55,6 +55,7 @@ PEOPLE = "/api/people"
 JOBS = "/api/jobs"
 JOB = re.compile(r"/api/jobs/(\d+)")
 ITEM = re.compile(r"/api/lists/([a-z]+)/(\d+)/done")
+LIST = re.compile(r"/api/lists/([a-z]+)")
 WRITES = ("POST", "PUT", "DELETE")
 
 
@@ -143,7 +144,8 @@ class WebApp:
     def handle(self, request: Request) -> Response:
         """La respuesta a un pedido; nunca levanta."""
         path = request.path.rstrip("/") or "/"
-        if path == PEOPLE or path == JOBS or JOB.fullmatch(path) or ITEM.fullmatch(path):
+        if (path == PEOPLE or path == JOBS or JOB.fullmatch(path) or ITEM.fullmatch(path)
+                or LIST.fullmatch(path)):
             return self._house(request, path)
 
         known = path in PAGES or path in FEEDS or path.startswith("/static/")
@@ -166,9 +168,10 @@ class WebApp:
         """La gente, los avisos y las listas: lo que la pantalla lee y escribe."""
         job = JOB.fullmatch(path)
         item = ITEM.fullmatch(path)
+        items = LIST.fullmatch(path)
         if path == PEOPLE:
             allowed = ("GET",)
-        elif path == JOBS or item:
+        elif path == JOBS or item or items:
             allowed = ("POST",)
         else:
             allowed = ("GET", "PUT", "DELETE")
@@ -203,6 +206,8 @@ class WebApp:
             if item:
                 removed = self.jobs.cross_out(item.group(1), int(item.group(2)))
                 return _json(200, {"removed": removed})
+            if items:
+                return _json(201, self.jobs.add_items(items.group(1), payload.get("text")))
             job_id = int(job.group(1))
             if request.method == "GET":
                 return _json(200, self.jobs.job(job_id))

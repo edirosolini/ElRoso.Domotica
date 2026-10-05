@@ -444,7 +444,7 @@ borró.
 El desplegable «A nombre de» lista los chats de `ALLOWED_CHAT_IDS`. Cada uno aparece como
 «Chat <número>» hasta que le escribe algo al bot; desde ahí, con su nombre de Telegram.
 **Con `ALLOWED_CHAT_IDS` vacío la pantalla no escribe**: no aparece «Nuevo aviso» ni se
-puede editar, borrar o tachar.
+puede editar, borrar, agregar ni tachar.
 
 **El kiosco** es un tablero de tarjetas y se actualiza solo cada minuto:
 
@@ -455,8 +455,10 @@ puede editar, borrar o tachar.
   qué calendario es. Lo de todo el día no cuenta. Si no hay nada, «Nada más por hoy».
 - **Hoy**: el día como línea de tiempo, con una marca «ahora». De lo que ya pasó quedan los
   dos últimos, con cómo terminó.
-- **Compras y Pendientes**, con cuántos hay. Cada ítem trae un círculo para tacharlo desde
-  ahí.
+- **Compras y Pendientes**, con cuántos hay. Arriba de cada una hay un campo para agregar:
+  «leche y pan, yerba» son tres ítems, como en el chat, y lo que ya estaba no se repite.
+  Cada ítem trae un círculo para tacharlo desde ahí. Ni agregar ni tachar avisan en los
+  chats.
 
 Se ve claro u oscuro según el tema del dispositivo; en el horario de descanso, o con
 `/silencio`, se pone oscuro y apagado aunque el dispositivo esté en claro. Apaisado ocupa
