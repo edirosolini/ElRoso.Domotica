@@ -11,74 +11,95 @@
 <script src="/static/app.js" defer></script>
 </head>
 <body class="agenda">
-<header class="bar">
-  <h1>Agenda de la casa</h1>
-  <button type="button" id="new-job" class="primary" hidden>Nuevo aviso</button>
-  <a href="/pantalla">Pantalla</a>
-</header>
-<div id="problems" class="problems" hidden></div>
-<ul id="legend" class="legend"></ul>
-<div id="calendar"></div>
-<div id="detail" class="detail" hidden>
-  <div class="detail-card">
+<div class="agenda-page">
+  <header class="topbar">
+    <h1 id="title">Agenda de la casa</h1>
+    <div class="nav">
+      <button type="button" class="round" id="prev" aria-label="Anterior">‹</button>
+      <button type="button" class="ghost" id="today">Hoy</button>
+      <button type="button" class="round" id="next" aria-label="Siguiente">›</button>
+    </div>
+    <div class="segmented" id="views">
+      <button type="button" data-view="dayGridMonth" class="on">Mes</button>
+      <button type="button" data-view="timeGridWeek">Semana</button>
+      <button type="button" data-view="timeGridDay">Día</button>
+      <button type="button" data-view="listWeek">Lista</button>
+    </div>
+    <a class="ghost" href="/pantalla">Pantalla</a>
+  </header>
+
+  <div id="problems" class="problems" hidden></div>
+  <ul id="legend" class="legend"></ul>
+
+  <div class="card calendar-card"><div id="calendar"></div></div>
+</div>
+
+<button type="button" class="fab" id="new-job" hidden><span>+</span> Nuevo aviso</button>
+
+<div id="detail" class="sheet-wrap" hidden>
+  <div class="sheet">
+    <div class="grip"></div>
     <h2 id="detail-title"></h2>
-    <p id="detail-when"></p>
+    <p id="detail-when" class="sub"></p>
     <p id="detail-where"></p>
     <ul id="detail-marks"></ul>
-    <div class="actions">
-      <button type="button" id="detail-edit" hidden>Editar</button>
-      <button type="button" id="detail-delete" class="danger" hidden>Borrar</button>
-      <button type="button" id="detail-close">Cerrar</button>
+    <div class="sheet-actions">
+      <button type="button" id="detail-delete" class="btn danger" hidden>Borrar</button>
+      <button type="button" id="detail-close" class="btn quiet">Cerrar</button>
+      <button type="button" id="detail-edit" class="btn primary" hidden>Editar</button>
     </div>
   </div>
 </div>
-<div id="editor" class="detail" hidden>
-  <form id="editor-form" class="detail-card" novalidate>
+
+<div id="editor" class="sheet-wrap" hidden>
+  <form id="editor-form" class="sheet" novalidate>
+    <div class="grip"></div>
     <h2 id="editor-title">Nuevo aviso</h2>
-    <label>Tipo
-      <select id="editor-type">
-        <option value="alarm">Alarma</option>
-        <option value="reminder">Recordatorio</option>
-        <option value="timer">Timer</option>
-      </select>
-    </label>
-    <label>Mensaje
+    <p class="sub">Suena en la casa y avisa por Telegram.</p>
+    <input type="hidden" id="editor-type" value="alarm">
+    <div class="types" id="editor-types" role="group" aria-label="Tipo">
+      <button type="button" data-type="alarm" class="on"><b>⏰</b>Alarma</button>
+      <button type="button" data-type="reminder"><b>📌</b>Recordatorio</button>
+      <button type="button" data-type="timer"><b>⏲️</b>Timer</button>
+    </div>
+    <label class="field"><span>Mensaje</span>
       <textarea id="editor-message" maxlength="500" rows="2" required></textarea>
     </label>
-    <label>Fecha y hora
+    <label class="field"><span>Cuándo</span>
       <input type="datetime-local" id="editor-when" required>
     </label>
-    <label>Repetición
+    <label class="field"><span>Se repite</span>
       <select id="editor-repeat">
         <option value="once">Una sola vez</option>
         <option value="daily">Todos los días</option>
         <option value="weekly">Algunos días</option>
       </select>
     </label>
-    <fieldset id="editor-days" class="days" hidden>
-      <legend>Días</legend>
-      <label><input type="checkbox" value="1">Lun</label>
-      <label><input type="checkbox" value="2">Mar</label>
-      <label><input type="checkbox" value="3">Mié</label>
-      <label><input type="checkbox" value="4">Jue</label>
-      <label><input type="checkbox" value="5">Vie</label>
-      <label><input type="checkbox" value="6">Sáb</label>
-      <label><input type="checkbox" value="7">Dom</label>
-    </fieldset>
-    <label>Equipo
+    <div id="editor-days" class="days-row" role="group" aria-label="Días" hidden>
+      <button type="button" data-day="1" aria-label="Lunes" aria-pressed="false">L</button>
+      <button type="button" data-day="2" aria-label="Martes" aria-pressed="false">M</button>
+      <button type="button" data-day="3" aria-label="Miércoles" aria-pressed="false">M</button>
+      <button type="button" data-day="4" aria-label="Jueves" aria-pressed="false">J</button>
+      <button type="button" data-day="5" aria-label="Viernes" aria-pressed="false">V</button>
+      <button type="button" data-day="6" aria-label="Sábado" aria-pressed="false">S</button>
+      <button type="button" data-day="7" aria-label="Domingo" aria-pressed="false">D</button>
+    </div>
+    <label class="field"><span>Equipo</span>
       <select id="editor-device">
         <option value="">El de siempre</option>
       </select>
     </label>
-    <label id="editor-author-label">A nombre de
+    <label class="field" id="editor-author-label"><span>A nombre de</span>
       <select id="editor-author"></select>
     </label>
     <p id="editor-error" class="problems" hidden></p>
-    <div class="actions">
-      <button type="submit" id="editor-save" class="primary">Guardar</button>
-      <button type="button" id="editor-cancel">Cancelar</button>
+    <div class="sheet-actions">
+      <button type="button" id="editor-cancel" class="btn quiet">Cancelar</button>
+      <button type="submit" id="editor-save" class="btn primary">Guardar</button>
     </div>
   </form>
 </div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

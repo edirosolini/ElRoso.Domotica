@@ -51,4 +51,9 @@ assert.strictEqual(
 // La fecha para el campo datetime-local, en hora local.
 assert.strictEqual(agenda.toLocalInput(new Date(2026, 0, 2, 7, 5)), "2026-01-02T07:05");
 
+// Semana y día abren una hora antes de la actual; a medianoche, arriba de todo.
+assert.strictEqual(agenda.nowScroll(at(14, 40)), "13:00:00");
+assert.strictEqual(agenda.nowScroll(at(9, 0)), "08:00:00");
+assert.strictEqual(agenda.nowScroll(at(0, 30)), "00:00:00");
+
 console.log("ok");

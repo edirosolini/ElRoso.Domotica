@@ -12,7 +12,7 @@ from homeauto.quiet import Hush, HushStore, QuietHours
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.store import DAILY, REMINDER, Store
 from homeauto.weather import WeatherClient
-from homeauto.web.board import MAX_RANGE, PALETTE, Board, RangeError
+from homeauto.web.board import KIND_COLORS, MAX_RANGE, PALETTE, Board, RangeError, sky_icon
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 NOW = datetime(2026, 10, 5, 12, 0)  # lunes
@@ -487,3 +487,110 @@ def test_without_collaborators_the_screen_is_empty_but_answers(parts):
     assert answer["lists"] == {}
     assert answer["quiet"] is False
     assert built.events(*WEEK)["calendars"] == []
+
+
+# --- el ícono del cielo ---
+
+
+@pytest.mark.parametrize(
+    "code, icon",
+    [
+        (0, "☀️"), (1, "🌤️"), (2, "⛅"), (3, "☁️"), (45, "🌫️"), (48, "🌫️"),
+        (51, "🌦️"), (57, "🌦️"), (61, "🌧️"), (67, "🌧️"), (80, "🌦️"), (82, "🌦️"),
+        (71, "❄️"), (86, "❄️"), (95, "⛈️"), (99, "⛈️"), (12, "⛅"),
+    ],
+)
+def test_each_sky_code_has_its_icon(code, icon):
+    assert sky_icon(code) == icon
+
+
+def test_the_screen_weather_carries_the_icon(parts):
+    answer = board(parts, weather=weather_client([])).screen()
+
+    assert answer["weather"]["icon"] == "🌤️"
+    assert answer["weather"]["feels_like"] == 21
+
+
+# --- lo próximo ---
+
+
+def test_next_is_the_first_thing_that_has_not_started_yet(parts):
+    clock = Clock(datetime(2026, 10, 6, 9, 30))
+    parts["store"].add(42, datetime(2026, 10, 6, 9, 0), "ya pasó")
+    parts["store"].add(42, datetime(2026, 10, 6, 21, 0), "la pastilla", repeat=DAILY, kind=REMINDER)
+
+    upcoming = board(parts, clock=clock, calendar=both_calendars()).screen()["next"]
+
+    assert upcoming == {
+        "title": "<b>Dentista</b>",
+        "start": "2026-10-06T10:00:00-03:00",
+        "time": "10:00",
+        "tomorrow": False,
+        "color": PALETTE[0],
+        "source": "personal",
+    }
+
+
+def test_next_from_the_house_says_so(parts):
+    clock = Clock(datetime(2026, 10, 5, 12, 0))
+    parts["store"].add(42, datetime(2026, 10, 5, 18, 0), "la pizza")
+
+    upcoming = board(parts, clock=clock).screen()["next"]
+
+    assert upcoming["title"] == "⏰ la pizza"
+    assert upcoming["source"] == "La casa"
+    assert upcoming["color"] == KIND_COLORS["alarm"]
+    assert upcoming["time"] == "18:00"
+
+
+def test_an_event_that_already_started_is_not_next(parts):
+    clock = Clock(datetime(2026, 10, 6, 10, 30))
+
+    upcoming = board(parts, clock=clock, calendar=both_calendars()).screen()["next"]
+
+    assert upcoming is None
+
+
+def test_with_nothing_left_today_next_looks_at_tomorrow(parts):
+    clock = Clock(datetime(2026, 10, 5, 22, 0))
+
+    upcoming = board(parts, clock=clock, calendar=both_calendars()).screen()["next"]
+
+    assert upcoming["title"] == "<b>Dentista</b>"
+    assert upcoming["tomorrow"] is True
+
+
+def test_an_all_day_event_is_never_next(parts):
+    clock = Clock(datetime(2026, 10, 11, 20, 0))
+
+    assert board(parts, clock=clock, calendar=both_calendars()).screen()["next"] is None
+
+
+def test_without_anything_coming_there_is_no_next(parts):
+    assert board(parts).screen()["next"] is None
+
+
+# --- cómo terminó lo de hoy ---
+
+
+def test_today_carries_the_bare_title_and_how_it_ended(parts):
+    clock = Clock(datetime(2026, 10, 6, 12, 0))
+    history = parts["history"]
+    history.record(7, 42, REMINDER, DAILY, "la pastilla", datetime(2026, 10, 6, 8, 0))
+    history.mark_announced(7)
+    history.mark_done(7, datetime(2026, 10, 6, 8, 2), "Eze")
+    history.record(8, 42, "alarm", DAILY, "arriba", datetime(2026, 10, 6, 7, 0))
+    history.mark_announced(8)
+    history.record(9, 42, "alarm", "once", "muda", datetime(2026, 10, 6, 9, 0))
+    parts["store"].add(42, datetime(2026, 10, 6, 21, 0), "la basura")
+
+    today = board(parts, clock=clock, calendar=both_calendars()).screen()["today"]
+
+    assert [(entry["label"], entry["mark"]) for entry in today] == [
+        ("⏰ arriba", "✓"),
+        ("📌 la pastilla", "✓ Eze"),
+        ("⏰ muda", "⚠️ no sonó"),
+        ("<b>Dentista</b>", ""),
+        ("Fútbol", ""),
+        ("⏰ la basura", ""),
+    ]
