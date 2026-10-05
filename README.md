@@ -406,6 +406,19 @@ lo dice (`"spoken": false`). Nada se pierde, pero nadie se despierta.
 El token se genera solo la primera vez y vive en `/etc/domotica/domotica.env`. Si no hay
 token, la API no arranca — apagada es el estado seguro.
 
+**La agenda del mes.** El mismo servidor sirve una página para abrir desde el teléfono:
+
+```
+http://192.168.68.10:8099/agenda              # el mes actual
+http://192.168.68.10:8099/agenda?m=2026-11    # otro mes
+```
+
+Una grilla con cuántas alarmas (⏰), recordatorios (📌) y timers (⏲️) hay cada día, y abajo
+la lista día por día. Lo que ya sonó dice cómo terminó: ✅ y quién lo marcó, 🔔 los
+re-avisos, 💤 pospuesto, ✖️ cancelado, ⚠️ no sonó. Lo que viene se calcula igual que cuando
+suena. Es de solo lectura y **no pide token**: la ve cualquiera que llegue al contenedor por
+la red. Sin `API_TOKEN` tampoco existe. Lo que sonó antes del 2026-10-05 no está registrado.
+
 ## Desarrollo
 
 ```bash
