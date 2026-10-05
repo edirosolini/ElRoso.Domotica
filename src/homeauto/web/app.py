@@ -20,9 +20,11 @@ PAGES_DIR = HERE / "pages"
 FULLCALENDAR = "fullcalendar-6.1.21"
 
 # FullCalendar inyecta su CSS en un <style> y estila con atributos: necesita 'unsafe-inline'.
+# Sus íconos (las flechas) son una fuente embebida como data: URI.
 POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    "img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'; "
+    "base-uri 'none'; form-action 'none'"
 )
 
 JS = "text/javascript; charset=utf-8"
