@@ -32,6 +32,7 @@ Domotica/
 │   ├── calc.py          # cuentas y conversión de unidades, sin modelo
 │   ├── lists.py         # las listas de compras y de pendientes
 │   ├── translate.py     # traducir, solo para leer
+│   ├── people.py        # el nombre visible de cada chat de la casa
 │   ├── api.py           # servidor HTTP de la LAN: /say para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
@@ -93,7 +94,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con doce tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con trece tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -110,6 +111,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `schedule.AwaitingStore` | los recordatorios que sonaron y esperan su «Hecho», con sus re-avisos |
 | `strangers.StrangerStore` | los chats fuera de la lista de los que ya se avisó al dueño |
 | `schedule.HistoryStore` | todo lo que sonó y cómo terminó, doce meses (`fired_history`) |
+| `people.PeopleStore` | el nombre visible de cada chat de la casa, para la pantalla |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -458,6 +460,8 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | alarmas, recordatorios y timers | todos, con posponer; recordatorios y timers también con «Hecho» |
 | re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
 | agenda, clima, lluvia, API | todos |
+| alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
+| borrado con ese «Cancelar #N» | los demás chats: «🗑 <nombre> borró #N» |
 | respuesta de un comando | el chat que lo escribió |
 | aviso de un desconocido | todos (`Strangers`) |
 
@@ -471,7 +475,8 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 - **El parlante no sabe de chats.** Lo que suena, suena en toda la casa: separar los chats no
   hace privado un aviso dicho en voz alta.
 - `/lista` y `/cancelar` siguen siendo de quien creó la alarma, aunque el aviso le llegue a
-  todos.
+  todos. El «Cancelar #N» de un aviso de la pantalla no: borra desde cualquier chat. Ver
+  **Pantalla de la casa**.
 
 ## API
 
@@ -485,6 +490,8 @@ separada del transporte HTTP y se prueba sin red.
 - El token se compara con `hmac.compare_digest`, no con `==`.
 - 🔴 **El token es de `/say`, no del servidor.** `/health` y las rutas de la pantalla no lo
   piden. La ruta se compara sin la query, así que `/health?x=1` sigue siendo `/health`.
+- `api._Handler` también atiende `PUT` y `DELETE`, y le pasa a `WebApp` los headers y el
+  cuerpo. **Un cuerpo de más de ocho kilobytes (`MAX_BODY`) es un 413** antes de leerse.
 - **`urgent` es la única forma de saltear el horario de descanso.** Producción caída a las
   3 AM lo amerita; un backup terminado, no.
 - El CLI `domotica-say` lee el token del archivo de configuración: pasarlo por línea de
@@ -912,8 +919,8 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   sonar. «Hecho» es la forma de cortarlo.
 - ⚠️ **Con `ALLOWED_CHAT_IDS` vacío, el re-aviso de un timer se queda sin destino tras un
   reinicio.** El chat sale del job, que ya no existe; sin lista, no hay a quién escribir.
-- 🔴 **`hecho` es solo un botón**: está en `Commands.press()` y no en `_dispatch()`, así el
-  router nunca lo nombra y el test que ata las dos listas sigue en pie. El nombre de quien
+- 🔴 **`hecho` es solo un botón**, como `borrar`: está en `Commands.press()` y no en
+  `_dispatch()`, así el router nunca lo nombra y el test que ata las dos listas sigue en pie. El nombre de quien
   tocó sale de `main._who()` y entra a `press(who=...)`.
 - **Posponer conserva el tipo**: `FiredStore` guarda `kind`, y un recordatorio pospuesto
   vuelve a sonar como recordatorio.
@@ -1008,15 +1015,20 @@ cancelado, con `closed_at`. `Reminders` es el único que escribe.
 | `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana y día. `?m=AAAA-MM` abre en ese mes |
 | `/pantalla` | el kiosco: reloj, clima, lo de hoy y las dos listas |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
-| `/api/board` | el estado del kiosco: hora, descanso, hoy, clima y listas |
+| `/api/board` | el estado del kiosco: hora, descanso, hoy, clima y listas como `[{id, text}]` |
+| `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre y los equipos |
+| `POST /api/jobs` | crea un aviso de la casa |
+| `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
+| `POST /api/lists/<lista>/<id>/done` | tacha un ítem de compras o pendientes |
 
 `Board` arma los datos y `WebApp.handle(Request) -> Response` rutea; ninguno de los dos
 conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arquitectura**.
 
-- 🔴 **Abierta en la LAN, sin login ni token.** Decisión del dueño: la red de la casa es de
-  confianza —cable y un WiFi oculto— y la pantalla la tiene que poder abrir cualquiera de la
-  casa. ⚠️ La ve **cualquiera que alcance el CT**: los mensajes de las alarmas y los títulos
-  de Google quedan a la vista.
+- 🔴 **Abierta en la LAN, sin login ni token, también para escribir.** Decisión del dueño:
+  la red de la casa es de confianza —cable y un WiFi oculto— y la pantalla la tiene que poder
+  usar cualquiera de la casa. ⚠️ La ve y la escribe **cualquiera que alcance el CT**: los
+  mensajes de las alarmas y los títulos de Google quedan a la vista, y un aviso se puede
+  crear o borrar sin decir quién es.
 - 🔴 **Las URLs privadas de iCal nunca llegan al navegador.** `problems` dice solo el alias
   ("No pude leer el calendario X."). El texto de la excepción no se reenvía porque requests
   mete la URL adentro (`404 for url: …`), y la URL es una credencial. Hay test con una URL
@@ -1045,6 +1057,11 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
 - **El clima se cachea quince minutos** (`WEATHER_TTL`) y **una falla no se cachea**: se
   vuelve a pedir en el polling siguiente.
 - Un error al armar un feed devuelve 500 y se loguea; no tumba el servidor de `/say`.
+- **En el mes, como mucho cinco eventos por día** (`dayMaxEvents`) y el resto en «+N más».
+- **Hoy, lo que ya pasó queda plegado bajo un «…»** que lo despliega. `isPastToday()` decide:
+  lo de la casa que ya sonó, o lo que terminó antes de ahora; lo de todo el día nunca. Se
+  oculta con `display: none` desde que llega el feed, así no cuenta en el «+N más». Solo en
+  la vista de mes, y se recalcula cada minuto.
 
 **El kiosco** (`kiosk.js`) pide `/api/board` cada sesenta segundos.
 
@@ -1057,6 +1074,51 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
 - **Pantalla completa al primer toque**: el navegador solo la concede desde un gesto. Que la
   pantalla no se apague y el cargador son cosa del dispositivo.
 - Sin conexión dice "Sin conexión con la casa." y deja lo último que mostró.
+- **Cada ítem de las listas trae un ✓ para tacharlo**, solo si `/api/people` dice que la
+  pantalla escribe. Tacha por id, como el botón del chat, así que un toque no se lleva otro
+  ítem. Tachar no avisa a los chats.
+
+**Escribir desde la pantalla.** `/agenda` crea, edita y borra avisos de la casa con un
+formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
+
+- **Se crea tocando un día o con «Nuevo aviso».** Un día del mes abre a las ocho; una hora
+  que ya pasó se corre a la próxima hora en punto.
+- **Solo se edita o borra lo de la casa que todavía no sonó.** Lo que sonó sale del
+  historial y no trae `job`; **Google es solo lectura**.
+- **Editar un aviso que repite edita la serie**, y borrarlo la borra entera. No hay "solo
+  esta vez".
+- **El autor se elige de un desplegable** con los chats de `ALLOWED_CHAT_IDS`, y **no cambia
+  al editar**: `Store.update` conserva el id y el dueño. Es a nombre de quien queda en
+  `/lista` y de quien puede `/cancelar` escrito.
+- 🔴 **Sin `ALLOWED_CHAT_IDS` la pantalla no escribe**: no hay a nombre de quién poner un
+  aviso. Las escrituras contestan 403, y el formulario y los ✓ no aparecen.
+- **El nombre de cada chat sale de `PeopleStore`**: `main._meet()`, después de `_knock()`,
+  anota el nombre visible de quien le escribe al bot (nombre y apellido, o el @usuario).
+  Solo de chats permitidos, y uno vacío no pisa al que había. Hasta que escribe, es
+  «Chat <id>». Anotarlo no puede costar la respuesta.
+- 🔴 **`schedule/spec.py` es la única fuente de las reglas de lo programado**, para Telegram y
+  para la web: qué tipo y repetición es cada cosa (un timer suena una vez, un recordatorio
+  repite, uno semanal necesita días) y cuándo suena por primera vez. Es la misma lección que
+  `next_run()` y `down_line()`: con dos copias, la pantalla acepta lo que el chat rechaza.
+- **`Reminders.update` guarda antes de desagendar.** Una edición inválida levanta en el
+  `Store` y el aviso sigue con su timer. No toca lo que ya sonó y espera su «Hecho», ni su
+  re-aviso.
+- **Cada alta, cambio o baja se avisa a todos los chats** con «🖥️ … desde la pantalla» y el
+  aviso en una línea; el alta lleva el nombre del autor. Va en un hilo aparte: un chat que
+  falla no frena a los otros ni a la respuesta.
+- 🔴 **El «Cancelar #N» de ese aviso manda `borrar <id>`, no `cancelar`.** `borrar` es solo un
+  botón, en `Commands.press()` y no en `_dispatch()`, así el router no lo nombra. Borra
+  desde **cualquier** chat, porque el aviso le llegó a todos, y avisa a los demás «🗑 <nombre>
+  borró #N». `/cancelar` escrito y el «Cancelar #N» de `/timer` y `/alarma` siguen siendo
+  del dueño.
+- 🔴 **Una escritura exige `application/json` y, si trae `Origin`, que coincida con `Host`**
+  (`_refuse_write`); si no, 415 o 403. Ese content-type obliga al navegador a un preflight
+  CORS, y la casa no contesta CORS: un sitio externo abierto en un navegador de la casa no
+  puede escribir. ⚠️ **Aceptar otro content-type (un form, `text/plain`) saca esa protección
+  sin que nada avise.** No cubre DNS rebinding ni un `curl` desde la LAN: la LAN es de
+  confianza.
+- Un método que la ruta no acepta es un 405 con `Allow`. El mensaje tiene tope de quinientos
+  caracteres, como `/say`.
 
 **FullCalendar 6.1.21 va vendorizado** en `static/fullcalendar-6.1.21/`, licencia MIT con su
 `LICENSE.md` al lado, **sin CDN**: la pantalla no depende de internet ni de un tercero. La
@@ -1328,6 +1390,8 @@ argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cance
   ata las dos mitades.
 - **`/lista` nombra a `/cancelar` y `/compras` nombra a `/sacar`.** Son las salidas del menú
   que dejan a otro comando sin puerta: quien ve la lista ahí mismo lee cómo borrar de ella.
+- **`hecho` y `borrar` no están en `ALL_COMMANDS`**: son solo botones, en
+  `Commands.press()`. Ni se escriben ni los nombra el router.
 
 ## Cableado
 
