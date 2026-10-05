@@ -12,6 +12,7 @@ from typing import Callable, Iterable, Protocol
 
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
+from homeauto.schedule.history import CANCEL, SNOOZE, HistoryStore
 from homeauto.schedule.store import ALARM, DAILY, ONCE, WEEKLY, Job, Store
 from homeauto.timespec import next_weekday
 
@@ -42,12 +43,14 @@ class Reminders:
         awaiting: AwaitingStore | None = None,
         notify: Callable[..., None] | None = None,
         nag_actions: tuple[tuple[str, str], ...] = (),
+        history: HistoryStore | None = None,
     ):
         self.store = store
         self.timer = timer
         self.announce = announce
         self.fired = fired
         self.awaiting = awaiting
+        self.history = history
         self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
@@ -95,7 +98,9 @@ class Reminders:
         if job is None or job.chat_id != chat_id:
             return False
         self.timer.unschedule(str(job_id))
-        self._close_wait(job_id)
+        if self._close_wait(job_id):
+            now = self.clock()
+            self._write_history(lambda history: history.mark_closed(job_id, CANCEL, now))
         return self.store.remove(job_id)
 
     def snooze(self, chat_id: int, delay: timedelta) -> Job | None:
@@ -110,6 +115,7 @@ class Reminders:
             self.fired.forget(chat)
         if last.job_id is not None:
             self._close_wait(last.job_id)
+            self._write_history(lambda history: history.mark_closed(last.job_id, SNOOZE, now))
         return self.add(chat_id, now + delay, last.message, device=last.device, kind=last.kind)
 
     def done(self, chat_id: int, job_id: int, who: str) -> str | None:
@@ -120,6 +126,8 @@ class Reminders:
         self.timer.unschedule(_nag_key(job_id))
         if message is None:
             return None
+        now = self.clock()
+        self._write_history(lambda history: history.mark_done(job_id, now, who))
         audience = self._audience(chat_id)
         for chat in audience:
             if self.fired is not None and (last := self.fired.last(chat)) and last.message == message:
@@ -139,11 +147,21 @@ class Reminders:
     def _nags(self) -> bool:
         return self.awaiting is not None and self.notify is not None
 
-    def _close_wait(self, job_id: int) -> None:
-        """Saca el job de la espera del «Hecho» y desagenda su re-aviso."""
+    def _close_wait(self, job_id: int) -> bool:
+        """Saca el job de la espera del «Hecho» y desagenda su re-aviso; True si esperaba."""
         self.timer.unschedule(_nag_key(job_id))
-        if self.awaiting is not None:
-            self.awaiting.take(job_id)
+        if self.awaiting is None:
+            return False
+        return self.awaiting.take(job_id) is not None
+
+    def _write_history(self, write: Callable[[HistoryStore], object]) -> None:
+        """Escribe en el historial sin que una falla frene el aviso."""
+        if self.history is None:
+            return
+        try:
+            write(self.history)
+        except Exception:
+            log.exception("could not write to the fired history")
 
     def _arm_nag(self, job_id: int, chat_id: int | None, when: datetime) -> None:
         self.timer.schedule(_nag_key(job_id), when, lambda: self._nag(job_id, chat_id))
@@ -168,6 +186,7 @@ class Reminders:
                     self.notify(chat, text)
             except Exception:
                 log.exception("no se pudo re-avisar al chat %s del job %s", chat, job_id)
+        self._write_history(lambda history: history.mark_nag(job_id))
 
         if wait.nags + 1 >= NAG_LIMIT:
             self.awaiting.mark_nagged(job_id, None)
@@ -194,12 +213,20 @@ class Reminders:
             self.awaiting.remember(job.id, job.message, at, next_nag)
             if next_nag is not None:
                 self._arm_nag(job.id, job.chat_id, next_nag)
+        fired_at = self.clock()
+        self._write_history(
+            lambda history: history.record(
+                job.id, job.chat_id, job.kind, job.repeat, job.message, fired_at
+            )
+        )
 
         try:
             self.announce(job)
         except Exception:
             # Un parlante apagado no puede llevarse puesta la agenda.
             log.exception("no se pudo anunciar el job %s", job_id)
+        else:
+            self._write_history(lambda history: history.mark_announced(job.id))
 
         next_time = self._next_run(job)
         if next_time is None:
