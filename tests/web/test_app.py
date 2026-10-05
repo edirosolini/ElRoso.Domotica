@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from homeauto.web.app import FULLCALENDAR, Request, WebApp
+from homeauto.web.app import FULLCALENDAR, STATIC_DIR, Request, WebApp
 from homeauto.web.board import RangeError
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
@@ -110,6 +110,16 @@ def test_every_answer_carries_the_security_headers(app):
         assert "unsafe-eval" not in policy
         assert "'unsafe-inline'" not in policy.split("script-src")[1].split(";")[0]
         assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_the_policy_lets_fullcalendar_load_its_icon_font(app):
+    """Las flechas de FullCalendar son una fuente embebida como data: URI."""
+    bundle = (STATIC_DIR / FULLCALENDAR / "index.global.min.js").read_text(encoding="utf-8")
+    assert 'src:url("data:application/x-font-ttf' in bundle
+
+    policy = get(app, "/agenda").headers["Content-Security-Policy"]
+    fonts = policy.split("font-src")[1].split(";")[0]
+    assert "data:" in fonts
 
 
 # --- /api/events ---
