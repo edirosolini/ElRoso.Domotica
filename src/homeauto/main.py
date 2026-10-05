@@ -32,7 +32,6 @@ from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands, with_actions
 from homeauto.bible import VerseOfTheDay
-from homeauto.calendar_page import CalendarPage
 from homeauto.briefing import Briefing
 from homeauto.closing import Closing
 from homeauto.economy import EconomyClient
@@ -73,6 +72,8 @@ from homeauto.watch.seq import SeqClient
 from homeauto.watch.seq_watcher import SeqWatcher
 from homeauto.watch.status import StatusStore
 from homeauto.weather import RainWatcher, WeatherClient, WeatherWatcher
+from homeauto.web.app import WebApp
+from homeauto.web.board import Board
 
 CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
 PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
@@ -862,7 +863,18 @@ def main() -> None:
                 polish=polish,
             ),
             port=config.api_port,
-            page=CalendarPage(store=store, history=history, clock=datetime.now),
+            web=WebApp(
+                Board(
+                    store=store,
+                    history=history,
+                    clock=datetime.now,
+                    timezone=local_timezone(),
+                    calendar=calendar,
+                    weather=weather,
+                    lists=ListStore(db_path),
+                    quiet=hush,
+                )
+            ),
         )
     else:
         log.info("API deshabilitada: no hay API_TOKEN en la configuración")

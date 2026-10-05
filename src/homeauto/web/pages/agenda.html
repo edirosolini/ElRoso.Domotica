@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agenda de la casa</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/fullcalendar-6.1.21/index.global.min.js" defer></script>
+<script src="/static/fullcalendar-6.1.21/es.global.min.js" defer></script>
+<script src="/static/app.js" defer></script>
+</head>
+<body class="agenda">
+<header class="bar">
+  <h1>Agenda de la casa</h1>
+  <a href="/pantalla">Pantalla</a>
+</header>
+<div id="problems" class="problems" hidden></div>
+<ul id="legend" class="legend"></ul>
+<div id="calendar"></div>
+<div id="detail" class="detail" hidden>
+  <div class="detail-card">
+    <h2 id="detail-title"></h2>
+    <p id="detail-when"></p>
+    <p id="detail-where"></p>
+    <ul id="detail-marks"></ul>
+    <button type="button" id="detail-close">Cerrar</button>
+  </div>
+</div>
+</body>
+</html>

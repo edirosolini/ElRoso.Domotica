@@ -1,10 +1,15 @@
 import json
 import urllib.error
 import urllib.request
+from datetime import datetime
 
 import pytest
 
 from homeauto.api import ApiServer, ApiService
+from homeauto.schedule.history import HistoryStore
+from homeauto.schedule.store import Store
+from homeauto.web.app import Response, WebApp
+from homeauto.web.board import Board
 
 from tests.conftest import FakeSpeaker, StubRegistry
 
@@ -117,71 +122,143 @@ def test_the_token_can_travel_in_the_body(served):
     assert speaker.said == ["hola"]
 
 
-class _Page:
-    """Doble de la página: anota el mes pedido y devuelve HTML."""
+# --- la pantalla de la casa ---
+
+
+class _Web:
+    """Doble de WebApp: anota cada pedido y contesta como la de verdad."""
 
     def __init__(self):
         self.asked = []
 
-    def html(self, month):
-        self.asked.append(month)
-        return "<!doctype html><p>agenda ñandú</p>"
+    def handle(self, request):
+        self.asked.append(request)
+        return Response(
+            status=200,
+            body="<!doctype html><p>agenda ñandú</p>".encode("utf-8"),
+            headers={"Content-Type": "text/html; charset=utf-8", "X-Prueba": "llego"},
+        )
+
+    __call__ = handle
 
 
-@pytest.fixture
-def with_page():
-    page = _Page()
-    service = ApiService(
+def _service():
+    return ApiService(
         token=TOKEN,
         speakers=StubRegistry(parlante=FakeSpeaker("parlante")),
         default_devices=["parlante"],
         notify=lambda chat_id, text: None,
         chat_ids=(),
     )
-    server = ApiServer(service, port=0, host="127.0.0.1", page=page)
+
+
+@pytest.fixture
+def with_web():
+    web = _Web()
+    server = ApiServer(_service(), port=0, host="127.0.0.1", web=web)
     server.start()
-    yield server, page
+    yield server, web
     server.stop()
 
 
 def get(server, path):
     with urllib.request.urlopen(f"http://127.0.0.1:{server.actual_port}{path}", timeout=5) as r:
-        return r.status, r.headers.get("Content-Type"), r.read().decode("utf-8")
+        return r.status, r.headers, r.read().decode("utf-8")
 
 
-def test_the_month_page_answers_without_a_token(with_page):
-    server, page = with_page
+def test_the_screen_answers_without_a_token(with_web):
+    server, web = with_web
 
-    status, content_type, body = get(server, "/agenda?m=2026-09")
+    status, headers, body = get(server, "/agenda")
 
     assert status == 200
-    assert content_type.startswith("text/html")
+    assert headers["Content-Type"].startswith("text/html")
+    assert headers["X-Prueba"] == "llego"
     assert "agenda ñandú" in body
-    assert page.asked == ["2026-09"]
+    assert [(r.method, r.path) for r in web.asked] == [("GET", "/agenda")]
 
 
-def test_without_a_month_the_page_gets_none(with_page):
-    server, page = with_page
+def test_the_query_reaches_the_screen(with_web):
+    server, web = with_web
 
-    get(server, "/agenda")
-    get(server, "/agenda/?m=cualquiera")
+    get(server, "/api/events?start=2026-10-05T00:00:00-03:00&end=2026-10-12")
 
-    assert page.asked == [None, "cualquiera"]
+    [request] = web.asked
+    assert request.path == "/api/events"
+    assert request.query == {"start": "2026-10-05T00:00:00-03:00", "end": "2026-10-12"}
 
 
-def test_saying_still_needs_the_token_with_the_page_on(with_page):
-    server, _ = with_page
+def test_health_is_still_the_service_with_the_screen_on(with_web):
+    server, web = with_web
+
+    status, _, body = get(server, "/health")
+
+    assert status == 200
+    assert json.loads(body)["ok"] is True
+    assert web.asked == []
+
+
+def test_saying_still_needs_the_token_with_the_screen_on(with_web):
+    server, web = with_web
 
     with pytest.raises(urllib.error.HTTPError) as caught:
         post(server, {"text": "hola"}, token="")
 
     assert caught.value.code == 401
+    assert web.asked == []
 
 
-def test_without_a_page_the_agenda_does_not_exist(served):
+def test_saying_still_works_with_the_screen_on(with_web):
+    server, web = with_web
+
+    status, _ = post(server, {"text": "hola"})
+
+    assert status == 200
+    assert web.asked == []
+
+
+def test_a_post_elsewhere_goes_to_the_screen(with_web):
+    server, web = with_web
+
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{server.actual_port}/api/events", data=b"{}", method="POST"
+    )
+    urllib.request.urlopen(request, timeout=5).read()
+
+    assert [(r.method, r.path) for r in web.asked] == [("POST", "/api/events")]
+
+
+def test_without_the_screen_the_agenda_does_not_exist(served):
     server, _ = served
 
     with pytest.raises(urllib.error.HTTPError) as caught:
         get(server, "/agenda")
 
     assert caught.value.code == 404
+
+
+def test_the_real_screen_is_served_with_its_policy(tmp_path):
+    board = Board(
+        store=Store(tmp_path / "jobs.db"),
+        history=HistoryStore(tmp_path / "jobs.db"),
+        clock=lambda: datetime(2026, 10, 5, 12, 0),
+    )
+    server = ApiServer(_service(), port=0, host="127.0.0.1", web=WebApp(board))
+    server.start()
+    try:
+        status, headers, body = get(server, "/api/events?start=2026-10-05&end=2026-10-12")
+        assert status == 200
+        assert json.loads(body) == {"events": [], "calendars": [], "problems": []}
+        assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            get(server, "/api/events?start=2026-10-12&end=2026-10-05")
+        assert caught.value.code == 400
+
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            get(server, "/static/../web/app.py")
+        assert caught.value.code == 404
+    finally:
+        server.stop()
+
+

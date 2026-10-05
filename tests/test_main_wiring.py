@@ -5,12 +5,14 @@ and a variable used before it existed. Neither showed up in a unit test,
 because nothing exercised the assembly itself.
 """
 
+import json
 import uuid
 from datetime import timedelta
 
 import pytest
 
 from homeauto import main, polish
+from homeauto.web.app import Request
 
 
 class FakeJobQueue:
@@ -859,25 +861,53 @@ def test_the_summaries_hand_over_the_copy_for_the_others(schedule, wired, tmp_pa
     assert announced == [("dicho", "completo", "sin servicios")]
 
 
-def test_the_api_serves_a_usable_month_page(wired, tmp_path, monkeypatch):
-    """La página llega al servidor de la API y se puede pedir de verdad."""
-    seen = {}
-    original = main.ApiServer.__init__
-
-    def spy(self, *args, **kwargs):
-        seen["page"] = kwargs.get("page")
-        return original(self, *args, **kwargs)
-
-    monkeypatch.setattr(main.ApiServer, "__init__", spy)
-    run_main(monkeypatch, config_file(tmp_path, "API_TOKEN=un-token-suficientemente-largo\n"))
-
-    page = seen["page"]
-    assert page is not None
-    assert "<table>" in page.html(None)
-    assert "<table>" in page.html("2026-02")
+def _wired_web(monkeypatch, tmp_path, extra=""):
+    seen = _spy_init(monkeypatch, main.ApiServer)
+    run_main(
+        monkeypatch, config_file(tmp_path, "API_TOKEN=un-token-suficientemente-largo\n" + extra)
+    )
+    return seen["web"]
 
 
-def test_without_a_token_there_is_no_month_page(wired, tmp_path, monkeypatch):
+def test_the_api_serves_a_usable_screen(wired, tmp_path, monkeypatch):
+    """La pantalla llega al servidor de la API y se puede pedir de verdad."""
+    web = _wired_web(monkeypatch, tmp_path)
+
+    for path in ("/agenda", "/pantalla", "/static/app.js"):
+        assert web.handle(Request(method="GET", path=path)).status == 200, path
+    response = web.handle(
+        Request(method="GET", path="/api/events", query={"start": "2026-10-01", "end": "2026-11-01"})
+    )
+    assert response.status == 200
+    assert json.loads(response.body)["problems"] == []
+
+
+def test_the_screen_reads_the_one_database(wired, tmp_path, monkeypatch):
+    web = _wired_web(monkeypatch, tmp_path)
+    board = web.board
+    board.store.add(42, main.datetime(2099, 1, 2, 8, 0), "arriba")
+    board.lists.add("compras", ["leche"])
+    board.weather.fetch = lambda latitude, longitude: {}
+
+    events = board.events(main.datetime(2099, 1, 1), main.datetime(2099, 1, 8))
+    screen = board.screen()
+
+    assert board.store.db_path == tmp_path / "jobs.db"
+    assert [event["title"] for event in events["events"]] == ["⏰ arriba"]
+    assert screen["lists"]["compras"] == ["leche"]
+    assert screen["weather"] is None
+    assert isinstance(screen["quiet"], bool)
+    assert board.quiet.until() is None
+
+
+def test_the_screen_shows_the_configured_calendars(wired, tmp_path, monkeypatch):
+    web = _wired_web(monkeypatch, tmp_path, "CALENDAR_URL_PERSONAL=https://ejemplo/a.ics\n")
+
+    assert web.board.aliases == ["personal"]
+    assert web.board.calendar.timezone == main.local_timezone()
+
+
+def test_without_a_token_there_is_no_screen(wired, tmp_path, monkeypatch):
     built = []
     monkeypatch.setattr(main.ApiServer, "__init__", lambda self, *a, **k: built.append(k))
 

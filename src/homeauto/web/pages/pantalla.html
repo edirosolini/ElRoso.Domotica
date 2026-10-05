@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>La casa</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/kiosk.js" defer></script>
+</head>
+<body class="kiosk">
+<main class="screen">
+  <section class="clock">
+    <div id="time" class="time">--:--</div>
+    <div id="date" class="date"></div>
+  </section>
+  <section id="weather" class="weather" hidden>
+    <div id="temperature" class="temperature"></div>
+    <div id="sky" class="sky"></div>
+    <div id="range" class="range"></div>
+  </section>
+  <section class="today">
+    <h2>Hoy</h2>
+    <ul id="today"></ul>
+  </section>
+  <section class="lists">
+    <div class="list">
+      <h2>Compras</h2>
+      <ul id="list-compras"></ul>
+    </div>
+    <div class="list">
+      <h2>Pendientes</h2>
+      <ul id="list-pendientes"></ul>
+    </div>
+  </section>
+  <p id="problems" class="problems"></p>
+</main>
+</body>
+</html>
