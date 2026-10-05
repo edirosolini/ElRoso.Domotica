@@ -1,4 +1,4 @@
-// Kiosco de la casa: reloj con la hora del servidor, clima, listas y modo oscuro en descanso.
+// Kiosco de la casa: reloj con la hora del servidor, clima, listas para tachar y modo oscuro en descanso.
 (function () {
   "use strict";
 
@@ -9,6 +9,7 @@
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
   ];
   var offset = 0;
+  var writable = false;
 
   function byId(id) {
     return document.getElementById(id);
@@ -31,8 +32,30 @@
       DAYS[now.getDay()] + " " + now.getDate() + " de " + MONTHS[now.getMonth()];
   }
 
-  function fillList(id, items) {
-    var list = byId(id);
+  // Saca un ítem de la lista y vuelve a pedir la pantalla.
+  function crossOut(name, entry, button) {
+    button.disabled = true;
+    fetch("/api/lists/" + encodeURIComponent(name) + "/" + entry.id + "/done", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then(function (response) {
+        if (!response.ok && response.status !== 404) {
+          throw new Error(String(response.status));
+        }
+        poll();
+      })
+      .catch(function () {
+        button.disabled = false;
+        byId("problems").textContent = "No pude tachar «" + entry.text + "».";
+      });
+  }
+
+  function fillList(name, items) {
+    var list = byId("list-" + name);
     clear(list);
     if (!items || items.length === 0) {
       var empty = document.createElement("li");
@@ -41,9 +64,23 @@
       list.appendChild(empty);
       return;
     }
-    items.forEach(function (text) {
+    items.forEach(function (entry) {
       var item = document.createElement("li");
-      item.textContent = text;
+      var text = document.createElement("span");
+      text.textContent = entry.text;
+      item.appendChild(text);
+      if (writable) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "cross";
+        button.textContent = "✓";
+        button.title = "Tachar «" + entry.text + "»";
+        button.addEventListener("click", function (click) {
+          click.stopPropagation();
+          crossOut(name, entry, button);
+        });
+        item.appendChild(button);
+      }
       list.appendChild(item);
     });
   }
@@ -102,8 +139,8 @@
     showWeather(data.weather);
     fillToday(data.today);
     var lists = data.lists || {};
-    fillList("list-compras", lists.compras);
-    fillList("list-pendientes", lists.pendientes);
+    fillList("compras", lists.compras);
+    fillList("pendientes", lists.pendientes);
     byId("problems").textContent = (data.problems || []).join(" ");
     tick();
   }
@@ -125,6 +162,20 @@
       });
   }
 
+  function loadWritable() {
+    fetch("/api/people", { cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.json() : { writable: false };
+      })
+      .then(function (data) {
+        writable = Boolean(data.writable);
+        poll();
+      })
+      .catch(function () {
+        writable = false;
+      });
+  }
+
   function goFullscreen() {
     var root = document.documentElement;
     if (document.fullscreenElement || !root.requestFullscreen) {
@@ -140,6 +191,7 @@
     document.addEventListener("click", goFullscreen);
     tick();
     poll();
+    loadWritable();
     setInterval(tick, 1000);
     setInterval(poll, POLL_MS);
   });

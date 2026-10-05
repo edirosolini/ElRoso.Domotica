@@ -228,6 +228,40 @@ def test_a_post_elsewhere_goes_to_the_screen(with_web):
     assert [(r.method, r.path) for r in web.asked] == [("POST", "/api/events")]
 
 
+@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+def test_a_write_reaches_the_screen_with_its_headers_and_body(with_web, method):
+    server, web = with_web
+    host = f"127.0.0.1:{server.actual_port}"
+
+    request = urllib.request.Request(
+        f"http://{host}/api/jobs/7", data='{"message": "ñandú"}'.encode("utf-8"),
+        headers={"Content-Type": "application/json", "Origin": f"http://{host}"},
+        method=method,
+    )
+    urllib.request.urlopen(request, timeout=5).read()
+
+    [asked] = web.asked
+    assert (asked.method, asked.path) == (method, "/api/jobs/7")
+    assert asked.body == '{"message": "ñandú"}'.encode("utf-8")
+    assert asked.headers["content-type"] == "application/json"
+    assert asked.headers["origin"] == f"http://{host}"
+    assert asked.headers["host"] == host
+
+
+def test_a_huge_write_to_the_screen_gets_413(with_web):
+    server, web = with_web
+
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{server.actual_port}/api/jobs", data=b"x" * (9 * 1024),
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        urllib.request.urlopen(request, timeout=5)
+
+    assert caught.value.code == 413
+    assert web.asked == []
+
+
 def test_without_the_screen_the_agenda_does_not_exist(served):
     server, _ = served
 

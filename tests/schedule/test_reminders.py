@@ -2,8 +2,10 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from homeauto.schedule.awaiting import AwaitingStore
+from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.reminders import Reminders
-from homeauto.schedule.store import Store
+from homeauto.schedule.store import DAILY, REMINDER, WEEKLY, Store
 
 OWNER = 42
 STRANGER = 99
@@ -296,3 +298,122 @@ def test_without_memory_there_is_nothing_to_snooze(parts):
     timer.fire(str(job.id))
 
     assert reminders.snooze(OWNER, timedelta(minutes=10)) is None
+
+
+# --- editar y cancelar desde la pantalla ---------------------------------
+
+
+class Clock:
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+@pytest.fixture
+def screen(tmp_path):
+    path = tmp_path / "jobs.db"
+    store = Store(path)
+    timer = FakeTimer()
+    clock = Clock(NOW)
+    awaiting = AwaitingStore(path)
+    history = HistoryStore(path)
+    reminders = Reminders(
+        store=store,
+        timer=timer,
+        announce=lambda job: None,
+        awaiting=awaiting,
+        history=history,
+        notify=lambda *args: None,
+        clock=clock,
+        chat_ids=(OWNER, STRANGER),
+    )
+    return reminders, store, timer, clock, awaiting, history
+
+
+def test_update_rewrites_the_job_and_rearms_its_timer(screen):
+    reminders, store, timer, *_ = screen
+    job = reminders.add(OWNER, SOON, "arriba")
+    later = SOON + timedelta(hours=2)
+
+    updated = reminders.update(
+        job.id, later, "a desayunar", repeat=WEEKLY, device="comedor", days=(1, 3), kind=REMINDER
+    )
+
+    assert (updated.id, updated.chat_id, updated.when, updated.message) == (
+        job.id, OWNER, later, "a desayunar",
+    )
+    assert (updated.repeat, updated.weekdays, updated.devices, updated.kind) == (
+        WEEKLY, [1, 3], ["comedor"], REMINDER,
+    )
+    assert store.get(job.id) == updated
+    assert timer.armed[str(job.id)][0] == later
+
+
+def test_the_rearmed_timer_fires_the_new_version(screen):
+    reminders, store, timer, clock, *_ = screen
+    said = []
+    reminders.announce = said.append
+    job = reminders.add(OWNER, SOON, "arriba")
+    reminders.update(job.id, SOON + timedelta(hours=1), "otra cosa")
+
+    timer.fire(str(job.id))
+
+    assert [j.message for j in said] == ["otra cosa"]
+
+
+def test_updating_a_missing_job_returns_none_and_arms_nothing(screen):
+    reminders, _, timer, *_ = screen
+
+    assert reminders.update(7, SOON, "arriba") is None
+    assert timer.armed == {}
+
+
+def test_an_invalid_update_keeps_the_old_timer(screen):
+    reminders, store, timer, *_ = screen
+    job = reminders.add(OWNER, SOON, "arriba")
+
+    with pytest.raises(ValueError):
+        reminders.update(job.id, SOON, "arriba", repeat=WEEKLY)
+
+    assert timer.armed[str(job.id)][0] == SOON
+    assert store.get(job.id) == job
+
+
+def test_updating_a_reminder_that_rang_leaves_its_wait_and_nag_alone(screen):
+    reminders, store, timer, clock, awaiting, _ = screen
+    job = reminders.add(OWNER, SOON, "la pastilla", repeat=DAILY, kind=REMINDER)
+    clock.now = SOON
+    timer.fire(str(job.id))
+    assert f"nag:{job.id}" in timer.armed
+
+    reminders.update(job.id, SOON + timedelta(days=1, hours=1), "la pastilla grande",
+                     repeat=DAILY, kind=REMINDER)
+
+    assert awaiting.get(job.id) is not None
+    assert f"nag:{job.id}" in timer.armed
+
+
+def test_cancel_checks_the_owner_unless_told_otherwise(screen):
+    reminders, store, *_ = screen
+    job = reminders.add(OWNER, SOON, "arriba")
+
+    assert reminders.cancel(STRANGER, job.id) is False
+    assert reminders.cancel(None, job.id, any_owner=True) is True
+    assert store.get(job.id) is None
+
+
+def test_cancel_from_the_screen_closes_the_wait_and_writes_the_history(screen):
+    reminders, store, timer, clock, awaiting, history = screen
+    job = reminders.add(OWNER, SOON, "la pastilla", repeat=DAILY, kind=REMINDER)
+    clock.now = SOON
+    timer.fire(str(job.id))
+
+    assert reminders.cancel(None, job.id, any_owner=True)
+
+    assert awaiting.get(job.id) is None
+    assert f"nag:{job.id}" not in timer.armed
+    assert str(job.id) not in timer.armed
+    [entry] = history.between(NOW - timedelta(days=1), NOW + timedelta(days=2))
+    assert entry.closed == "cancel"

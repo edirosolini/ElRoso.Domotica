@@ -27,6 +27,7 @@ class Item:
     nags: int = 0
     snoozed: bool = False
     cancelled: bool = False
+    job_id: int | None = None
 
 
 def item_kind(kind: str, repeat: str) -> str:
@@ -47,7 +48,7 @@ def occurrences_between(
         at = _first_from(job, since)
         while at is not None and at < end:
             if at >= since:
-                found.append(Item(at=at, kind=kind, message=job.message))
+                found.append(Item(at=at, kind=kind, message=job.message, job_id=job.id))
             at = next_run(job, at)
     return sorted(found, key=lambda item: item.at)
 

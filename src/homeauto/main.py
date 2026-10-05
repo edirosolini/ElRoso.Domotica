@@ -53,6 +53,7 @@ from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
+from homeauto.people import People, PeopleStore
 from homeauto.strangers import Strangers, StrangerStore
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
@@ -74,6 +75,7 @@ from homeauto.watch.status import StatusStore
 from homeauto.weather import RainWatcher, WeatherClient, WeatherWatcher
 from homeauto.web.app import WebApp
 from homeauto.web.board import Board
+from homeauto.web.jobs import JobsService
 
 CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
 PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
@@ -558,7 +560,29 @@ async def _knock(strangers, update: Update) -> None:
         log.exception("no pude avisar del chat nuevo")
 
 
-def register(app: Application, commands: Commands, strangers=None) -> None:
+def _visible_name(update: Update) -> str:
+    """El nombre visible de quien escribió, o su @usuario; vacío si no hay ninguno."""
+    user = getattr(update, "effective_user", None)
+    if user is None:
+        return ""
+    name = " ".join(part for part in (user.first_name, user.last_name) if part)
+    return name or (f"@{user.username}" if user.username else "")
+
+
+async def _meet(people, update: Update) -> None:
+    """Anota el nombre del chat sin que la falla cueste la respuesta."""
+    if people is None or update.effective_chat is None:
+        return
+    name = _visible_name(update)
+    if not name:
+        return
+    try:
+        await asyncio.to_thread(people.meet, update.effective_chat.id, name)
+    except Exception:  # noqa: BLE001 - anotar el nombre no puede costar la respuesta
+        log.exception("could not remember the chat name")
+
+
+def register(app: Application, commands: Commands, strangers=None, people=None) -> None:
     """Cablea todos los comandos, corriendo el trabajo fuera del event loop.
 
     El descubrimiento (zeroconf) y la síntesis (Piper) bloquean: en el loop no
@@ -576,6 +600,7 @@ def register(app: Application, commands: Commands, strangers=None) -> None:
             chat_id = update.effective_chat.id
             text = _argument_text(update)
             await _knock(strangers, update)
+            await _meet(people, update)
             waiting = await _say_working(update.message)
             markup = None
             try:
@@ -635,6 +660,7 @@ def register(app: Application, commands: Commands, strangers=None) -> None:
             return
 
         await _knock(strangers, update)
+        await _meet(people, update)
         waiting = await _say_working(update.message)
         try:
             audio = bytes(await (await voice.get_file()).download_as_bytearray())
@@ -833,10 +859,12 @@ def main() -> None:
         polish=polish,
         clock=datetime.now,
     )
+    people = PeopleStore(db_path)
     register(
         app,
         commands,
         Strangers(config=config, store=StrangerStore(db_path), notify=notifier),
+        People(people, config.allowed_chat_ids),
     )
 
     watcher = None
@@ -873,7 +901,17 @@ def main() -> None:
                     weather=weather,
                     lists=ListStore(db_path),
                     quiet=hush,
-                )
+                ),
+                jobs=JobsService(
+                    reminders=reminders,
+                    store=store,
+                    devices=speakers.aliases,
+                    chat_ids=config.allowed_chat_ids,
+                    people=people,
+                    lists=ListStore(db_path),
+                    notify=notifier,
+                    clock=datetime.now,
+                ),
             ),
         )
     else:

@@ -89,18 +89,51 @@ class Reminders:
         self._arm(job)
         return job
 
+    def update(
+        self,
+        job_id: int,
+        when: datetime,
+        message: str,
+        repeat: str = ONCE,
+        device: str | None = None,
+        days: Iterable[int] | None = None,
+        kind: str = ALARM,
+    ) -> Job | None:
+        """Reescribe un job y lo rearma; lo que ya sonó y espera su «Hecho» no se toca."""
+        job = self.store.update(job_id, when, message, repeat, device, days, kind)
+        if job is None:
+            return None
+        self.timer.unschedule(str(job_id))
+        self._arm(job)
+        return job
+
     def list(self, chat_id: int) -> list[Job]:
         return self.store.pending(chat_id=chat_id)
 
-    def cancel(self, chat_id: int, job_id: int) -> bool:
+    def cancel(self, chat_id: int | None, job_id: int, any_owner: bool = False) -> bool:
+        """Borra un job del chat, o de cualquiera con `any_owner`; False si no estaba."""
         job = self.store.get(job_id)
-        if job is None or job.chat_id != chat_id:
+        if job is None or (not any_owner and job.chat_id != chat_id):
             return False
         self.timer.unschedule(str(job_id))
         if self._close_wait(job_id):
             now = self.clock()
             self._write_history(lambda history: history.mark_closed(job_id, CANCEL, now))
         return self.store.remove(job_id)
+
+    def discard(self, chat_id: int, job_id: int, who: str) -> Job | None:
+        """Borra un job de cualquiera y avisa al resto; None si ya no estaba."""
+        job = self.store.get(job_id)
+        if job is None or not self.cancel(chat_id, job_id, any_owner=True):
+            return None
+        for chat in self._audience(chat_id):
+            if chat == chat_id or self.notify is None:
+                continue
+            try:
+                self.notify(chat, f"🗑 {who} borró #{job_id}: «{job.message}»")
+            except Exception:
+                log.exception("no se pudo avisar al chat %s del borrado %s", chat, job_id)
+        return job
 
     def snooze(self, chat_id: int, delay: timedelta) -> Job | None:
         """Repite dentro de `delay` lo último que sonó en el chat, o None si no hay nada reciente."""

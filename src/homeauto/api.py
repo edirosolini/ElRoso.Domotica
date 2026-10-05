@@ -124,7 +124,16 @@ class _Handler(BaseHTTPRequestHandler):
         if self.web is None:
             self._reply(404, {"error": "no existe"})
             return
-        response = self.web.handle(Request.from_target(method, self.path))
+        body = b""
+        if method != "GET":
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > MAX_BODY:
+                self._reply(413, {"error": "cuerpo demasiado grande"})
+                return
+            body = self.rfile.read(length) if length else b""
+        response = self.web.handle(
+            Request.from_target(method, self.path, headers=dict(self.headers.items()), body=body)
+        )
         self.send_response(response.status)
         for name, value in response.headers.items():
             self.send_header(name, value)
@@ -137,6 +146,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._reply(200, self.service.health())
         else:
             self._delegate("GET")
+
+    def do_PUT(self):  # noqa: N802
+        self._delegate("PUT")
+
+    def do_DELETE(self):  # noqa: N802
+        self._delegate("DELETE")
 
     def do_POST(self):  # noqa: N802
         if self.path.split("?", 1)[0].rstrip("/") != "/say":
