@@ -1073,6 +1073,9 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   lo de la casa que ya sonó, o lo que terminó antes de ahora; lo de todo el día nunca. Se
   oculta con `display: none` desde que llega el feed, así no cuenta en el «+N más». Solo en
   la vista de mes, y se recalcula cada minuto.
+- **La agenda vuelve a pedir sus eventos cada minuto** (`refresh()`, con el mismo `TICK_MS`):
+  lo agregado desde Telegram o desde otra pantalla aparece solo. ⚠️ Lo de Google sigue
+  atado a `CALENDAR_TTL`, así que un evento nuevo ahí tarda hasta cinco minutos más.
 
 **Cómo se ve la agenda.** Barra propia (`headerToolbar: false`): título del período,
 anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y un enlace a `/pantalla`.
