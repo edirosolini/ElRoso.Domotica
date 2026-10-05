@@ -756,6 +756,17 @@ def test_a_reminder_offers_done_and_waits_in_the_one_database(wired, tmp_path, m
     assert callable(reminders["notify"])
 
 
+def test_a_reminder_nags_with_only_the_done_button(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    [(label, data)] = reminders["nag_actions"]
+    assert label == "✅ Hecho"
+    assert data.format(job=17) == "hecho 17"
+    assert callable(reminders["notify"])
+
+
 def test_a_button_has_a_handler(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 
