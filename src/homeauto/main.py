@@ -49,6 +49,7 @@ from homeauto.quiet import Hush, HushStore
 from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
+from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import Store
@@ -733,6 +734,7 @@ def main() -> None:
         ),
         fired=FiredStore(db_path),
         awaiting=AwaitingStore(db_path),
+        history=HistoryStore(db_path),
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
         nag_actions=DONE_ACTIONS,

@@ -6,6 +6,7 @@ because nothing exercised the assembly itself.
 """
 
 import uuid
+from datetime import timedelta
 
 import pytest
 
@@ -765,6 +766,20 @@ def test_a_reminder_nags_with_only_the_done_button(wired, tmp_path, monkeypatch)
     assert label == "✅ Hecho"
     assert data.format(job=17) == "hecho 17"
     assert callable(reminders["notify"])
+
+
+def test_what_rang_is_kept_in_the_history_of_the_one_database(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    history = reminders["history"]
+    assert history.db_path == tmp_path / "jobs.db"
+    at = main.datetime(2026, 10, 5, 8, 0)
+    history.record(17, 42, "reminder", "daily", "la pastilla", at)
+    assert history.mark_done(17, at, "Eze")
+    [entry] = history.between(at, at + timedelta(minutes=1))
+    assert (entry.message, entry.closed, entry.done_by) == ("la pastilla", "done", "Eze")
 
 
 def test_a_button_has_a_handler(wired, tmp_path, monkeypatch):
