@@ -174,8 +174,9 @@ COMMAND_MENU = (
 
 # Los botones abajo de cada aviso: (etiqueta, comando con su argumento).
 SNOOZE_ACTIONS = (("Posponer 10 min", "posponer 10m"), ("Posponer 30 min", "posponer 30m"))
-# `{job}` lo completa el anunciador con el número del recordatorio.
-REMINDER_ACTIONS = (("✅ Hecho", "hecho {job}"),) + SNOOZE_ACTIONS
+# `{job}` lo completa quien avisa con el número del recordatorio.
+DONE_ACTIONS = (("✅ Hecho", "hecho {job}"),)
+REMINDER_ACTIONS = DONE_ACTIONS + SNOOZE_ACTIONS
 MONITOR_ACTIONS = (("Ver estado", "estado"), ("Silenciar 1 h", "silencio 1h"))
 SEQ_ACTIONS = (("Silenciar 1 h", "silencio 1h"),)
 
@@ -734,6 +735,7 @@ def main() -> None:
         awaiting=AwaitingStore(db_path),
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
+        nag_actions=DONE_ACTIONS,
     )
     calendar = None
     agenda = None
