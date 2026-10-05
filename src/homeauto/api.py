@@ -1,8 +1,7 @@
-"""Una puerta para que otros sistemas hablen por la casa.
+"""Servidor HTTP de la LAN para que otros sistemas usen la casa.
 
-Con long polling el bot no necesita ningún puerto entrante. Esto sí: un
-endpoint HTTP chico en la LAN para que un script de backup, un monitor o un
-cron anuncien algo. Va protegido con token compartido y nunca sale a internet.
+`POST /say` anuncia un texto y pide token compartido; `GET /health` y
+`GET /agenda?m=AAAA-MM` (la página del mes) no lo piden.
 """
 
 from __future__ import annotations
@@ -14,7 +13,8 @@ import threading
 from datetime import datetime
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Protocol
+from urllib.parse import parse_qs, urlsplit
 
 from homeauto.polish import as_is
 from homeauto.voice.broadcast import HouseVoice
@@ -31,6 +31,10 @@ class ApiError(Exception):
 
 class Unauthorized(Exception):
     """Token equivocado o ausente."""
+
+
+class Page(Protocol):
+    def html(self, month: str | None) -> str: ...
 
 
 class ApiService:
@@ -99,8 +103,9 @@ class ApiService:
 class _Handler(BaseHTTPRequestHandler):
     server_version = "domotica"
 
-    def __init__(self, *args, service: ApiService, **kwargs):
+    def __init__(self, *args, service: ApiService, page: Page | None = None, **kwargs):
         self.service = service
+        self.page = page
         super().__init__(*args, **kwargs)
 
     def log_message(self, *args):
@@ -114,9 +119,27 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def _reply_html(self, status: int, html: str) -> None:
+        raw = html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def do_GET(self):  # noqa: N802 - nombre impuesto por http.server
-        if self.path.rstrip("/") == "/health":
+        url = urlsplit(self.path)
+        path = url.path.rstrip("/")
+        if path == "/health":
             self._reply(200, self.service.health())
+        elif path == "/agenda" and self.page is not None:
+            # De solo lectura y para la LAN: no pide token.
+            month = (parse_qs(url.query).get("m") or [None])[0]
+            try:
+                self._reply_html(200, self.page.html(month))
+            except Exception:  # noqa: BLE001
+                log.exception("could not render the month page")
+                self._reply_html(500, "<p>No pude armar la agenda.</p>")
         else:
             self._reply(404, {"error": "no existe"})
 
@@ -152,14 +175,17 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 class ApiServer:
-    def __init__(self, service: ApiService, port: int, host: str = "0.0.0.0"):
+    def __init__(
+        self, service: ApiService, port: int, host: str = "0.0.0.0", page: Page | None = None
+    ):
         self.service = service
+        self.page = page
         self.port = port
         self.host = host
         self._server: ThreadingHTTPServer | None = None
 
     def start(self) -> None:
-        handler = partial(_Handler, service=self.service)
+        handler = partial(_Handler, service=self.service, page=self.page)
         self._server = ThreadingHTTPServer((self.host, self.port), handler)
         threading.Thread(target=self._server.serve_forever, daemon=True).start()
         log.info("API escuchando en %s:%s", self.host, self.actual_port)

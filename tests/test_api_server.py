@@ -115,3 +115,73 @@ def test_the_token_can_travel_in_the_body(served):
 
     assert status == 200
     assert speaker.said == ["hola"]
+
+
+class _Page:
+    """Doble de la página: anota el mes pedido y devuelve HTML."""
+
+    def __init__(self):
+        self.asked = []
+
+    def html(self, month):
+        self.asked.append(month)
+        return "<!doctype html><p>agenda ñandú</p>"
+
+
+@pytest.fixture
+def with_page():
+    page = _Page()
+    service = ApiService(
+        token=TOKEN,
+        speakers=StubRegistry(parlante=FakeSpeaker("parlante")),
+        default_devices=["parlante"],
+        notify=lambda chat_id, text: None,
+        chat_ids=(),
+    )
+    server = ApiServer(service, port=0, host="127.0.0.1", page=page)
+    server.start()
+    yield server, page
+    server.stop()
+
+
+def get(server, path):
+    with urllib.request.urlopen(f"http://127.0.0.1:{server.actual_port}{path}", timeout=5) as r:
+        return r.status, r.headers.get("Content-Type"), r.read().decode("utf-8")
+
+
+def test_the_month_page_answers_without_a_token(with_page):
+    server, page = with_page
+
+    status, content_type, body = get(server, "/agenda?m=2026-09")
+
+    assert status == 200
+    assert content_type.startswith("text/html")
+    assert "agenda ñandú" in body
+    assert page.asked == ["2026-09"]
+
+
+def test_without_a_month_the_page_gets_none(with_page):
+    server, page = with_page
+
+    get(server, "/agenda")
+    get(server, "/agenda/?m=cualquiera")
+
+    assert page.asked == [None, "cualquiera"]
+
+
+def test_saying_still_needs_the_token_with_the_page_on(with_page):
+    server, _ = with_page
+
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        post(server, {"text": "hola"}, token="")
+
+    assert caught.value.code == 401
+
+
+def test_without_a_page_the_agenda_does_not_exist(served):
+    server, _ = served
+
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        get(server, "/agenda")
+
+    assert caught.value.code == 404
