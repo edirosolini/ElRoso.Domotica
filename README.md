@@ -421,11 +421,29 @@ Las alarmas (⏰), los recordatorios (📌) y los timers (⏲️) tienen su colo
 de Google, el suyo, con la leyenda arriba. Lo que ya sonó dice cómo terminó: ✅ y quién lo
 marcó, 🔔 los re-avisos, 💤 pospuesto, ✖️ cancelado, ⚠️ no sonó. Lo que viene se calcula igual
 que cuando suena. Un toque sobre un evento muestra el detalle. Si un calendario no se pudo
-leer, lo dice arriba por su nombre.
+leer, lo dice arriba por su nombre. En el mes entran hasta cinco eventos por día y el resto
+queda en «+N más»; lo que ya pasó hoy se pliega bajo un «…» que lo despliega.
+
+**Crear, editar y borrar desde la agenda.** Tocando un día, o con «Nuevo aviso», se abre un
+formulario: tipo (alarma, recordatorio o timer), mensaje, fecha y hora, repetición, equipo y
+a nombre de quién. Valen las mismas reglas que en Telegram: un timer suena una vez, un
+recordatorio repite, «Algunos días» pide los días. Tocando un aviso de la casa que todavía no
+sonó aparecen «Editar» y «Borrar»; si repite, se edita o se borra la serie entera, y el autor
+no cambia. Lo de Google Calendar y lo que ya sonó son solo para mirar.
+
+Cada alta, cambio o baja se avisa en todos los chats. El de un alta o un cambio trae
+«Cancelar #N», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
+borró.
+
+El desplegable «A nombre de» lista los chats de `ALLOWED_CHAT_IDS`. Cada uno aparece como
+«Chat <número>» hasta que le escribe algo al bot; desde ahí, con su nombre de Telegram.
+**Con `ALLOWED_CHAT_IDS` vacío la pantalla no escribe**: no aparece «Nuevo aviso» ni se
+puede editar, borrar o tachar.
 
 **El kiosco** muestra la hora, el clima, lo de hoy y las listas de compras y pendientes, y se
 actualiza solo cada minuto. La hora es la de la casa, aunque el dispositivo tenga otra. En el
-horario de descanso, o con `/silencio`, se pone oscuro.
+horario de descanso, o con `/silencio`, se pone oscuro. Cada ítem de las listas trae un ✓
+para tacharlo desde ahí.
 
 Para dejarlo fijo en una tablet o un teléfono viejo:
 
@@ -433,8 +451,10 @@ Para dejarlo fijo en una tablet o un teléfono viejo:
 2. Que no se apague la pantalla y que quede enchufado al cargador se configura en el
    dispositivo, no acá.
 
-Es de solo lectura y **no pide login ni token**: la ve cualquiera que llegue al contenedor por
-la red. Sin `API_TOKEN` tampoco existe. Lo que sonó antes del 2026-10-05 no está registrado.
+**No pide login ni token**, ni para mirar ni para escribir: la usa cualquiera que llegue al
+contenedor por la red. Lo que sí rechaza es una escritura que venga de otro sitio abierto en
+el navegador. Sin `API_TOKEN` tampoco existe. Lo que sonó antes del 2026-10-05 no está
+registrado.
 
 ## Desarrollo
 
