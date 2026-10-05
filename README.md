@@ -425,7 +425,9 @@ calcula igual que cuando suena. Un toque sobre un evento muestra el detalle. Si 
 no se pudo leer, lo dice arriba por su nombre. En una computadora el mes entra entero en la
 ventana y cada día muestra lo que cabe; en el teléfono, hasta cinco eventos por día. El resto
 queda en «+N más», y lo que ya pasó hoy se pliega bajo un «…» que lo despliega. Semana y Día
-abren una hora antes de la actual. Se ve clara u oscura según el tema del dispositivo.
+abren una hora antes de la actual. Se ve clara u oscura según el tema del dispositivo. Se
+actualiza sola cada minuto: lo agregado desde Telegram o desde otra pantalla aparece sin
+recargar; lo nuevo de Google puede tardar hasta cinco minutos más.
 
 **Crear, editar y borrar desde la agenda.** Tocando un día, o con el botón «+ Nuevo aviso» de
 abajo a la derecha, se abre un panel: tipo (alarma, recordatorio o timer), mensaje, fecha y

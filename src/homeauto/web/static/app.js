@@ -201,6 +201,15 @@
     showToggle(count);
   }
 
+  // Repliega lo que pasó y vuelve a pedir los eventos, para ver lo agregado desde otro lado.
+  function refresh() {
+    if (!state.calendar) {
+      return;
+    }
+    applyPastToday();
+    state.calendar.refetchEvents();
+  }
+
   function mountTodayToggle(info) {
     if (!info.isToday || info.view.type !== MONTH_VIEW) {
       return;
@@ -575,6 +584,6 @@
       fitHeight(calendar);
     });
     loadPeople();
-    setInterval(applyPastToday, TICK_MS);
+    setInterval(refresh, TICK_MS);
   });
 })();

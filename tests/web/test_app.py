@@ -162,6 +162,15 @@ def test_the_month_shows_five_per_day_and_folds_what_already_passed_today(app):
     assert "isPastToday" in script
 
 
+def test_the_agenda_refetches_its_events_every_minute(app):
+    script = get(app, "/static/app.js").body.decode("utf-8")
+
+    assert "TICK_MS = 60000" in script
+    refresh = script.split("function refresh()")[1].split("\n  }\n")[0]
+    assert "refetchEvents()" in refresh
+    assert "setInterval(refresh, TICK_MS)" in script
+
+
 def test_on_a_wide_screen_the_calendar_fits_the_window_without_page_scroll(app):
     script = get(app, "/static/app.js").body.decode("utf-8")
     css = get(app, "/static/app.css").body.decode("utf-8")
