@@ -284,8 +284,6 @@ original: nadie se queda sin aviso porque el modelo estaba lento.
 
 ⚠️ **Esto mejora la redacción, no la voz.** El timbre lo pone Piper y sigue igual.
 
-⚠️ **`/decir` y los timers no pasan por acá.** Lo que escribís vos se dice tal cual.
-
 ## El resumen de la mañana
 
 A la hora de `BRIEFING_AT` la casa dice, en un solo texto: qué hay en la agenda, cómo está el
@@ -374,7 +372,8 @@ Dos reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
 ## API para otros sistemas
 
 Cualquier script puede hacer hablar la casa. El bot usa long polling y no expone nada, pero
-esta API sí escucha: **solo en la LAN, con token**. No abrirla a internet.
+esta API sí escucha, **solo en la LAN**: hacer hablar la casa pide token. No abrirla a
+internet.
 
 Desde el contenedor:
 
@@ -406,17 +405,35 @@ lo dice (`"spoken": false`). Nada se pierde, pero nadie se despierta.
 El token se genera solo la primera vez y vive en `/etc/domotica/domotica.env`. Si no hay
 token, la API no arranca — apagada es el estado seguro.
 
-**La agenda del mes.** El mismo servidor sirve una página para abrir desde el teléfono:
+## La pantalla de la casa
+
+El mismo servidor de la API sirve dos páginas para abrir desde el navegador, en cualquier
+dispositivo de la casa:
 
 ```
-http://192.168.68.10:8099/agenda              # el mes actual
-http://192.168.68.10:8099/agenda?m=2026-11    # otro mes
+http://192.168.68.10:8099/agenda              # la agenda, en el mes actual
+http://192.168.68.10:8099/agenda?m=2026-11    # abre en otro mes
+http://192.168.68.10:8099/pantalla            # el kiosco, para dejar fijo en una pantalla
 ```
 
-Una grilla con cuántas alarmas (⏰), recordatorios (📌) y timers (⏲️) hay cada día, y abajo
-la lista día por día. Lo que ya sonó dice cómo terminó: ✅ y quién lo marcó, 🔔 los
-re-avisos, 💤 pospuesto, ✖️ cancelado, ⚠️ no sonó. Lo que viene se calcula igual que cuando
-suena. Es de solo lectura y **no pide token**: la ve cualquiera que llegue al contenedor por
+**La agenda** junta lo de la casa y lo de Google Calendar, con vista de mes, semana y día.
+Las alarmas (⏰), los recordatorios (📌) y los timers (⏲️) tienen su color; cada calendario
+de Google, el suyo, con la leyenda arriba. Lo que ya sonó dice cómo terminó: ✅ y quién lo
+marcó, 🔔 los re-avisos, 💤 pospuesto, ✖️ cancelado, ⚠️ no sonó. Lo que viene se calcula igual
+que cuando suena. Un toque sobre un evento muestra el detalle. Si un calendario no se pudo
+leer, lo dice arriba por su nombre.
+
+**El kiosco** muestra la hora, el clima, lo de hoy y las listas de compras y pendientes, y se
+actualiza solo cada minuto. La hora es la de la casa, aunque el dispositivo tenga otra. En el
+horario de descanso, o con `/silencio`, se pone oscuro.
+
+Para dejarlo fijo en una tablet o un teléfono viejo:
+
+1. Abrir `/pantalla` en el navegador y tocar la pantalla una vez: pasa a pantalla completa.
+2. Que no se apague la pantalla y que quede enchufado al cargador se configura en el
+   dispositivo, no acá.
+
+Es de solo lectura y **no pide login ni token**: la ve cualquiera que llegue al contenedor por
 la red. Sin `API_TOKEN` tampoco existe. Lo que sonó antes del 2026-10-05 no está registrado.
 
 ## Desarrollo
