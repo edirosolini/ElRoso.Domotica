@@ -105,8 +105,8 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `quiet.HushStore` | hasta cuándo dura el silencio pedido a mano |
 | `pending.PendingStore` | el comando a medio armar de cada chat |
 | `lists.ListStore` | las listas de compras y de pendientes |
-| `schedule.FiredStore` | lo último que sonó en cada chat, para posponerlo |
-| `schedule.AwaitingStore` | los recordatorios que sonaron y esperan su «Hecho» |
+| `schedule.FiredStore` | lo último que sonó en cada chat y de qué job, para posponerlo |
+| `schedule.AwaitingStore` | los recordatorios que sonaron y esperan su «Hecho», con sus re-avisos |
 | `strangers.StrangerStore` | los chats fuera de la lista de los que ya se avisó al dueño |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
@@ -452,6 +452,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | monitor y Seq, dichos o en descanso | `ALERT_CHAT_IDS` |
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
 | alarmas, recordatorios y timers | todos, con posponer; recordatorios y timers también con «Hecho» |
+| re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
 | agenda, clima, lluvia, API | todos |
 | respuesta de un comando | el chat que lo escribió |
 | aviso de un desconocido | todos (`Strangers`) |
@@ -865,11 +866,11 @@ reunión. `quiet.Hush` la implementa.
 Tres tipos de programado, pedidos por el dueño el 2026-09-28: una medicación o salir al
 colegio sonaban con los tres beeps de despertador y decían "(alarma de todos los días)".
 
-| | Repite | Sonido | Botones |
-| --- | --- | --- | --- |
-| `/alarma` | una vez, diaria o por días | tres beeps | posponer |
-| `/recordar` | **siempre**, en los días marcados | un beep suave | «✅ Hecho» y posponer |
-| `/timer` | nunca | un beep suave | «✅ Hecho» y posponer |
+| | Repite | Sonido | Botones | Sin «Hecho» |
+| --- | --- | --- | --- | --- |
+| `/alarma` | una vez, diaria o por días | tres beeps | posponer | nada |
+| `/recordar` | **siempre**, en los días marcados | un beep suave | «✅ Hecho» y posponer | re-avisa |
+| `/timer` | nunca | un beep suave | «✅ Hecho» y posponer | re-avisa |
 
 - 🔴 **El tipo es la columna `kind` de `jobs`** (`alarm` / `reminder`). Entra por
   `_add_missing_columns` con default `alarm`: lo agendado antes de existir sigue siendo
@@ -886,6 +887,24 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 - **«Hecho» se marca una sola vez** y avisa a los demás chats «✅ <nombre> marcó hecho». El
   segundo toque contesta que ya estaba. También borra lo que sonó, así ya no se pospone.
 - **Lo que espera un «Hecho» vence al día** (`awaiting.KEEP`): se poda cada vez que suena otro.
+- 🔴 **Sin «Hecho», se vuelve a avisar** a los cinco, diez y quince minutos (`NAG_DELAY`,
+  `NAG_LIMIT`): «🔔 Sigue pendiente: «…»». Un recordatorio que sonó una vez y nadie tocó
+  quedaba olvidado, que es justo lo que no puede pasar con una medicación.
+- **El re-aviso es solo chat y solo trae «Hecho».** No suena, no pasa por el pulidor y no
+  ofrece posponer: es insistir, no un segundo aviso. Va a todos los chats y **sale también
+  en descanso**, porque no despierta a nadie.
+- **«Hecho», posponer y `/cancelar` lo cortan.** Los tres sacan el job de `awaiting_done` y
+  desagendan su timer.
+- 🔴 **El timer del re-aviso usa la clave `nag:<id>`, no la del job.** Un recordatorio diario
+  se rearma con `str(id)` al sonar: con la misma clave, el rearme pisaría el re-aviso.
+- **Sobrevive un reinicio**: `nags` y `next_nag` viven en `awaiting_done`. Al arrancar, un
+  re-aviso atrasado sale **una vez** y retoma el ritmo; pasado `SNOOZE_WINDOW` desde que sonó
+  ya no sale. Las columnas entran por `_add_missing_columns`, y lo que esperaba un «Hecho»
+  antes de existir queda con `next_nag` vacío: **no re-avisa**.
+- ⚠️ **`/cancelar` de un `/timer` que ya sonó contesta «No encontré»**: el job se borra al
+  sonar. «Hecho» es la forma de cortarlo.
+- ⚠️ **Con `ALLOWED_CHAT_IDS` vacío, el re-aviso de un timer se queda sin destino tras un
+  reinicio.** El chat sale del job, que ya no existe; sin lista, no hay a quién escribir.
 - 🔴 **`hecho` es solo un botón**: está en `Commands.press()` y no en `_dispatch()`, así el
   router nunca lo nombra y el test que ata las dos listas sigue en pie. El nombre de quien
   tocó sale de `main._who()` y entra a `press(who=...)`.
@@ -932,6 +951,9 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
   que no hay nada que posponer. El job nuevo queda a nombre de quien tocó.
 - **Crea un job de una sola vez**, con el mismo mensaje y los mismos equipos. Una alarma que
   repite sigue su curso: posponer el lunes no mueve el martes.
+- 🔴 **Posponer cierra el «Hecho» del original.** `last_fired` guarda el `job_id` (por
+  `_add_missing_columns`) y posponer saca ese job de la espera: si no, el original seguiría
+  re-avisando mientras el pospuesto espera su turno.
 - **Solo vale media hora** después de sonar (`SNOOZE_WINDOW`). Pasado eso contesta que no hay
   nada que posponer, en vez de agendar algo que nadie espera. Sin duración son diez minutos.
 - 🔴 **Lo que sonó se guarda antes de anunciarlo.** El botón llega con el aviso y el anuncio

@@ -116,8 +116,10 @@ qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
 y «Posponer». El recordatorio (`/recordar`) repite siempre en los días marcados —una
 medicación, salir al colegio— y el timer es de una sola vez; los dos suenan con un beep suave
 y traen «✅ Hecho» además de posponer. Tocar «Hecho» les avisa a los demás chats quién lo
-marcó, y ya no se puede posponer. Un recordatorio sin días no se agenda: para algo de una
-sola vez está `/timer`.
+marcó, y ya no se puede posponer. Si nadie lo toca, el chat insiste a los 5, 10 y 15
+minutos con «🔔 Sigue pendiente», solo escrito y solo con «Hecho», también en horario de
+descanso; «Hecho», posponer o `/cancelar` lo cortan. Un recordatorio sin días no se agenda:
+para algo de una sola vez está `/timer`.
 
 Los timers, las alarmas y los recordatorios se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
