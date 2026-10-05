@@ -416,20 +416,24 @@ http://192.168.68.10:8099/agenda?m=2026-11    # abre en otro mes
 http://192.168.68.10:8099/pantalla            # el kiosco, para dejar fijo en una pantalla
 ```
 
-**La agenda** junta lo de la casa y lo de Google Calendar, con vista de mes, semana y día.
-Las alarmas (⏰), los recordatorios (📌) y los timers (⏲️) tienen su color; cada calendario
-de Google, el suyo, con la leyenda arriba. Lo que ya sonó dice cómo terminó: ✅ y quién lo
-marcó, 🔔 los re-avisos, 💤 pospuesto, ✖️ cancelado, ⚠️ no sonó. Lo que viene se calcula igual
-que cuando suena. Un toque sobre un evento muestra el detalle. Si un calendario no se pudo
-leer, lo dice arriba por su nombre. En el mes entran hasta cinco eventos por día y el resto
-queda en «+N más»; lo que ya pasó hoy se pliega bajo un «…» que lo despliega.
+**La agenda** junta lo de la casa y lo de Google Calendar. Arriba están el mes o la semana que
+se ve, las flechas, «Hoy» y las vistas Mes, Semana, Día y Lista. Cada evento es un bloque de
+color suave: las alarmas (⏰), los recordatorios (📌) y los timers (⏲️) tienen su color; cada
+calendario de Google, el suyo, con la leyenda arriba. Lo que ya sonó dice cómo terminó: ✅ y
+quién lo marcó, 🔔 los re-avisos, 💤 pospuesto, ✖️ cancelado, ⚠️ no sonó. Lo que viene se
+calcula igual que cuando suena. Un toque sobre un evento muestra el detalle. Si un calendario
+no se pudo leer, lo dice arriba por su nombre. En una computadora el mes entra entero en la
+ventana y cada día muestra lo que cabe; en el teléfono, hasta cinco eventos por día. El resto
+queda en «+N más», y lo que ya pasó hoy se pliega bajo un «…» que lo despliega. Semana y Día
+abren una hora antes de la actual. Se ve clara u oscura según el tema del dispositivo.
 
-**Crear, editar y borrar desde la agenda.** Tocando un día, o con «Nuevo aviso», se abre un
-formulario: tipo (alarma, recordatorio o timer), mensaje, fecha y hora, repetición, equipo y
-a nombre de quién. Valen las mismas reglas que en Telegram: un timer suena una vez, un
-recordatorio repite, «Algunos días» pide los días. Tocando un aviso de la casa que todavía no
-sonó aparecen «Editar» y «Borrar»; si repite, se edita o se borra la serie entera, y el autor
-no cambia. Lo de Google Calendar y lo que ya sonó son solo para mirar.
+**Crear, editar y borrar desde la agenda.** Tocando un día, o con el botón «+ Nuevo aviso» de
+abajo a la derecha, se abre un panel: tipo (alarma, recordatorio o timer), mensaje, fecha y
+hora, repetición, equipo y a nombre de quién. Valen las mismas reglas que en Telegram: un
+timer suena una vez, un recordatorio repite, «Algunos días» pide los días. Tocando un aviso de
+la casa que todavía no sonó aparecen «Editar» y «Borrar»; si repite, se edita o se borra la
+serie entera, y el autor no cambia; borrar pide confirmación. Lo de Google Calendar y lo que
+ya sonó son solo para mirar.
 
 Cada alta, cambio o baja se avisa en todos los chats. El de un alta o un cambio trae
 «Cancelar #N», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
@@ -440,10 +444,21 @@ El desplegable «A nombre de» lista los chats de `ALLOWED_CHAT_IDS`. Cada uno a
 **Con `ALLOWED_CHAT_IDS` vacío la pantalla no escribe**: no aparece «Nuevo aviso» ni se
 puede editar, borrar o tachar.
 
-**El kiosco** muestra la hora, el clima, lo de hoy y las listas de compras y pendientes, y se
-actualiza solo cada minuto. La hora es la de la casa, aunque el dispositivo tenga otra. En el
-horario de descanso, o con `/silencio`, se pone oscuro. Cada ítem de las listas trae un ✓
-para tacharlo desde ahí.
+**El kiosco** es un tablero de tarjetas y se actualiza solo cada minuto:
+
+- **La hora y la fecha**: la de la casa, aunque el dispositivo tenga otra.
+- **El clima**: un ícono del cielo, la temperatura, la sensación térmica, la máxima, la
+  mínima y la chance de lluvia.
+- **Lo próximo**: lo primero que viene con hora, de hoy o de mañana, con cuánto falta y de
+  qué calendario es. Lo de todo el día no cuenta. Si no hay nada, «Nada más por hoy».
+- **Hoy**: el día como línea de tiempo, con una marca «ahora». De lo que ya pasó quedan los
+  dos últimos, con cómo terminó.
+- **Compras y Pendientes**, con cuántos hay. Cada ítem trae un círculo para tacharlo desde
+  ahí.
+
+Se ve claro u oscuro según el tema del dispositivo; en el horario de descanso, o con
+`/silencio`, se pone oscuro y apagado aunque el dispositivo esté en claro. Apaisado ocupa
+tres columnas; vertical, dos.
 
 Para dejarlo fijo en una tablet o un teléfono viejo:
 
@@ -464,7 +479,8 @@ python3 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
-Los tests no necesitan hardware ni red: el parlante y Piper están mockeados.
+Los tests no necesitan hardware ni red: el parlante y Piper están mockeados. Si hay `node`,
+también corren la lógica de las páginas; sin `node`, ese test se saltea.
 
 ## Configuración
 

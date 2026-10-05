@@ -1012,10 +1012,10 @@ cancelado, con `closed_at`. `Reminders` es el único que escribe.
 
 | Ruta | Qué es |
 | --- | --- |
-| `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana y día. `?m=AAAA-MM` abre en ese mes |
-| `/pantalla` | el kiosco: reloj, clima, lo de hoy y las dos listas |
+| `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes |
+| `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy y las dos listas |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
-| `/api/board` | el estado del kiosco: hora, descanso, hoy, clima y listas como `[{id, text}]` |
+| `/api/board` | el estado del kiosco: hora, descanso, hoy, lo próximo, clima y listas como `[{id, text}]` |
 | `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre y los equipos |
 | `POST /api/jobs` | crea un aviso de la casa |
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
@@ -1036,9 +1036,14 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
 - 🔴 **La CSP es la defensa, y cada excepción tiene su motivo.** `script-src 'self'`, sin
   `unsafe-inline` ni `unsafe-eval`, y ningún script inline en las páginas.
   `style-src 'unsafe-inline'` porque FullCalendar inyecta su CSS en un `<style>`.
-  `font-src 'self' data:` porque las flechas de anterior y siguiente son una fuente embebida
-  como `data:` URI: sin eso **las flechas se ven rotas**, y pasó (#30). Hay test del
-  script y de la fuente.
+  `font-src 'self' data:` porque los íconos de FullCalendar son una fuente embebida como
+  `data:` URI: sin eso **se ven rotos**, y pasó con las flechas (#30). Las flechas de la
+  barra ya son botones propios; la fuente sigue en el bundle para los íconos que FullCalendar
+  dibuja solo. Hay test del script y de la fuente.
+- 🔴 **Nada de `style=` ni `<style>` en las páginas, y desde el JS solo
+  `style.setProperty()`**, para pasar un color como variable (`--c`, `--ev`). Lo que se
+  escribe por CSSOM no depende de `unsafe-inline`; un atributo en el HTML sí. Hay test de
+  las dos cosas.
 - 🔴 **Un título va siempre como texto.** `textContent`, nunca `innerHTML` ni un
   `eventContent` que devuelva HTML: un título de Google o el mensaje de una alarma es texto
   de una persona.
@@ -1057,24 +1062,71 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
 - **El clima se cachea quince minutos** (`WEATHER_TTL`) y **una falla no se cachea**: se
   vuelve a pedir en el polling siguiente.
 - Un error al armar un feed devuelve 500 y se loguea; no tumba el servidor de `/say`.
-- **En el mes, como mucho cinco eventos por día** (`dayMaxEvents`) y el resto en «+N más».
+- **En pantalla ancha (≥720 px) el calendario ocupa el alto de la ventana**: `fitHeight()`
+  le da el alto que queda debajo de la barra y `dayMaxEvents: true`, así cada día muestra lo
+  que entra y el resto va a «+N más», sin scroll de página. Se recalcula al cambiar el
+  tamaño. En angosta, `height: auto` y como mucho cinco por día.
+- **Semana y día abren una hora antes de la actual** (`nowScroll()`), al cargar y al cambiar
+  de vista. ⚠️ **No hay `slotMinTime`**: escondería lo que suena antes de las seis, y en el CT
+  el descanso termina a las 05:25.
 - **Hoy, lo que ya pasó queda plegado bajo un «…»** que lo despliega. `isPastToday()` decide:
   lo de la casa que ya sonó, o lo que terminó antes de ahora; lo de todo el día nunca. Se
   oculta con `display: none` desde que llega el feed, así no cuenta en el «+N más». Solo en
   la vista de mes, y se recalcula cada minuto.
 
-**El kiosco** (`kiosk.js`) pide `/api/board` cada sesenta segundos.
+**Cómo se ve la agenda.** Barra propia (`headerToolbar: false`): título del período,
+anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y un enlace a `/pantalla`.
+
+- **Cada evento es un bloque** (`display: "block"`, también los de hora) con la clase `ev`
+  y su color en `--ev`, que `eventDidMount` le pasa: fondo suave con `color-mix()` y un
+  borde del color pleno. ⚠️ Sin `color-mix()` el fondo cae a `--card-2` y el color queda
+  solo en el borde: es el respaldo de `@supports`, no una falla.
+- **«Nuevo aviso» es un botón flotante**, que aparece solo si la pantalla escribe. El
+  formulario y el detalle abren en un panel desde abajo (centrado en pantalla ancha) y se
+  cierran tocando afuera.
+- **Lo que pasó se avisa con un toast** que se va solo, no con `alert()`. ⚠️ **Borrar sigue
+  pidiendo `confirm()`**: es un toque sin deshacer y borra la serie entera.
+
+**Temas.** Los colores son variables en `:root` de `app.css`, una sola hoja para las dos
+páginas.
+
+- **Claro u oscuro según el dispositivo**, con `prefers-color-scheme`. Las páginas declaran
+  `<meta name="color-scheme" content="light dark">` para que los controles del formulario
+  cambien también, y **FullCalendar recibe los colores por sus `--fc-*`**: con sus defaults
+  sería un calendario claro adentro de una página oscura.
+- 🔴 **El descanso del kiosco va por encima del tema del dispositivo**: `kiosk.js` pone
+  `data-theme="night"` en `<html>` y `:root[data-theme="night"]` gana sobre los dos: en
+  descanso se oscurece aunque el dispositivo esté en tema claro.
+
+**El kiosco** (`kiosk.js`) pide `/api/board` cada sesenta segundos y lo arma en tarjetas:
+reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres columnas; vertical, en dos.
 
 - 🔴 **El reloj corre con la hora del servidor.** Calcula el offset entre `now` y el punto
   medio de la ida y vuelta, así un dispositivo con la hora mal igual muestra la de la casa.
-- **Se pone oscuro en descanso**, con `quiet`, que es `Hush.is_quiet()`: el horario fijo y el
-  silencio pedido.
-- ⚠️ **`kiosk.js` va sin sintaxis moderna** —`var` y `function`, sin flechas ni `const`—
-  para andar en el navegador viejo de un dispositivo reciclado. Sí necesita `fetch`.
+- **Se pone en tema nocturno en descanso**, con `quiet`, que es `Hush.is_quiet()`: el
+  horario fijo y el silencio pedido.
+- **El clima trae un ícono por código WMO** (`board.sky_icon`); lo que no figura en
+  `SKY_ICONS` es cielo variable.
+- **«Lo próximo» es lo primero con hora que todavía no empezó, de hoy o de mañana**
+  (`Board._next`). Lo de todo el día nunca entra: no tiene un «en cuánto». Sin nada, dice
+  «Nada más por hoy». Cuánto falta se recalcula con el reloj, no con el polling.
+- 🔴 **«Hoy» es una línea de tiempo con una marca «ahora», y de lo pasado quedan solo los
+  dos últimos** (`KEEP_PAST`). La tarjeta no scrollea: con todo lo pasado a la vista, lo
+  que viene, que es lo que se mira, quedaría afuera. Cada entrada de `today` trae
+  `label` —el ícono del tipo y el mensaje— y `mark`, cómo terminó, que se muestra solo si
+  ya pasó.
+- **Cada tarjeta de lista y la de «Hoy» llevan un contador** de lo que tienen.
+- ⚠️ **`app.js` y `kiosk.js` van en ES5** —`var` y `function`, sin flechas, `const`,
+  template strings ni `?.`— para andar en el navegador viejo de un dispositivo reciclado. Sí
+  necesitan `fetch`. Hay test que busca esa sintaxis, y `innerHTML`, en los dos.
+- **La lógica pura de los dos scripts se prueba con node.** Cada uno exporta sus funciones
+  sin DOM por `module.exports` cuando corre fuera del navegador; `tests/web/agenda_logic.js`
+  y `kiosk_logic.js` las ejercitan y `test_agenda_js.py` los corre. ⚠️ **Sin `node` en la
+  máquina, ese test se saltea**: no falla.
 - **Pantalla completa al primer toque**: el navegador solo la concede desde un gesto. Que la
   pantalla no se apague y el cargador son cosa del dispositivo.
 - Sin conexión dice "Sin conexión con la casa." y deja lo último que mostró.
-- **Cada ítem de las listas trae un ✓ para tacharlo**, solo si `/api/people` dice que la
+- **Cada ítem de las listas trae un círculo para tacharlo**, solo si `/api/people` dice que la
   pantalla escribe. Tacha por id, como el botón del chat, así que un toque no se lleva otro
   ítem. Tachar no avisa a los chats.
 
