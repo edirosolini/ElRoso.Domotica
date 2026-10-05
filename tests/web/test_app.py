@@ -272,6 +272,23 @@ def test_the_static_files_are_served(app, name, kind):
     assert "Cache-Control" in response.headers
 
 
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
+def test_the_pages_declare_both_color_schemes(app, path):
+    page = get(app, path).body.decode()
+
+    assert '<meta name="color-scheme" content="light dark">' in page
+
+
+def test_the_style_follows_the_device_theme_also_inside_fullcalendar(app):
+    css = get(app, "/static/app.css").body.decode()
+    dark = css.split("@media (prefers-color-scheme: dark)")[1]
+
+    assert "--bg:" in dark and "--text:" in dark
+    assert "--fc-page-bg-color: var(--bg)" in css
+    assert "--fc-border-color: var(--line)" in css
+    assert ".kiosk.dark" in css
+
+
 def test_the_vendored_bundle_is_cached_for_long_and_ours_revalidate(app):
     vendored = get(app, f"/static/{FULLCALENDAR}/index.global.min.js")
     ours = get(app, "/static/app.js")
