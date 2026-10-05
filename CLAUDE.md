@@ -33,6 +33,7 @@ Domotica/
 │   ├── lists.py         # las listas de compras y de pendientes
 │   ├── translate.py     # traducir, solo para leer
 │   ├── api.py           # endpoint HTTP para otros sistemas
+│   ├── calendar_page.py # la página del mes: lo que sonó y lo que va a sonar
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
 │   ├── agenda/          # Google Calendar: lectura, avisos, resumen
@@ -92,7 +93,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con once tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con doce tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -108,6 +109,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `schedule.FiredStore` | lo último que sonó en cada chat y de qué job, para posponerlo |
 | `schedule.AwaitingStore` | los recordatorios que sonaron y esperan su «Hecho», con sus re-avisos |
 | `strangers.StrangerStore` | los chats fuera de la lista de los que ya se avisó al dueño |
+| `schedule.HistoryStore` | todo lo que sonó y cómo terminó, doce meses (`fired_history`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -472,12 +474,15 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 ## API
 
 `homeauto/api.py` expone un endpoint HTTP **solo para la LAN**, con token compartido, para que
-otros sistemas anuncien cosas. La lógica (`ApiService`) está separada del transporte HTTP y se
-prueba sin red.
+otros sistemas anuncien cosas, y además sirve en HTML la **Pantalla del mes**. La lógica
+(`ApiService`, `CalendarPage`) está separada del transporte HTTP y se prueba sin red.
 
 - **Sin `API_TOKEN` la API no arranca.** Apagada es el estado seguro; un endpoint que hace
   hablar la casa no puede quedar abierto por olvido.
 - El token se compara con `hmac.compare_digest`, no con `==`.
+- 🔴 **El token es de `/say`, no del servidor.** `GET /health` y `GET /agenda` no lo piden;
+  ver **Pantalla del mes**. Rutea por `urlsplit(path)`, así que `/health?x=1` sigue siendo
+  `/health`.
 - **`urgent` es la única forma de saltear el horario de descanso.** Producción caída a las
   3 AM lo amerita; un backup terminado, no.
 - El CLI `domotica-say` lee el token del archivo de configuración: pasarlo por línea de
@@ -972,6 +977,50 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
   treinta y uno de treinta y uno (hoy treinta y cuatro). Ver **Texto libre**.
+
+## Historial de lo que sonó
+
+`schedule.HistoryStore` (`fired_history`) guarda una fila por cada vez que suena una alarma,
+un recordatorio o un timer: si se dijo, cuántos re-avisos, «Hecho» y quién, pospuesto o
+cancelado, con `closed_at`. `Reminders` es el único que escribe.
+
+- 🔴 **La fila se graba antes de anunciar** y nace como no dicha; `mark_announced()` la da
+  por dicha solo si el anuncio no levantó. Un parlante apagado deja la marca de que no sonó,
+  en vez de no dejar nada.
+- 🔴 **El historial no puede costar un aviso.** Toda escritura pasa por
+  `Reminders._write_history()`, que loguea la falla y sigue.
+- **Cada marca toca solo la última fila abierta del job** (`closed IS NULL`). Una alarma
+  diaria tiene una fila por día; marcar la de hoy no reescribe la de ayer.
+- 🔴 **Cancelar solo cierra lo que esperaba «Hecho».** `/cancelar` de algo que nunca sonó no
+  escribe nada, y una alarma diaria cancelada no toca la fila de ayer: esa ya terminó como
+  terminó.
+- **Doce meses** (`history.KEEP`), podados al insertar, como `awaiting.KEEP`. Sin job aparte.
+
+## Pantalla del mes
+
+`GET /agenda?m=AAAA-MM` en el mismo `ApiServer` de la API (puerto `API_PORT`, 8099): una
+grilla del mes con un ícono por tipo y cuántos hay, y abajo la lista día por día con hora,
+tipo, mensaje y cómo terminó cada aviso. Sin `m`, o con algo que no se entiende, el mes
+actual. `month.py` arma el mes; `calendar_page.py`, el HTML.
+
+- 🔴 **Abierta en la LAN, sin token.** Decisión del dueño: es de solo lectura y la tiene
+  que poder abrir cualquiera de la casa desde el teléfono. ⚠️ La ve **cualquiera que alcance
+  el CT**, incluida la red IoT si llega. Los mensajes de las alarmas quedan a la vista.
+- **Existe solo si la API arrancó**, o sea con `API_TOKEN`: es otra ruta del mismo servidor.
+- 🔴 **Lo que va a sonar sale de `store.next_run(job, after)`, la misma función que usa
+  `Reminders` para reagendar.** Estaba como `Reminders._next_run`; con dos copias, la página
+  podía mostrar un día en que la alarma no suena. Es la misma regla que `down_line()`.
+- **Lo pasado sale del historial, lo futuro de los jobs**, cortados en el mismo `now`: el día
+  de hoy no muestra dos veces lo que ya sonó.
+- **Sin JavaScript ni dependencias**: HTML y CSS armados a mano. 🔴 Todo texto de una persona
+  —mensaje, quién marcó «Hecho»— pasa por `html.escape`.
+- Un error al armarla devuelve 500 y se loguea; no tumba el servidor de `/say`.
+- ⚠️ **Un job vencido mientras el servicio estaba caído no aparece hasta que suena.** La
+  expansión arranca en `now`, y ese job tiene la hora en el pasado.
+- ⚠️ **Un recordatorio pospuesto se ve como timer**: posponer crea un job de una sola vez
+  con `kind=reminder`, y uno de una sola vez es un timer para la página.
+- ⚠️ **Lo que sonó antes del historial no está.** Los meses anteriores al 2026-10-05 se ven
+  vacíos de pasado.
 
 ## Botones en las respuestas
 
