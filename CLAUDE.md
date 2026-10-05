@@ -32,13 +32,13 @@ Domotica/
 │   ├── calc.py          # cuentas y conversión de unidades, sin modelo
 │   ├── lists.py         # las listas de compras y de pendientes
 │   ├── translate.py     # traducir, solo para leer
-│   ├── api.py           # endpoint HTTP para otros sistemas
-│   ├── calendar_page.py # la página del mes: lo que sonó y lo que va a sonar
+│   ├── api.py           # servidor HTTP de la LAN: /say para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
 │   ├── agenda/          # Google Calendar: lectura, avisos, resumen
 │   ├── voice/           # equipos cast: tts, cast, registro, difusión
 │   ├── watch/           # vigilancia de servicios externos y de Seq
+│   ├── web/             # pantalla de la casa: agenda, kiosco y sus feeds JSON
 │   └── main.py          # cableado y ciclo de vida del proceso
 ├── deploy/              # unit de systemd, despliegue, CLI y la medición del router
 ├── tests/
@@ -125,6 +125,8 @@ un despliegue nuevo no necesita migración.
 - **pychromecast** — control del parlante.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
+- **FullCalendar** en la pantalla de la casa, vendorizado y sin CDN. Es el único JavaScript
+  de terceros del proyecto.
 
 ## Desarrollo
 
@@ -473,16 +475,16 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 
 ## API
 
-`homeauto/api.py` expone un endpoint HTTP **solo para la LAN**, con token compartido, para que
-otros sistemas anuncien cosas, y además sirve en HTML la **Pantalla del mes**. La lógica
-(`ApiService`, `CalendarPage`) está separada del transporte HTTP y se prueba sin red.
+`homeauto/api.py` expone un servidor HTTP **solo para la LAN**: `POST /say`, con token
+compartido, para que otros sistemas anuncien cosas, y `GET /health`. Todo lo demás lo
+delega a `web.WebApp`, la **Pantalla de la casa**. La lógica (`ApiService`, `WebApp`) está
+separada del transporte HTTP y se prueba sin red.
 
-- **Sin `API_TOKEN` la API no arranca.** Apagada es el estado seguro; un endpoint que hace
-  hablar la casa no puede quedar abierto por olvido.
+- **Sin `API_TOKEN` la API no arranca**, y con ella tampoco la pantalla. Apagada es el estado
+  seguro; un endpoint que hace hablar la casa no puede quedar abierto por olvido.
 - El token se compara con `hmac.compare_digest`, no con `==`.
-- 🔴 **El token es de `/say`, no del servidor.** `GET /health` y `GET /agenda` no lo piden;
-  ver **Pantalla del mes**. Rutea por `urlsplit(path)`, así que `/health?x=1` sigue siendo
-  `/health`.
+- 🔴 **El token es de `/say`, no del servidor.** `/health` y las rutas de la pantalla no lo
+  piden. La ruta se compara sin la query, así que `/health?x=1` sigue siendo `/health`.
 - **`urgent` es la única forma de saltear el horario de descanso.** Producción caída a las
   3 AM lo amerita; un backup terminado, no.
 - El CLI `domotica-say` lee el token del archivo de configuración: pasarlo por línea de
@@ -996,31 +998,89 @@ cancelado, con `closed_at`. `Reminders` es el único que escribe.
   terminó.
 - **Doce meses** (`history.KEEP`), podados al insertar, como `awaiting.KEEP`. Sin job aparte.
 
-## Pantalla del mes
+## Pantalla de la casa
 
-`GET /agenda?m=AAAA-MM` en el mismo `ApiServer` de la API (puerto `API_PORT`, 8099): una
-grilla del mes con un ícono por tipo y cuántos hay, y abajo la lista día por día con hora,
-tipo, mensaje y cómo terminó cada aviso. Sin `m`, o con algo que no se entiende, el mes
-actual. `month.py` arma el mes; `calendar_page.py`, el HTML.
+`homeauto/web/` sirve dos páginas y sus datos en el mismo `ApiServer` de la API (puerto
+`API_PORT`, 8099), y **existe solo si la API arrancó**, o sea con `API_TOKEN`.
 
-- 🔴 **Abierta en la LAN, sin token.** Decisión del dueño: es de solo lectura y la tiene
-  que poder abrir cualquiera de la casa desde el teléfono. ⚠️ La ve **cualquiera que alcance
-  el CT**, incluida la red IoT si llega. Los mensajes de las alarmas quedan a la vista.
-- **Existe solo si la API arrancó**, o sea con `API_TOKEN`: es otra ruta del mismo servidor.
+| Ruta | Qué es |
+| --- | --- |
+| `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana y día. `?m=AAAA-MM` abre en ese mes |
+| `/pantalla` | el kiosco: reloj, clima, lo de hoy y las dos listas |
+| `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
+| `/api/board` | el estado del kiosco: hora, descanso, hoy, clima y listas |
+
+`Board` arma los datos y `WebApp.handle(Request) -> Response` rutea; ninguno de los dos
+conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arquitectura**.
+
+- 🔴 **Abierta en la LAN, sin login ni token.** Decisión del dueño: la red de la casa es de
+  confianza —cable y un WiFi oculto— y la pantalla la tiene que poder abrir cualquiera de la
+  casa. ⚠️ La ve **cualquiera que alcance el CT**: los mensajes de las alarmas y los títulos
+  de Google quedan a la vista.
+- 🔴 **Las URLs privadas de iCal nunca llegan al navegador.** `problems` dice solo el alias
+  ("No pude leer el calendario X."). El texto de la excepción no se reenvía porque requests
+  mete la URL adentro (`404 for url: …`), y la URL es una credencial. Hay test con una URL
+  secreta que no puede aparecer en ninguna respuesta.
+- 🔴 **La CSP es la defensa, y cada excepción tiene su motivo.** `script-src 'self'`, sin
+  `unsafe-inline` ni `unsafe-eval`, y ningún script inline en las páginas.
+  `style-src 'unsafe-inline'` porque FullCalendar inyecta su CSS en un `<style>`.
+  `font-src 'self' data:` porque las flechas de anterior y siguiente son una fuente embebida
+  como `data:` URI: sin eso **las flechas se ven rotas**, y pasó (#30). Hay test del
+  script y de la fuente.
+- 🔴 **Un título va siempre como texto.** `textContent`, nunca `innerHTML` ni un
+  `eventContent` que devuelva HTML: un título de Google o el mensaje de una alarma es texto
+  de una persona.
 - 🔴 **Lo que va a sonar sale de `store.next_run(job, after)`, la misma función que usa
-  `Reminders` para reagendar.** Estaba como `Reminders._next_run`; con dos copias, la página
-  podía mostrar un día en que la alarma no suena. Es la misma regla que `down_line()`.
+  `Reminders` para reagendar.** Con dos copias, la agenda podía mostrar un día en que la
+  alarma no suena. Es la misma regla que `down_line()`. `schedule/month.py` expande los jobs
+  y traduce el historial; `Board` los pasa al formato de FullCalendar.
 - **Lo pasado sale del historial, lo futuro de los jobs**, cortados en el mismo `now`: el día
-  de hoy no muestra dos veces lo que ya sonó.
-- **Sin JavaScript ni dependencias**: HTML y CSS armados a mano. 🔴 Todo texto de una persona
-  —mensaje, quién marcó «Hecho»— pasa por `html.escape`.
-- Un error al armarla devuelve 500 y se loguea; no tumba el servidor de `/say`.
+  de hoy no muestra dos veces lo que ya sonó. Lo que sonó lleva cómo terminó en el título.
+- **Un rango es de como mucho sesenta y dos días** (`MAX_RANGE`); invertido o más largo es un
+  400. Las fechas de FullCalendar llegan con offset y se llevan a hora local sin zona, como
+  guarda la casa sus jobs.
+- **Google se cachea cinco minutos por rango** (`CALENDAR_TTL`), con tope de treinta y dos
+  rangos (`MAX_CACHED_RANGES`): navegar meses no le pega a Google en cada clic. ⚠️ Un
+  calendario caído también queda cacheado: el aviso dura hasta cinco minutos.
+- **El clima se cachea quince minutos** (`WEATHER_TTL`) y **una falla no se cachea**: se
+  vuelve a pedir en el polling siguiente.
+- Un error al armar un feed devuelve 500 y se loguea; no tumba el servidor de `/say`.
+
+**El kiosco** (`kiosk.js`) pide `/api/board` cada sesenta segundos.
+
+- 🔴 **El reloj corre con la hora del servidor.** Calcula el offset entre `now` y el punto
+  medio de la ida y vuelta, así un dispositivo con la hora mal igual muestra la de la casa.
+- **Se pone oscuro en descanso**, con `quiet`, que es `Hush.is_quiet()`: el horario fijo y el
+  silencio pedido.
+- ⚠️ **`kiosk.js` va sin sintaxis moderna** —`var` y `function`, sin flechas ni `const`—
+  para andar en el navegador viejo de un dispositivo reciclado. Sí necesita `fetch`.
+- **Pantalla completa al primer toque**: el navegador solo la concede desde un gesto. Que la
+  pantalla no se apague y el cargador son cosa del dispositivo.
+- Sin conexión dice "Sin conexión con la casa." y deja lo último que mostró.
+
+**FullCalendar 6.1.21 va vendorizado** en `static/fullcalendar-6.1.21/`, licencia MIT con su
+`LICENSE.md` al lado, **sin CDN**: la pantalla no depende de internet ni de un tercero. La
+ruta lleva la versión y el bundle sale con `Cache-Control: immutable`; lo propio, con
+`no-cache`. Solo se sirve lo que está en `app.STATIC`. Para re-vendorizar, verificar el
+sha512 de cada paquete contra `dist.integrity` antes de copiar:
+
+```bash
+npm pack fullcalendar@6.1.21 @fullcalendar/core@6.1.21
+npm view fullcalendar@6.1.21 dist.integrity          # = sha512 del .tgz
+openssl dgst -sha512 -binary fullcalendar-6.1.21.tgz | base64 -w0
+# fullcalendar: index.global.min.js y LICENSE.md
+# @fullcalendar/core: locales/es.global.min.js → es.global.min.js
+```
+
+Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `<script>` de
+`agenda.html`.
+
 - ⚠️ **Un job vencido mientras el servicio estaba caído no aparece hasta que suena.** La
   expansión arranca en `now`, y ese job tiene la hora en el pasado.
 - ⚠️ **Un recordatorio pospuesto se ve como timer**: posponer crea un job de una sola vez
-  con `kind=reminder`, y uno de una sola vez es un timer para la página.
-- ⚠️ **Lo que sonó antes del historial no está.** Los meses anteriores al 2026-10-05 se ven
-  vacíos de pasado.
+  con `kind=reminder`, y uno de una sola vez es un timer para la pantalla.
+- ⚠️ **Lo que sonó antes del historial no está.** Lo anterior al 2026-10-05 se ve vacío de
+  pasado.
 
 ## Botones en las respuestas
 
