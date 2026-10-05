@@ -1,4 +1,4 @@
-"""El mes de lo programado: lo que va a sonar y lo que ya sonó."""
+"""Lo programado en un rango: lo que va a sonar y lo que ya sonó."""
 
 from datetime import date, datetime, timedelta
 
@@ -7,13 +7,18 @@ from homeauto.schedule.month import (
     ALARM_ITEM,
     REMINDER_ITEM,
     TIMER_ITEM,
-    month_view,
-    occurrences,
+    from_history,
+    occurrences_between,
 )
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import ALARM, DAILY, ONCE, REMINDER, WEEKLY, Job, Store, next_run
 
 NOW = datetime(2026, 10, 5, 12, 0)  # lunes
+OCTOBER = (datetime(2026, 10, 1), datetime(2026, 11, 1))
+
+
+def october(jobs, now=NOW):
+    return occurrences_between(jobs, *OCTOBER, now)
 
 
 def job(when, repeat=ONCE, days=None, kind=ALARM, message="arriba", job_id=1):
@@ -74,15 +79,15 @@ class _Timer:
         self.armed.pop(key, None)
 
 
-def test_the_page_and_the_reminders_follow_the_same_rule(tmp_path):
-    """Lo que la página dice que va a sonar es lo que Reminders rearma después de sonar."""
+def test_the_screen_and_the_reminders_follow_the_same_rule(tmp_path):
+    """Lo que la pantalla dice que va a sonar es lo que Reminders rearma después de sonar."""
     store = Store(tmp_path / "jobs.db")
     timer = _Timer()
     reminders = Reminders(store=store, timer=timer, announce=lambda job: None, clock=lambda: NOW)
     friday = datetime(2026, 10, 9, 7, 0)
     added = reminders.add(42, friday, "colegio", repeat=WEEKLY, days=[5, 6, 7, 1])
 
-    expected = [item.at for item in occurrences([added], 2026, 10, NOW)]
+    expected = [item.at for item in october([added])]
     fired = [added.when]
     for _ in range(len(expected) - 1):
         timer.armed[str(added.id)][1]()
@@ -94,10 +99,10 @@ def test_the_page_and_the_reminders_follow_the_same_rule(tmp_path):
 # --- la expansión de lo programado ---
 
 
-def test_a_daily_fills_the_rest_of_the_month_from_now():
+def test_a_daily_fills_the_rest_of_the_range_from_now():
     daily = job(datetime(2026, 10, 5, 21, 0), DAILY)
 
-    found = occurrences([daily], 2026, 10, NOW)
+    found = october([daily])
 
     assert [item.at.day for item in found] == list(range(5, 32))
     assert all(item.at.hour == 21 for item in found)
@@ -106,7 +111,7 @@ def test_a_daily_fills_the_rest_of_the_month_from_now():
 def test_what_already_passed_is_not_expanded():
     daily = job(datetime(2026, 10, 6, 8, 0), DAILY)
 
-    found = occurrences([daily], 2026, 10, datetime(2026, 10, 20, 9, 0))
+    found = october([daily], datetime(2026, 10, 20, 9, 0))
 
     assert found[0].at == datetime(2026, 10, 21, 8, 0)
 
@@ -114,42 +119,34 @@ def test_what_already_passed_is_not_expanded():
 def test_a_weekly_only_lands_on_its_days():
     weekly = job(datetime(2026, 10, 9, 7, 0), WEEKLY, days="1,5,6,7")
 
-    found = occurrences([weekly], 2026, 10, NOW)
+    found = october([weekly])
 
     assert {item.at.isoweekday() for item in found} == {1, 5, 6, 7}
     assert found[0].at == datetime(2026, 10, 9, 7, 0)
 
 
-def test_a_month_far_ahead_is_expanded_too():
+def test_a_range_far_ahead_is_expanded_too():
     daily = job(datetime(2026, 10, 6, 8, 0), DAILY)
 
-    found = occurrences([daily], 2030, 2, NOW)
+    found = occurrences_between([daily], datetime(2030, 2, 1), datetime(2030, 3, 1), NOW)
 
     assert len(found) == 28
     assert found[0].at == datetime(2030, 2, 1, 8, 0)
 
 
-def test_a_one_shot_outside_the_month_is_left_out():
-    assert occurrences([job(datetime(2026, 11, 1, 8, 0))], 2026, 10, NOW) == []
-
-
-def test_a_past_month_has_nothing_scheduled():
-    daily = job(datetime(2026, 10, 6, 8, 0), DAILY)
-
-    assert occurrences([daily], 2026, 9, NOW) == []
+def test_a_one_shot_outside_the_range_is_left_out():
+    assert october([job(datetime(2026, 11, 1, 8, 0))]) == []
 
 
 def test_alarm_reminder_and_timer_are_told_apart():
     kinds = [
         item.kind
-        for item in occurrences(
+        for item in october(
             [
                 job(datetime(2026, 10, 6, 8, 0), DAILY, kind=ALARM, job_id=1),
                 job(datetime(2026, 10, 6, 9, 0), WEEKLY, days="2", kind=REMINDER, job_id=2),
                 job(datetime(2026, 10, 6, 10, 0), ONCE, kind=REMINDER, job_id=3),
             ],
-            2026,
-            10,
             datetime(2026, 10, 6, 7, 0),
         )
         if item.at.day == 6
@@ -158,74 +155,68 @@ def test_alarm_reminder_and_timer_are_told_apart():
     assert kinds == [ALARM_ITEM, REMINDER_ITEM, TIMER_ITEM]
 
 
-# --- la vista del mes ---
+def test_a_snoozed_reminder_reads_as_a_timer_until_it_sounds():
+    snoozed = job(datetime(2026, 10, 5, 12, 30), ONCE, kind=REMINDER)
+
+    [item] = october([snoozed])
+
+    assert item.kind == TIMER_ITEM
 
 
-def test_the_grid_starts_on_monday_and_has_whole_weeks():
-    view = month_view([], [], 2026, 10, NOW)
-
-    assert all(len(week) == 7 for week in view.weeks)
-    assert view.weeks[0][0].date == date(2026, 9, 28)
-    assert view.weeks[-1][-1].date == date(2026, 11, 1)
-    assert not view.weeks[0][0].in_month
-    assert view.weeks[0][3].date == date(2026, 10, 1)
-
-
-def test_the_view_knows_today_and_its_neighbours():
-    view = month_view([], [], 2026, 1, datetime(2026, 1, 15, 9, 0))
-
-    assert [day.date for week in view.weeks for day in week if day.today] == [date(2026, 1, 15)]
-    assert view.previous == (2025, 12)
-    assert view.following == (2026, 2)
-
-
-def test_today_mixes_what_sounded_with_what_is_coming_without_repeating():
-    rearmed = job(datetime(2026, 10, 6, 8, 0), DAILY)
-    later = job(datetime(2026, 10, 5, 18, 0), job_id=2, message="la pizza")
-    sounded = entry(datetime(2026, 10, 5, 8, 0), repeat=DAILY)
-
-    view = month_view([rearmed, later], [sounded], 2026, 10, NOW)
-
-    [today] = [day for day in view.days if day.date == date(2026, 10, 5)]
-    assert [(item.at.hour, item.past) for item in today.items] == [(8, True), (18, False)]
-
-
-def test_history_after_now_is_ignored():
-    view = month_view([], [entry(NOW + timedelta(hours=1))], 2026, 10, NOW)
-
-    assert view.days == []
-
-
-def test_a_past_month_shows_only_the_history():
+def test_a_range_expands_the_daily_across_two_months():
     daily = job(datetime(2026, 10, 6, 8, 0), DAILY)
-    old = entry(datetime(2026, 9, 10, 8, 0))
 
-    view = month_view([daily], [old], 2026, 9, NOW)
+    found = occurrences_between([daily], datetime(2026, 10, 26), datetime(2026, 11, 9), NOW)
 
-    assert [(day.date, len(day.items)) for day in view.days] == [(date(2026, 9, 10), 1)]
+    assert [item.at.date() for item in found] == [
+        date(2026, 10, 26) + timedelta(days=offset) for offset in range(14)
+    ]
+
+
+def test_a_range_starts_at_now_when_now_is_inside():
+    daily = job(datetime(2026, 10, 5, 8, 0), DAILY)
+
+    found = occurrences_between([daily], datetime(2026, 10, 5), datetime(2026, 10, 7), NOW)
+
+    assert [item.at for item in found] == [datetime(2026, 10, 6, 8, 0)]
+
+
+def test_a_range_end_is_left_out():
+    once = job(datetime(2026, 10, 7, 0, 0))
+
+    assert occurrences_between([once], datetime(2026, 10, 6), datetime(2026, 10, 7), NOW) == []
+
+
+def test_a_range_in_the_past_has_nothing_scheduled():
+    daily = job(datetime(2026, 10, 6, 8, 0), DAILY)
+
+    assert occurrences_between([daily], datetime(2026, 9, 1), datetime(2026, 10, 1), NOW) == []
+
+
+# --- lo que ya sonó ---
+
+
+def test_a_history_entry_becomes_a_past_item():
+    at = datetime(2026, 10, 2, 8, 0)
+
+    item = from_history(entry(at, kind=REMINDER, repeat=DAILY, done_by="Eze", closed=DONE))
+
+    assert item.past and item.done and item.done_by == "Eze" and item.kind == REMINDER_ITEM
 
 
 def test_the_history_keeps_how_each_one_ended():
     at = datetime(2026, 10, 2, 8, 0)
-    entries = [
-        entry(at, kind=REMINDER, repeat=DAILY, done_by="Eze", done_at=at, closed=DONE, nags=2),
-        entry(at, kind=REMINDER, repeat=DAILY, closed=SNOOZE, snoozed_at=at),
-        entry(at, closed=CANCEL),
-        entry(at, announced=False),
+    done, snoozed, cancelled, silent = [
+        from_history(e)
+        for e in (
+            entry(at, kind=REMINDER, repeat=DAILY, done_by="Eze", done_at=at, closed=DONE, nags=2),
+            entry(at, kind=REMINDER, repeat=DAILY, closed=SNOOZE, snoozed_at=at),
+            entry(at, closed=CANCEL),
+            entry(at, announced=False),
+        )
     ]
-
-    [day] = month_view([], entries, 2026, 10, NOW).days
-    done, snoozed, cancelled, silent = day.items
 
     assert done.done and done.done_by == "Eze" and done.nags == 2
     assert snoozed.snoozed and not snoozed.done
     assert cancelled.cancelled
     assert silent.silent and not done.silent
-
-
-def test_a_snoozed_reminder_reads_as_a_timer_until_it_sounds():
-    snoozed = job(datetime(2026, 10, 5, 12, 30), ONCE, kind=REMINDER)
-
-    [item] = occurrences([snoozed], 2026, 10, NOW)
-
-    assert item.kind == TIMER_ITEM

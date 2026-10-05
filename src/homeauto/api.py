@@ -1,7 +1,7 @@
 """Servidor HTTP de la LAN para que otros sistemas usen la casa.
 
-`POST /say` anuncia un texto y pide token compartido; `GET /health` y
-`GET /agenda?m=AAAA-MM` (la página del mes) no lo piden.
+`POST /say` anuncia un texto y pide token compartido; `GET /health` no lo pide.
+El resto de las rutas son de la pantalla de la casa (`web.WebApp`), abiertas a la LAN.
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from datetime import datetime
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Iterable, Protocol
-from urllib.parse import parse_qs, urlsplit
 
 from homeauto.polish import as_is
 from homeauto.voice.broadcast import HouseVoice
+from homeauto.web.app import Request, Response
 
 log = logging.getLogger(__name__)
 
@@ -33,8 +33,8 @@ class Unauthorized(Exception):
     """Token equivocado o ausente."""
 
 
-class Page(Protocol):
-    def html(self, month: str | None) -> str: ...
+class Web(Protocol):
+    def handle(self, request: Request) -> Response: ...
 
 
 class ApiService:
@@ -103,9 +103,9 @@ class ApiService:
 class _Handler(BaseHTTPRequestHandler):
     server_version = "domotica"
 
-    def __init__(self, *args, service: ApiService, page: Page | None = None, **kwargs):
+    def __init__(self, *args, service: ApiService, web: Web | None = None, **kwargs):
         self.service = service
-        self.page = page
+        self.web = web
         super().__init__(*args, **kwargs)
 
     def log_message(self, *args):
@@ -119,33 +119,28 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def _reply_html(self, status: int, html: str) -> None:
-        raw = html.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(raw)))
+    def _delegate(self, method: str) -> None:
+        """Pasa el pedido a la pantalla de la casa, o 404 si no está."""
+        if self.web is None:
+            self._reply(404, {"error": "no existe"})
+            return
+        response = self.web.handle(Request.from_target(method, self.path))
+        self.send_response(response.status)
+        for name, value in response.headers.items():
+            self.send_header(name, value)
+        self.send_header("Content-Length", str(len(response.body)))
         self.end_headers()
-        self.wfile.write(raw)
+        self.wfile.write(response.body)
 
     def do_GET(self):  # noqa: N802 - nombre impuesto por http.server
-        url = urlsplit(self.path)
-        path = url.path.rstrip("/")
-        if path == "/health":
+        if self.path.split("?", 1)[0].rstrip("/") == "/health":
             self._reply(200, self.service.health())
-        elif path == "/agenda" and self.page is not None:
-            # De solo lectura y para la LAN: no pide token.
-            month = (parse_qs(url.query).get("m") or [None])[0]
-            try:
-                self._reply_html(200, self.page.html(month))
-            except Exception:  # noqa: BLE001
-                log.exception("could not render the month page")
-                self._reply_html(500, "<p>No pude armar la agenda.</p>")
         else:
-            self._reply(404, {"error": "no existe"})
+            self._delegate("GET")
 
     def do_POST(self):  # noqa: N802
-        if self.path.rstrip("/") != "/say":
-            self._reply(404, {"error": "no existe"})
+        if self.path.split("?", 1)[0].rstrip("/") != "/say":
+            self._delegate("POST")
             return
 
         length = int(self.headers.get("Content-Length") or 0)
@@ -176,16 +171,16 @@ class _Handler(BaseHTTPRequestHandler):
 
 class ApiServer:
     def __init__(
-        self, service: ApiService, port: int, host: str = "0.0.0.0", page: Page | None = None
+        self, service: ApiService, port: int, host: str = "0.0.0.0", web: Web | None = None
     ):
         self.service = service
-        self.page = page
+        self.web = web
         self.port = port
         self.host = host
         self._server: ThreadingHTTPServer | None = None
 
     def start(self) -> None:
-        handler = partial(_Handler, service=self.service, page=self.page)
+        handler = partial(_Handler, service=self.service, web=self.web)
         self._server = ThreadingHTTPServer((self.host, self.port), handler)
         threading.Thread(target=self._server.serve_forever, daemon=True).start()
         log.info("API escuchando en %s:%s", self.host, self.actual_port)
