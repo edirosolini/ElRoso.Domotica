@@ -130,3 +130,37 @@ def test_days_column_is_added_to_an_older_database(tmp_path):
     job = store.add(OWNER, T1, "arriba", repeat="weekly", days=(6, 7))
 
     assert store.get(job.id).weekdays == [6, 7]
+
+
+# --- editar ----------------------------------------------------------------
+
+
+def test_update_rewrites_the_job_and_keeps_its_id_and_owner(store):
+    job = store.add(OWNER, T1, "arriba")
+
+    updated = store.update(
+        job.id, T2, "a desayunar", repeat="weekly", device="comedor", days=[5, 1], kind="reminder"
+    )
+
+    assert updated == Job(
+        id=job.id, chat_id=OWNER, when=T2, message="a desayunar", repeat="weekly",
+        device="comedor", days="1,5", kind="reminder",
+    )
+    assert store.get(job.id) == updated
+
+
+def test_update_of_a_missing_job_returns_none(store):
+    assert store.update(7, T1, "arriba") is None
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [{"repeat": "monthly"}, {"kind": "despertador"}, {"repeat": "weekly", "days": []}],
+)
+def test_update_validates_like_add(store, bad):
+    job = store.add(OWNER, T1, "arriba")
+
+    with pytest.raises(ValueError):
+        store.update(job.id, T2, "otra", **bad)
+
+    assert store.get(job.id) == job

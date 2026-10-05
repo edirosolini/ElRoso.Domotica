@@ -8,6 +8,7 @@ import pytest
 
 from homeauto.web.app import FULLCALENDAR, STATIC_DIR, Request, WebApp
 from homeauto.web.board import RangeError
+from homeauto.web.jobs import NotFound, ReadOnly, WebError
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
@@ -90,6 +91,44 @@ def test_the_kiosk_has_a_place_for_today(app):
     assert 'id="today"' in page
     assert "data.today" in script
     assert "innerHTML" not in script
+
+
+def test_the_agenda_has_a_form_to_write_and_the_script_uses_it(app):
+    page = get(app, "/agenda").body.decode("utf-8")
+    script = get(app, "/static/app.js").body.decode("utf-8")
+
+    for field in ("editor-type", "editor-message", "editor-when", "editor-repeat",
+                  "editor-device", "editor-author", "detail-edit", "detail-delete", "new-job"):
+        assert f'id="{field}"' in page, field
+    assert 'maxlength="500"' in page
+    assert "/api/jobs" in script and "/api/people" in script
+    assert '"Content-Type": "application/json"' in script
+    assert "innerHTML" not in script
+
+
+def test_the_month_shows_five_per_day_and_folds_what_already_passed_today(app):
+    script = get(app, "/static/app.js").body.decode("utf-8")
+
+    assert "dayMaxEvents: 5" in script
+    assert "isPastToday" in script
+    assert 'setProp("display"' in script
+    assert "dayCellDidMount" in script
+
+
+def test_the_kiosk_crosses_items_out(app):
+    script = get(app, "/static/kiosk.js").body.decode("utf-8")
+
+    assert "/api/lists/" in script and "/done" in script
+    assert '"Content-Type": "application/json"' in script
+    assert "innerHTML" not in script
+
+
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js"])
+def test_our_scripts_stay_in_old_javascript(app, name):
+    script = get(app, f"/static/{name}").body.decode("utf-8")
+
+    for modern in ("=>", "let ", "const ", "`", "async ", "?.", "??"):
+        assert modern not in script, modern
 
 
 @pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
@@ -290,3 +329,211 @@ def test_a_request_is_built_from_the_raw_target():
 
     assert request.path == "/api/events"
     assert request.query == {"start": "2026-10-05", "end": "2026-10-12"}
+
+
+def test_a_request_keeps_its_headers_without_case_and_its_body():
+    request = Request.from_target(
+        "POST", "/api/jobs", headers={"Content-Type": "application/json", "ORIGIN": "x"},
+        body=b"{}",
+    )
+
+    assert request.headers == {"content-type": "application/json", "origin": "x"}
+    assert request.body == b"{}"
+
+
+# --- escribir desde la pantalla ---
+
+
+class StubJobs:
+    """Doble de JobsService: anota lo pedido y contesta o falla como el de verdad."""
+
+    def __init__(self, fail=None):
+        self.asked = []
+        self.fail = fail
+
+    def _answer(self, call, value):
+        self.asked.append(call)
+        if self.fail:
+            raise self.fail
+        return value
+
+    def people(self):
+        return self._answer(("people",), {"writable": True,
+                                          "people": [{"chat_id": 42, "name": "Eze"}]})
+
+    def job(self, job_id):
+        return self._answer(("job", job_id), {"id": job_id, "message": "arriba"})
+
+    def create(self, payload):
+        return self._answer(("create", payload), {"id": 1, **payload})
+
+    def update(self, job_id, payload):
+        return self._answer(("update", job_id, payload), {"id": job_id, **payload})
+
+    def delete(self, job_id):
+        return self._answer(("delete", job_id), None)
+
+    def cross_out(self, list_name, item_id):
+        return self._answer(("cross_out", list_name, item_id), "leche")
+
+
+HOST = "192.168.68.10:8080"
+JSON_HEADERS = {"Content-Type": "application/json", "Host": HOST, "Origin": f"http://{HOST}"}
+
+
+@pytest.fixture
+def jobs():
+    return StubJobs()
+
+
+@pytest.fixture
+def writer(board, jobs):
+    return WebApp(board, jobs=jobs)
+
+
+def send(app, method, path, payload=None, headers=None):
+    body = b"" if payload is None else json.dumps(payload).encode("utf-8")
+    return app.handle(
+        Request.from_target(method, path, headers=JSON_HEADERS if headers is None else headers,
+                            body=body)
+    )
+
+
+def test_people_are_read_without_writing(writer, jobs):
+    response = get(writer, "/api/people")
+
+    assert response.status == 200
+    assert body_json(response)["people"] == [{"chat_id": 42, "name": "Eze"}]
+
+
+def test_a_job_is_read_for_the_form(writer, jobs):
+    response = get(writer, "/api/jobs/7")
+
+    assert response.status == 200
+    assert jobs.asked == [("job", 7)]
+
+
+def test_create_answers_201_with_the_job(writer, jobs):
+    response = send(writer, "POST", "/api/jobs", {"message": "arriba"})
+
+    assert response.status == 201
+    assert body_json(response)["id"] == 1
+    assert jobs.asked == [("create", {"message": "arriba"})]
+
+
+def test_update_and_delete_reach_the_job_by_id(writer, jobs):
+    assert send(writer, "PUT", "/api/jobs/7", {"message": "otra"}).status == 200
+    assert send(writer, "DELETE", "/api/jobs/7").status == 200
+
+    assert jobs.asked == [("update", 7, {"message": "otra"}), ("delete", 7)]
+
+
+def test_an_item_is_crossed_out(writer, jobs):
+    response = send(writer, "POST", "/api/lists/compras/17/done", {})
+
+    assert response.status == 200
+    assert body_json(response) == {"removed": "leche"}
+    assert jobs.asked == [("cross_out", "compras", 17)]
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [
+        (WebError("Falta el mensaje."), 400),
+        (NotFound("No existe el aviso #7."), 404),
+        (ReadOnly("La pantalla es de solo lectura."), 403),
+    ],
+)
+def test_the_service_refusals_keep_their_status_and_text(board, error, status):
+    app = WebApp(board, jobs=StubJobs(fail=error))
+
+    response = send(app, "POST", "/api/jobs", {"message": ""})
+
+    assert response.status == status
+    assert body_json(response)["error"] == str(error)
+
+
+def test_a_service_that_breaks_gets_500_without_the_details(board):
+    app = WebApp(board, jobs=StubJobs(fail=RuntimeError("/var/lib/domotica/jobs.db")))
+
+    response = send(app, "POST", "/api/jobs", {"message": "x"})
+
+    assert response.status == 500
+    assert b"jobs.db" not in response.body
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Host": HOST, "Origin": f"http://{HOST}"},
+        {"Content-Type": "text/plain", "Host": HOST, "Origin": f"http://{HOST}"},
+        {"Content-Type": "application/x-www-form-urlencoded", "Host": HOST},
+        {"Content-Type": "application/json", "Host": HOST, "Origin": "https://malo.example"},
+        {"Content-Type": "application/json", "Host": HOST, "Origin": "null"},
+        {"Content-Type": "application/json", "Host": HOST,
+         "Origin": "http://192.168.68.10:9999"},
+        {"Content-Type": "application/json", "Origin": f"http://{HOST}"},
+    ],
+)
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("POST", "/api/jobs"), ("PUT", "/api/jobs/7"), ("DELETE", "/api/jobs/7"),
+     ("POST", "/api/lists/compras/17/done")],
+)
+def test_a_write_from_another_site_or_not_json_is_refused(writer, jobs, headers, method, path):
+    response = send(writer, method, path, {"message": "arriba"}, headers=headers)
+
+    assert response.status in (403, 415)
+    assert jobs.asked == []
+
+
+def test_a_write_without_origin_from_the_lan_is_accepted(writer, jobs):
+    response = send(writer, "POST", "/api/jobs", {"message": "arriba"},
+                    headers={"Content-Type": "application/json; charset=utf-8", "Host": HOST})
+
+    assert response.status == 201
+
+
+@pytest.mark.parametrize("body", [b"", b"no es json", b"[1, 2]", b"\xff"])
+def test_a_body_that_is_not_a_json_object_gets_400(writer, jobs, body):
+    response = writer.handle(Request.from_target("POST", "/api/jobs", headers=JSON_HEADERS,
+                                                 body=body))
+
+    assert response.status == 400
+    assert jobs.asked == []
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "allow"),
+    [
+        ("PATCH", "/api/jobs/7", "GET, PUT, DELETE"),
+        ("GET", "/api/jobs", "POST"),
+        ("POST", "/api/people", "GET"),
+        ("GET", "/api/lists/compras/17/done", "POST"),
+    ],
+)
+def test_the_wrong_method_gets_405(writer, method, path, allow):
+    response = send(writer, method, path, {})
+
+    assert response.status == 405
+    assert response.headers["Allow"] == allow
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/jobs/abc", "/api/jobs/7/8", "/api/lists/compras/x/done", "/api/lists/compras"]
+)
+def test_a_malformed_id_gets_404(writer, jobs, path):
+    assert send(writer, "POST", path, {}).status in (404, 405)
+    assert jobs.asked == []
+
+
+def test_without_the_service_the_screen_cannot_write(app):
+    assert send(app, "POST", "/api/jobs", {"message": "x"}).status == 405
+    assert get(app, "/api/people").status == 200
+    assert body_json(get(app, "/api/people")) == {"writable": False, "people": [], "devices": []}
+
+
+def test_writes_carry_no_cors_headers(writer):
+    response = send(writer, "POST", "/api/jobs", {"message": "arriba"})
+
+    assert not any(name.lower().startswith("access-control") for name in response.headers)

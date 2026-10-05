@@ -894,7 +894,7 @@ def test_the_screen_reads_the_one_database(wired, tmp_path, monkeypatch):
 
     assert board.store.db_path == tmp_path / "jobs.db"
     assert [event["title"] for event in events["events"]] == ["⏰ arriba"]
-    assert screen["lists"]["compras"] == ["leche"]
+    assert [item["text"] for item in screen["lists"]["compras"]] == ["leche"]
     assert screen["weather"] is None
     assert isinstance(screen["quiet"], bool)
     assert board.quiet.until() is None
@@ -905,6 +905,74 @@ def test_the_screen_shows_the_configured_calendars(wired, tmp_path, monkeypatch)
 
     assert web.board.aliases == ["personal"]
     assert web.board.calendar.timezone == main.local_timezone()
+
+
+HOUSE = "ALLOWED_CHAT_IDS=42,77\n"
+WRITE = {"Content-Type": "application/json", "Host": "casa:8080", "Origin": "http://casa:8080"}
+
+
+def test_the_screen_writes_to_the_one_database_and_tells_every_chat(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+    jobs = web.jobs
+    pending = []
+    jobs.spawn = pending.append
+
+    body = json.dumps({"type": "alarm", "message": "arriba", "when": "2099-01-02T08:00",
+                       "repeat": "once", "days": [], "device": "parlante", "author": 77})
+    response = web.handle(Request.from_target("POST", "/api/jobs", headers=WRITE,
+                                              body=body.encode("utf-8")))
+
+    assert response.status == 201
+    created = json.loads(response.body)
+    job = jobs.store.get(created["id"])
+    assert jobs.store.db_path == tmp_path / "jobs.db"
+    assert (job.chat_id, job.message, job.device) == (77, "arriba", "parlante")
+    assert web.board.store.get(created["id"]) == job
+    assert isinstance(jobs.notify, main.ChatNotifier)
+    assert jobs.notify is reminders["notify"]
+    assert sorted(jobs.chat_ids) == [42, 77]
+    assert len(pending) == 1
+
+
+def test_the_screen_knows_the_people_of_the_house(wired, tmp_path, monkeypatch):
+    registered = {}
+    original = main.register
+
+    def spy(app, commands, strangers=None, people=None):
+        registered["people"] = people
+        return original(app, commands, strangers, people)
+
+    monkeypatch.setattr(main, "register", spy)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+
+    registered["people"].meet(42, "Eze")
+    registered["people"].meet(99, "Un desconocido")
+    answer = json.loads(web.handle(Request(method="GET", path="/api/people")).body)
+
+    assert answer == {"writable": True, "people": [
+        {"chat_id": 42, "name": "Eze"}, {"chat_id": 77, "name": "Chat 77"},
+    ], "devices": ["parlante"]}
+
+
+def test_the_screen_crosses_out_from_the_one_database(wired, tmp_path, monkeypatch):
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+    web.board.lists.add("compras", ["leche"])
+    [(item_id, _)] = web.board.lists.entries("compras")
+
+    response = web.handle(Request.from_target(
+        "POST", f"/api/lists/compras/{item_id}/done", headers=WRITE, body=b"{}"))
+
+    assert response.status == 200
+    assert web.board.lists.items("compras") == []
+
+
+def test_without_allowed_chats_the_screen_does_not_write(wired, tmp_path, monkeypatch):
+    web = _wired_web(monkeypatch, tmp_path)
+
+    response = web.handle(Request.from_target("POST", "/api/jobs", headers=WRITE, body=b"{}"))
+
+    assert response.status == 403
 
 
 def test_without_a_token_there_is_no_screen(wired, tmp_path, monkeypatch):

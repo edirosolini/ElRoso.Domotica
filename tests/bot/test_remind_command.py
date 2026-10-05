@@ -179,3 +179,54 @@ def test_a_stranger_cannot_press_done(cmd):
 
     assert "No estás en la lista" in reply
     assert cmd.told == []
+
+
+# --- «Borrar», el botón de los avisos de la pantalla ------------------------
+
+
+def test_delete_button_works_from_any_chat_and_tells_the_rest(cmd):
+    job = cmd.reminders.add(OWNER, NOW + timedelta(hours=1), "arriba")
+
+    reply = cmd.press(OTHER, f"borrar {job.id}", who="Ana")
+
+    assert reply == f"🗑 Borrado #{job.id}: «arriba»"
+    assert cmd.reminders.store.get(job.id) is None
+    assert cmd.told == [(OWNER, f"🗑 Ana borró #{job.id}: «arriba»")]
+
+
+def test_delete_button_twice_says_it_was_gone(cmd):
+    job = cmd.reminders.add(OWNER, NOW + timedelta(hours=1), "arriba")
+    cmd.press(OTHER, f"borrar {job.id}", who="Ana")
+
+    reply = cmd.press(OWNER, f"borrar {job.id}", who="Eze")
+
+    assert "ya no" in reply.lower()
+    assert len(cmd.told) == 1
+
+
+def test_delete_without_a_name_still_works(cmd):
+    job = cmd.reminders.add(OWNER, NOW + timedelta(hours=1), "arriba")
+
+    cmd.press(OWNER, f"borrar {job.id}")
+
+    assert cmd.told == [(OTHER, f"🗑 Alguien borró #{job.id}: «arriba»")]
+
+
+def test_delete_is_a_button_and_not_something_to_route(cmd):
+    assert "borrar" not in cmd._dispatch()
+
+
+def test_a_stranger_cannot_press_delete(cmd):
+    job = cmd.reminders.add(OWNER, NOW + timedelta(hours=1), "arriba")
+
+    reply = cmd.press(7, f"borrar {job.id}", who="Nadie")
+
+    assert "No estás en la lista" in reply
+    assert cmd.reminders.store.get(job.id) is not None
+
+
+def test_typed_cancel_is_still_only_the_owners(cmd):
+    job = cmd.reminders.add(OWNER, NOW + timedelta(hours=1), "arriba")
+
+    assert "No encontré" in cmd.cancel(OTHER, str(job.id))
+    assert cmd.reminders.store.get(job.id) is not None

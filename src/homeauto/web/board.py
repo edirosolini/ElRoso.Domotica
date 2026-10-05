@@ -72,7 +72,13 @@ def _house_event(item: Item) -> dict:
         "editable": False,
         "color": PAST_COLOR if item.past else KIND_COLORS[item.kind],
         "classNames": ["casa", item.kind] + (["past"] if item.past else []),
-        "extendedProps": {"source": HOUSE, "kind": item.kind, "past": item.past, "marks": found},
+        "extendedProps": {
+            "source": HOUSE,
+            "kind": item.kind,
+            "past": item.past,
+            "marks": found,
+            "job": item.job_id,
+        },
     }
 
 
@@ -211,8 +217,17 @@ class Board:
             else now.isoformat(),
             "quiet": bool(self.quiet.is_quiet(now)) if self.quiet is not None else False,
             "weather": weather,
-            "lists": {name: self.lists.items(name) for name in LISTS} if self.lists else {},
+            "lists": self._lists(),
             "problems": problems,
+        }
+
+    def _lists(self) -> dict:
+        """Cada lista con el id de sus ítems, para poder tacharlos."""
+        if not self.lists:
+            return {}
+        return {
+            name: [{"id": item_id, "text": text} for item_id, text in self.lists.entries(name)]
+            for name in LISTS
         }
 
     def _today(self, now: datetime) -> tuple[list[dict], list[str]]:

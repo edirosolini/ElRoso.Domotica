@@ -12,6 +12,7 @@
 <body class="agenda">
 <header class="bar">
   <h1>Agenda de la casa</h1>
+  <button type="button" id="new-job" class="primary" hidden>Nuevo aviso</button>
   <a href="/pantalla">Pantalla</a>
 </header>
 <div id="problems" class="problems" hidden></div>
@@ -23,8 +24,60 @@
     <p id="detail-when"></p>
     <p id="detail-where"></p>
     <ul id="detail-marks"></ul>
-    <button type="button" id="detail-close">Cerrar</button>
+    <div class="actions">
+      <button type="button" id="detail-edit" hidden>Editar</button>
+      <button type="button" id="detail-delete" class="danger" hidden>Borrar</button>
+      <button type="button" id="detail-close">Cerrar</button>
+    </div>
   </div>
+</div>
+<div id="editor" class="detail" hidden>
+  <form id="editor-form" class="detail-card" novalidate>
+    <h2 id="editor-title">Nuevo aviso</h2>
+    <label>Tipo
+      <select id="editor-type">
+        <option value="alarm">Alarma</option>
+        <option value="reminder">Recordatorio</option>
+        <option value="timer">Timer</option>
+      </select>
+    </label>
+    <label>Mensaje
+      <textarea id="editor-message" maxlength="500" rows="2" required></textarea>
+    </label>
+    <label>Fecha y hora
+      <input type="datetime-local" id="editor-when" required>
+    </label>
+    <label>Repetición
+      <select id="editor-repeat">
+        <option value="once">Una sola vez</option>
+        <option value="daily">Todos los días</option>
+        <option value="weekly">Algunos días</option>
+      </select>
+    </label>
+    <fieldset id="editor-days" class="days" hidden>
+      <legend>Días</legend>
+      <label><input type="checkbox" value="1">Lun</label>
+      <label><input type="checkbox" value="2">Mar</label>
+      <label><input type="checkbox" value="3">Mié</label>
+      <label><input type="checkbox" value="4">Jue</label>
+      <label><input type="checkbox" value="5">Vie</label>
+      <label><input type="checkbox" value="6">Sáb</label>
+      <label><input type="checkbox" value="7">Dom</label>
+    </fieldset>
+    <label>Equipo
+      <select id="editor-device">
+        <option value="">El de siempre</option>
+      </select>
+    </label>
+    <label id="editor-author-label">A nombre de
+      <select id="editor-author"></select>
+    </label>
+    <p id="editor-error" class="problems" hidden></p>
+    <div class="actions">
+      <button type="submit" id="editor-save" class="primary">Guardar</button>
+      <button type="button" id="editor-cancel">Cancelar</button>
+    </div>
+  </form>
 </div>
 </body>
 </html>

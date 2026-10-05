@@ -82,6 +82,19 @@ def next_run(job: Job, after: datetime) -> datetime | None:
     return None
 
 
+def _validate(repeat: str, kind: str, days: Iterable[int] | None) -> str | None:
+    """Chequea repetición, tipo y días; devuelve los días como se guardan."""
+    if repeat not in REPEATS:
+        raise ValueError(f"repeat inválido: {repeat}")
+    if kind not in KINDS:
+        raise ValueError(f"kind inválido: {kind}")
+    stored_days = ",".join(str(day) for day in sorted(days)) if days else None
+    # Un job semanal sin días no encontraría nunca un día para disparar.
+    if repeat == WEEKLY and not stored_days:
+        raise ValueError("una alarma semanal necesita días")
+    return stored_days
+
+
 def _row_to_job(row: sqlite3.Row) -> Job:
     return Job(
         id=row["id"],
@@ -129,14 +142,7 @@ class Store:
         days: Iterable[int] | None = None,
         kind: str = ALARM,
     ) -> Job:
-        if repeat not in REPEATS:
-            raise ValueError(f"repeat inválido: {repeat}")
-        if kind not in KINDS:
-            raise ValueError(f"kind inválido: {kind}")
-        stored_days = ",".join(str(day) for day in sorted(days)) if days else None
-        # Un job semanal sin días no encontraría nunca un día para disparar.
-        if repeat == WEEKLY and not stored_days:
-            raise ValueError("una alarma semanal necesita días")
+        stored_days = _validate(repeat, kind, days)
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days, kind)"
@@ -172,6 +178,26 @@ class Store:
     def remove(self, job_id: int) -> bool:
         with self._connect() as conn:
             return conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,)).rowcount > 0
+
+    def update(
+        self,
+        job_id: int,
+        when: datetime,
+        message: str,
+        repeat: str = ONCE,
+        device: str | None = None,
+        days: Iterable[int] | None = None,
+        kind: str = ALARM,
+    ) -> Job | None:
+        """Reescribe un job conservando su id y su dueño; None si ya no existe."""
+        stored_days = _validate(repeat, kind, days)
+        with self._connect() as conn:
+            changed = conn.execute(
+                "UPDATE jobs SET fires_at = ?, message = ?, repeat = ?, device = ?, days = ?,"
+                " kind = ? WHERE id = ?",
+                (when.isoformat(), message, repeat, device, stored_days, kind, job_id),
+            ).rowcount
+        return self.get(job_id) if changed else None
 
     def reschedule(self, job_id: int, when: datetime) -> None:
         with self._connect() as conn:

@@ -340,6 +340,96 @@ async def test_a_knock_that_blows_up_does_not_cost_the_answer():
     assert update.message.edits[0][0] == "#5 · #6"
 
 
+class Met:
+    def __init__(self, boom=None):
+        self.met = []
+        self.threads = []
+        self.boom = boom
+
+    def meet(self, chat_id, name):
+        self.met.append((chat_id, name))
+        self.threads.append(threading.current_thread().name)
+        if self.boom:
+            raise self.boom
+
+
+@pytest.mark.asyncio
+async def test_every_message_remembers_the_name_of_its_chat_off_the_loop():
+    app = MessageRecorder()
+    people = Met()
+    main.register(app, OfferingCommands(), people=people)
+    update = CommandUpdate()
+    update.effective_user = User()
+
+    await app.callbacks[0](update, None)
+
+    assert people.met == [(42, "Diego Pérez")]
+    assert people.threads[0] != threading.current_thread().name
+
+
+class OnlyHandle:
+    first_name = None
+    last_name = None
+    username = "diego"
+
+
+class Nameless:
+    first_name = None
+    last_name = None
+    username = None
+
+
+@pytest.mark.asyncio
+async def test_without_a_visible_name_the_handle_is_remembered():
+    app = MessageRecorder()
+    people = Met()
+    main.register(app, OfferingCommands(), people=people)
+    update = CommandUpdate()
+    update.effective_user = OnlyHandle()
+
+    await app.callbacks[0](update, None)
+
+    assert people.met == [(42, "@diego")]
+
+
+@pytest.mark.asyncio
+async def test_without_any_name_nothing_is_remembered():
+    app = MessageRecorder()
+    people = Met()
+    main.register(app, OfferingCommands(), people=people)
+    update = CommandUpdate()
+    update.effective_user = Nameless()
+
+    await app.callbacks[0](update, None)
+
+    assert people.met == []
+
+
+@pytest.mark.asyncio
+async def test_a_message_without_a_user_does_not_store_a_made_up_name():
+    app = MessageRecorder()
+    people = Met()
+    main.register(app, OfferingCommands(), people=people)
+    update = CommandUpdate()
+    update.effective_user = None
+
+    await app.callbacks[0](update, None)
+
+    assert people.met == []
+
+
+@pytest.mark.asyncio
+async def test_remembering_a_name_that_blows_up_does_not_cost_the_answer():
+    app = MessageRecorder()
+    main.register(app, OfferingCommands(), people=Met(boom=RuntimeError("sqlite")))
+    update = CommandUpdate()
+    update.effective_user = User()
+
+    await app.callbacks[0](update, None)
+
+    assert update.message.edits[0][0] == "#5 · #6"
+
+
 def test_who_falls_back_to_the_id_when_there_is_no_name():
     update = CommandUpdate()
     update.effective_user = None

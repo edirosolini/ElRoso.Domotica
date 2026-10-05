@@ -29,12 +29,12 @@ from homeauto.correct import as_written
 from homeauto.polish import as_is
 from homeauto.route import Decision, RouteError
 from homeauto.translate import TranslateError
+from homeauto.schedule.spec import SpecError, resolve as resolve_when
 from homeauto.schedule.store import ALARM, DAILY, ONCE, REMINDER, WEEKLY
 from homeauto.quiet import Hush
 from homeauto.timespec import (
     TimeSpecError,
     format_weekdays,
-    next_weekday,
     parse_duration,
     parse_schedule,
     parse_weekdays,
@@ -709,8 +709,8 @@ class Commands:
             return self.free_text(chat_id, data[len(ANSWER_MARK):].strip())
 
         command, _, argument = data.strip().partition(" ")
-        # «hecho» solo existe como botón: el router nunca lo nombra.
-        run = {**self._dispatch(), "hecho": self.done}.get(command)
+        # «hecho» y «borrar» solo existen como botón: el router nunca los nombra.
+        run = {**self._dispatch(), "hecho": self.done, "borrar": self.discard}.get(command)
         if run is None:
             log.warning("botón desconocido: %r", data)
             return "No sé qué hacer con ese botón."
@@ -735,6 +735,22 @@ class Commands:
         if message is None:
             return "Eso ya estaba marcado como hecho."
         return f"✅ Hecho: «{message}»"
+
+    def discard(self, chat_id: int, text: str) -> str:
+        """Borra un aviso de cualquiera, desde el botón de la pantalla, y avisa a los demás."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        try:
+            job_id = int(text.strip().lstrip("#"))
+        except ValueError:
+            return "No sé cuál borrar."
+
+        job = self.reminders.discard(chat_id, job_id, _WHO.get() or "Alguien")
+        if job is None:
+            return f"El #{job_id} ya no está programado."
+        return f"🗑 Borrado #{job_id}: «{job.message}»"
 
     def heard(self, chat_id: int, audio: bytes, mime: str = "audio/ogg") -> Reply:
         """Una nota de voz: se transcribe, se ejecuta y se contesta con otra."""
@@ -1063,9 +1079,10 @@ class Commands:
         except TimeSpecError as exc:
             return str(exc)
 
-        if days:
-            # La hora ya rodó a su próxima ocurrencia; ahora se elige el día.
-            when = next_weekday(when, days)
+        try:
+            when = resolve_when(repeat, when, now, days)
+        except SpecError as exc:
+            return str(exc)
 
         job = self.reminders.add(
             chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days, kind=kind

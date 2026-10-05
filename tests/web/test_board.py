@@ -140,6 +140,17 @@ def test_a_daily_reminder_fills_the_range_from_now(parts):
     assert all(event["editable"] is False for event in found)
 
 
+def test_what_is_still_to_ring_carries_its_job_for_editing(parts):
+    job = parts["store"].add(42, datetime(2026, 10, 6, 7, 0), "arriba")
+    parts["history"].record(9, 42, "alarm", "once", "ya sonó", datetime(2026, 10, 5, 8, 0))
+
+    found = board(parts).events(*WEEK)["events"]
+
+    by_start = {event["start"]: event["extendedProps"] for event in found}
+    assert by_start["2026-10-06T07:00:00"]["job"] == job.id
+    assert by_start["2026-10-05T08:00:00"]["job"] is None
+
+
 def test_what_sounded_carries_how_it_ended(parts):
     history = parts["history"]
     history.record(7, 42, REMINDER, DAILY, "el colegio", datetime(2026, 10, 2, 7, 0))
@@ -349,9 +360,22 @@ def test_the_screen_has_the_weather_the_lists_and_the_hour(parts):
     assert answer["weather"]["minimum"] == 13
     assert answer["weather"]["rain_chance"] == 10
     assert answer["weather"]["sky"]
-    assert answer["lists"] == {"compras": ["leche", "pan"], "pendientes": ["llamar al plomero"]}
+    assert {name: [entry["text"] for entry in entries]
+            for name, entries in answer["lists"].items()} == {
+        "compras": ["leche", "pan"], "pendientes": ["llamar al plomero"]
+    }
     assert answer["quiet"] is False
     assert answer["problems"] == []
+
+
+def test_each_list_item_carries_its_id_for_crossing_it_out(parts):
+    parts["lists"].add("compras", ["leche"])
+    [(item_id, _)] = parts["lists"].entries("compras")
+
+    answer = board(parts).screen()
+
+    assert answer["lists"]["compras"] == [{"id": item_id, "text": "leche"}]
+    assert answer["lists"]["pendientes"] == []
 
 
 def test_the_weather_is_cached_for_fifteen_minutes(parts):
