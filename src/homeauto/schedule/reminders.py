@@ -13,8 +13,7 @@ from typing import Callable, Iterable, Protocol
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import CANCEL, SNOOZE, HistoryStore
-from homeauto.schedule.store import ALARM, DAILY, ONCE, WEEKLY, Job, Store
-from homeauto.timespec import next_weekday
+from homeauto.schedule.store import ALARM, ONCE, Job, Store, next_run
 
 log = logging.getLogger(__name__)
 
@@ -228,23 +227,13 @@ class Reminders:
         else:
             self._write_history(lambda history: history.mark_announced(job.id))
 
-        next_time = self._next_run(job)
+        next_time = next_run(job, job.when)
         if next_time is None:
             self.timer.unschedule(str(job_id))
             self.store.remove(job_id)
         else:
             self.store.reschedule(job_id, next_time)
             self._arm(self.store.get(job_id))
-
-    @staticmethod
-    def _next_run(job: Job) -> datetime | None:
-        """Cuándo vuelve a disparar un job repetido; None si era de una sola vez."""
-        if job.repeat == DAILY:
-            return job.when + timedelta(days=1)
-        if job.repeat == WEEKLY:
-            # Se busca desde el día siguiente, o volvería a caer en el mismo día.
-            return next_weekday(job.when + timedelta(days=1), job.weekdays)
-        return None
 
 
 def _nag_key(job_id: int) -> str:

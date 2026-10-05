@@ -857,3 +857,30 @@ def test_the_summaries_hand_over_the_copy_for_the_others(schedule, wired, tmp_pa
     handed["announce"]("dicho", "completo", "sin servicios")
 
     assert announced == [("dicho", "completo", "sin servicios")]
+
+
+def test_the_api_serves_a_usable_month_page(wired, tmp_path, monkeypatch):
+    """La página llega al servidor de la API y se puede pedir de verdad."""
+    seen = {}
+    original = main.ApiServer.__init__
+
+    def spy(self, *args, **kwargs):
+        seen["page"] = kwargs.get("page")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.ApiServer, "__init__", spy)
+    run_main(monkeypatch, config_file(tmp_path, "API_TOKEN=un-token-suficientemente-largo\n"))
+
+    page = seen["page"]
+    assert page is not None
+    assert "<table>" in page.html(None)
+    assert "<table>" in page.html("2026-02")
+
+
+def test_without_a_token_there_is_no_month_page(wired, tmp_path, monkeypatch):
+    built = []
+    monkeypatch.setattr(main.ApiServer, "__init__", lambda self, *a, **k: built.append(k))
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert built == []

@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable
+
+from homeauto.timespec import next_weekday
 
 ONCE = "once"
 DAILY = "daily"
@@ -68,6 +70,16 @@ class Job:
     def devices(self) -> list[str]:
         """La columna guarda una lista separada por comas; lo común es un solo equipo."""
         return [part.strip() for part in (self.device or "").split(",") if part.strip()]
+
+
+def next_run(job: Job, after: datetime) -> datetime | None:
+    """La ocurrencia del job que sigue a la de `after`; None si no repite."""
+    if job.repeat == DAILY:
+        return after + timedelta(days=1)
+    if job.repeat == WEEKLY:
+        # Busca desde el día siguiente al de `after`.
+        return next_weekday(after + timedelta(days=1), job.weekdays)
+    return None
 
 
 def _row_to_job(row: sqlite3.Row) -> Job:

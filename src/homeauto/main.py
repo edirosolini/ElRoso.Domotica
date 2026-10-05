@@ -32,6 +32,7 @@ from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands, with_actions
 from homeauto.bible import VerseOfTheDay
+from homeauto.calendar_page import CalendarPage
 from homeauto.briefing import Briefing
 from homeauto.closing import Closing
 from homeauto.economy import EconomyClient
@@ -719,8 +720,10 @@ def main() -> None:
     # El silencio que todos consultan: las horas fijas más lo que haya pedido
     # /silencio. Se arma antes que sus usuarios, como el resto del archivo.
     hush = Hush(hours=config.quiet_hours, store=HushStore(db_path))
+    store = Store(db_path)
+    history = HistoryStore(db_path)
     reminders = Reminders(
-        store=Store(db_path),
+        store=store,
         timer=JobQueueTimer(app.job_queue),
         announce=Announcer(
             speakers=speakers,
@@ -734,7 +737,7 @@ def main() -> None:
         ),
         fired=FiredStore(db_path),
         awaiting=AwaitingStore(db_path),
-        history=HistoryStore(db_path),
+        history=history,
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
         nag_actions=DONE_ACTIONS,
@@ -859,6 +862,7 @@ def main() -> None:
                 polish=polish,
             ),
             port=config.api_port,
+            page=CalendarPage(store=store, history=history, clock=datetime.now),
         )
     else:
         log.info("API deshabilitada: no hay API_TOKEN en la configuración")
