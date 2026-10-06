@@ -1646,7 +1646,22 @@ que podarlo entero. Quedan acá para que no se pierdan de nuevo.
   librería, límite de una API, orden obligatorio—. Una línea, seca.
 - Docstrings: qué hace, qué recibe, qué devuelve. Sin narrativa.
 
+## Agentes
+
+`.claude/agents/` tiene el circuito de un cambio, y **se versiona**: un agente que cambia
+deja historial. Cada uno hace una sola cosa y le pasa la posta al siguiente:
+
+```
+planner → (el dueño aprueba) → executor → comments → docs → tester → pr
+        → (el dueño mergea) → memory → (el dueño despliega con !) → memory
+```
+
+- **Ninguno mergea ni despliega.** El merge y `deploy/deploy.sh` son del dueño.
+- 🔴 **Las reglas siguen siendo este archivo.** Un agente las aplica, no las redefine: si un
+  agente y este `CLAUDE.md` dicen distinto, se corrige el agente.
+- Un cambio en los agentes va en su propio PR, como una corrección de docs.
+
 ## Memoria local
 
-`.claude/memory/` (no se commitea, está en `.gitignore`). El backlog es
-`.claude/memory/backlog.md` — este proyecto **no** tiene board externo.
+`.claude/memory/` (no se commitea, está en `.gitignore`, igual que `.claude/worktrees/`). El
+backlog es `.claude/memory/backlog.md` — este proyecto **no** tiene board externo.
