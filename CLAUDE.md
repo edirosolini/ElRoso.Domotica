@@ -118,7 +118,7 @@ un despliegue nuevo no necesita migración.
 
 ## Stack
 
-- **Python 3.13** en el contenedor, 3.12 en la notebook. Nada específico de versión.
+- **Python 3.13** en el contenedor, 3.14 en la notebook. Nada específico de versión.
 - **piper-tts** — síntesis de voz **offline**, voz `es_AR-daniela-high`. No sale a internet.
 - **Open-Meteo** para el clima: sin cuenta, sin API key.
 - **icalendar** y **recurring-ical-events** para leer Google Calendar.
