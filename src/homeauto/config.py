@@ -7,6 +7,7 @@ import uuid
 from datetime import time as clock_time
 
 from homeauto.quiet import QuietHours
+from homeauto.timespec import parse_weekdays
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,6 +51,7 @@ DEFAULT_API_PORT = 8099
 DEFAULT_BRIEFING_AT = "08:00"
 # Antes del horario de descanso, o el cierre se escribiría en vez de decirse.
 DEFAULT_CLOSING_AT = "22:00"
+DEFAULT_WEEKLY_AT = "dom 19:00"
 DEFAULT_EVENT_LEAD = 10
 CALENDAR_PREFIX = "CALENDAR_URL_"
 
@@ -186,6 +188,30 @@ def _parse_daily_hour(pairs: dict[str, str], key: str, default: str) -> clock_ti
         return clock_time(int(hour), int(minute or 0))
     except ValueError as exc:
         raise ConfigError(f"{key} no es una hora válida: {raw}") from exc
+
+
+@dataclass(frozen=True)
+class WeeklyAt:
+    """Los días ISO (1 = lunes) y la hora del resumen semanal."""
+
+    days: tuple[int, ...]
+    at: clock_time
+
+
+def _parse_weekly(pairs: dict[str, str]) -> WeeklyAt | None:
+    """Los días y la hora del resumen semanal, o None si está apagado."""
+    raw = pairs.get("WEEKLY_AT", "").strip() or DEFAULT_WEEKLY_AT
+    if raw.lower() in ("off", "no", "0"):
+        return None
+    head, _, clock = raw.rpartition(" ")
+    days = parse_weekdays(head)
+    try:
+        if not days:
+            raise ValueError(raw)
+        hour, _, minute = clock.partition(":")
+        return WeeklyAt(days=days, at=clock_time(int(hour), int(minute or 0)))
+    except ValueError as exc:
+        raise ConfigError(f"WEEKLY_AT no es un día y una hora válidos: {raw}") from exc
 
 
 def _parse_lead(pairs: dict[str, str]) -> int:
@@ -365,6 +391,7 @@ class Config:
     calendars: dict[str, str] = field(default_factory=dict)
     briefing_at: clock_time | None = None
     closing_at: clock_time | None = None
+    weekly_at: WeeklyAt | None = None
     event_lead_minutes: int = DEFAULT_EVENT_LEAD
     checks_file: Path = Path(DEFAULT_CHECKS_FILE)
     check_interval: int = DEFAULT_CHECK_INTERVAL
@@ -427,6 +454,7 @@ class Config:
             calendars=_parse_calendars(pairs),
             briefing_at=_parse_daily_hour(pairs, "BRIEFING_AT", DEFAULT_BRIEFING_AT),
             closing_at=_parse_daily_hour(pairs, "CLOSING_AT", DEFAULT_CLOSING_AT),
+            weekly_at=_parse_weekly(pairs),
             event_lead_minutes=_parse_lead(pairs),
             checks_file=Path(pairs.get("CHECKS_FILE", "").strip() or DEFAULT_CHECKS_FILE),
             check_interval=_parse_interval(pairs),

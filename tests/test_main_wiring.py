@@ -19,12 +19,16 @@ class FakeJobQueue:
     def __init__(self):
         self.repeating = []
         self.daily = []
+        self.days = {}
+        self.callbacks = {}
 
     def run_repeating(self, callback, interval, first=None, name=None):
         self.repeating.append(name)
 
-    def run_daily(self, callback, time, name=None):
+    def run_daily(self, callback, time, days=(0, 1, 2, 3, 4, 5, 6), name=None):
         self.daily.append(name)
+        self.days[name] = days
+        self.callbacks[name] = callback
 
     def run_once(self, callback, when, name=None):
         pass
@@ -1059,3 +1063,52 @@ def test_without_a_token_there_is_no_screen(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 
     assert built == []
+
+
+# --- el resumen semanal ------------------------------------------------------
+
+
+def test_the_weekly_summary_goes_out_on_sunday_by_default(wired, tmp_path, monkeypatch):
+    """PTB cuenta el domingo como cero."""
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert wired.job_queue.days["weekly"] == (0,)
+
+
+def test_the_weekly_summary_days_are_translated_for_the_job_queue(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "WEEKLY_AT=lun,sáb,dom 9:00\n"))
+
+    assert sorted(wired.job_queue.days["weekly"]) == [0, 1, 6]
+
+
+def test_the_weekly_summary_can_be_turned_off(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "WEEKLY_AT=off\n"))
+
+    assert "weekly" not in wired.job_queue.daily
+
+
+def test_the_weekly_summary_reads_the_history_and_writes_to_everyone(
+    wired, tmp_path, monkeypatch
+):
+    seen = _spy_init(monkeypatch, main.Weekly)
+    monkeypatch.setattr(main, "ChatNotifier", _FakeNotifier)
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\n"))
+    history = seen["history"]
+    assert history.db_path == tmp_path / "jobs.db"
+    fired = main.datetime.now() - timedelta(days=1)
+    history.record(5, 42, "reminder", "daily", "la pastilla", fired)
+    history.mark_done(5, fired, "Eze")
+
+    main.asyncio.run(wired.job_queue.callbacks["weekly"](None))
+
+    assert [chat for chat, _, _ in _FakeNotifier.sent] == [42, 77]
+    assert all("la pastilla: 1 de 1" in text for _, text, _ in _FakeNotifier.sent)
+
+
+def test_an_empty_week_writes_nothing(wired, tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "ChatNotifier", _FakeNotifier)
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\n"))
+
+    main.asyncio.run(wired.job_queue.callbacks["weekly"](None))
+
+    assert _FakeNotifier.sent == []
