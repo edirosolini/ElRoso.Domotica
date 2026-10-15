@@ -28,6 +28,7 @@ Domotica/
 │   ├── economy.py       # dólar, riesgo país e inflación, en palabras
 │   ├── news.py          # titulares por RSS, solo para el chat
 │   ├── bible.py         # versículo del día de YouVersion, en la NTV
+│   ├── holidays.py      # feriados de argentinadatos, en una caché local
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── closing.py       # cierre del día: lo de mañana y lo que sigue roto
 │   ├── weekly.py        # balance de la semana sobre el historial, solo escrito
@@ -97,7 +98,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con catorce tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con quince tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -116,6 +117,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `schedule.HistoryStore` | todo lo que sonó y cómo terminó, doce meses (`fired_history`) |
 | `people.PeopleStore` | el nombre visible de cada chat de la casa, para la pantalla |
 | `schedule.RingingStore` | las alarmas que siguen sonando, con sus repeticiones (`ringing`) |
+| `holidays.HolidayStore` | los feriados del año, y desde noviembre los del siguiente (`holidays`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -126,8 +128,9 @@ un despliegue nuevo no necesita migración.
 - **piper-tts** — síntesis de voz **offline**, voz `es_AR-daniela-high`. No sale a internet.
 - **Open-Meteo** para el clima y la calidad del aire: sin cuenta, sin API key.
 - **icalendar** y **recurring-ical-events** para leer Google Calendar.
-- Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal), YouVersion
-  y **Seq** (este último por el túnel WireGuard, no por internet).
+- **argentinadatos** para los feriados, igual que para la inflación: sin cuenta, sin API key.
+- Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal), YouVersion,
+  argentinadatos y **Seq** (este último por el túnel WireGuard, no por internet).
 - **pychromecast** — control del parlante.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
@@ -174,7 +177,7 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son treinta y cinco llamadas al
+en el historial del shell, igual que el token de `domotica-say`. Son treinta y seis llamadas al
 modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
@@ -279,10 +282,10 @@ marca— con una diferencia:
 
 ## Resumen de la mañana
 
-`briefing.py` junta agenda, clima, economía, servicios caídos, titulares y el versículo del
-día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
+`briefing.py` junta el feriado, agenda, clima, economía, servicios caídos, titulares y el
+versículo del día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
 
-- **Las seis fuentes son independientes.** Una que falla deja un hueco, no cancela el
+- **Las fuentes son independientes.** Una que falla deja un hueco, no cancela el
   resumen: un calendario que no contesta no te puede costar el clima. Es la misma postura
   que dentro de `agenda/`, donde un calendario roto no tapa a los otros.
 - 🔴 **Desde las noticias, el resumen tiene dos mitades.** `speech()` devuelve `spoken` y
@@ -311,6 +314,9 @@ día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
   igual que los servicios en orden.
 - El texto se sintetiza, así que **no lleva dígitos**: las fuentes ya hablan en palabras y
   este módulo solo agrega nombres y conectores. Hay test que lo verifica.
+- **Un feriado abre el resumen**: «Hoy es feriado: <motivo>.», escrito y hablado, también
+  en la copia pública. Un puente dice «Hoy es día no laborable.». Sale de la caché local,
+  sin pedido a la red; ver **Feriados**.
 
 ## Cierre del día
 
@@ -370,6 +376,8 @@ defecto): lo agendado para **mañana**, el pronóstico de **mañana** y lo que s
   convierte con `iso % 7`: de lunes a sábado coinciden y el domingo es 7 de un lado y 0 del
   otro, así que el error solo aparece con un domingo, que es el default.
 - **Las 19:00 del default quedan fuera del cierre del CT (20:00) y del descanso (22:00).**
+- **Lo salteado por feriado no cuenta** (`closed = holiday`): no sonó a propósito, y contado
+  sería un recordatorio olvidado o algo que no salió por el parlante.
 
 ## Agenda
 
@@ -570,6 +578,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | repetición de una alarma sin apagar | todos, una de cada cinco veces y solo con «🔕 Apagar»; «Dejé de sonar» al tope |
 | alarma apagada | los demás chats: «🔕 <nombre> apagó la alarma» |
 | re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
+| algo programado que un feriado saltea | todos, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
 | corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
 | agenda, clima, lluvia, API | todos |
 | alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
@@ -752,7 +761,7 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
   la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
 - ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
   comportamiento medido. Un ejemplo nuevo puede correrle la atención al modelo en los otros
-  comandos, así que se vuelve a medir: la última corrida dio treinta y cinco de treinta y cinco.
+  comandos, así que se vuelve a medir: la última corrida dio treinta y seis de treinta y seis.
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
@@ -1108,6 +1117,9 @@ misma numeración que `datetime.isoweekday()`; la mensual, el día del mes en `m
   nunca sus días. Si algún día se hablan, hay que verbalizarlos.
 - El reloj acepta `5.30` además de `5:30`. Es como la gente escribe la hora; no cambia nada
   más del parser.
+- 🔴 **`hábiles` no es `lun-vie`.** Los dos son de lunes a viernes, pero `hábiles` (o
+  `habiles`, también dentro de una lista con comas) además prende `skip_holidays` y no suena
+  en feriados. `lun-vie` y `semana` no lo prenden. Ver **Feriados**.
 
 **La mensual** se escribe `mensual 10 9:00 pagar la luz`, en `/recordar` y en `/alarma`.
 `parse_monthday()` lee el día y `spec.resolve()` busca la primera vez que cae.
@@ -1129,6 +1141,42 @@ misma numeración que `datetime.isoweekday()`; la mensual, el día del mes en `m
   mes», «lun, mar», «todos los días») la usan `/lista` y el aviso de la pantalla; estaba
   copiada en los dos. Al sonar, la línea del chat usa `spec.ringing_label()`, sin dígitos:
   «(recordatorio del diez de cada mes)».
+
+## Feriados
+
+`holidays.py` trae los feriados nacionales de argentinadatos (`/v1/feriados/{año}`) y los
+guarda en la tabla `holidays`. Lo que repite por días de la semana puede no sonar ese día.
+
+- **Se refresca a los quince segundos de arrancar y todos los días a las 04:00**
+  (`main.schedule_holidays()`, fuera del event loop). Desde noviembre (`NEXT_YEAR_FROM`)
+  trae también el año siguiente. Cada año se reemplaza entero, en una transacción.
+- 🔴 **Un pedido que falla, o que vuelve vacío, deja la caché como estaba.** Sin datos nunca
+  —un despliegue nuevo antes del primer refresco—, todo suena.
+- 🔴 **Solo saltean `inamovible` y `trasladable`.** El `puente` suena: es no laborable, no
+  feriado, y el resumen lo nombra «día no laborable».
+- **`skip_holidays` es una columna de `jobs`** y solo vale con repetición `weekly`:
+  `Store`, `spec.check_skip_holidays()` y la pantalla rechazan otra cosa. Se prende con
+  `hábiles` en el chat o con la casilla «No suena en feriados» de la pantalla. Entra por
+  `_add_missing_columns` en cero: ⚠️ **lo que ya existía no se migra**, una alarma `hábiles`
+  de antes sigue sonando en feriados hasta que se la edite desde la pantalla o se vuelva a
+  crear.
+- **En el chat se nota en la repetición**: «días hábiles» si son de lunes a viernes, o los
+  días con «, sin feriados» (`spec.weekdays_label()`).
+- 🔴 **El salteo se decide al sonar, no en `next_run()`.** `spec.skips()` mira la fecha de la
+  ocurrencia contra la caché. Así `next_run()` sigue siendo una sola función para el
+  reagendado y para la pantalla, y un feriado cargado tarde igual se respeta.
+- 🔴 **Un día salteado no anuncia ni deja nada para después**: no escribe en `fired`,
+  `awaiting` ni `ringing`, así que no hay posponer, «Hecho» ni repetición. Deja la fila del
+  historial cerrada como `holiday`, avisa a todos «🏖 Feriado (<nombre>): hoy no suena «…»»
+  y reagenda a la próxima ocurrencia.
+- 🔴 **Si la caché no se puede leer, suena** (`Reminders._holiday()` loguea y sigue).
+- **El nombre escrito va como lo publica la API**, sin el paréntesis con la fecha
+  (`clean_name()`). Lo hablado pasa por `spoken_name()`: `Gral.`, `Dr.`, `Sta.` y `Sto.` se
+  dicen enteras, y un romano después de un nombre propio va en palabras («León XIV» →
+  «León catorce», hasta `MAX_ROMAN`). ⚠️ Si aun así queda un dígito, se dice solo «Hoy es
+  feriado.».
+- **La pantalla los muestra**: el feriado como evento de día completo y la ocurrencia que
+  no va a sonar, marcada. Ver **Pantalla de la casa**.
 
 ## Posponer
 
@@ -1163,14 +1211,14 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
   de silenciar.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
-  treinta y uno de treinta y uno (hoy treinta y cinco). Ver **Texto libre**.
+  treinta y uno de treinta y uno (hoy treinta y seis). Ver **Texto libre**.
 
 ## Historial de lo que sonó
 
 `schedule.HistoryStore` (`fired_history`) guarda una fila por cada vez que suena una alarma,
 un recordatorio o un timer: si se dijo, cuántos re-avisos —en una alarma, cuántas veces
-repitió—, «Hecho» y quién, apagada y quién (`off`, en `done_by`), pospuesto o cancelado, con
-`closed_at`. `Reminders` es el único que escribe.
+repitió—, «Hecho» y quién, apagada y quién (`off`, en `done_by`), pospuesto, cancelado o
+salteado por feriado (`holiday`), con `closed_at`. `Reminders` es el único que escribe.
 
 - 🔴 **La fila se graba antes de anunciar** y nace como no dicha; `mark_announced()` la da
   por dicha solo si el anuncio no levantó. Un parlante apagado deja la marca de que no sonó,
@@ -1388,6 +1436,14 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
   con `kind=reminder`, y uno de una sola vez es un timer para la pantalla.
 - ⚠️ **Lo que sonó antes del historial no está.** Lo anterior al 2026-10-05 se ve vacío de
   pasado.
+- **Los feriados son eventos de día completo**, de solo lectura, con `source: "feriado"` y
+  su color; el detalle dice «Feriado nacional» y el «Hoy» del kiosco lo muestra. Salen de la caché local, no de la red, y una
+  caché que no contesta deja la agenda sin feriados, no en error.
+- **Lo que un feriado va a saltear se marca «🏖 feriado, no suena»**, con el mismo
+  `spec.skips()` que decide al sonar; ya pasado, «🏖 feriado», y no cuenta como «no sonó».
+  «Lo próximo» del kiosco lo saltea.
+- **La casilla «No suena en feriados» aparece solo con «Algunos días»**, y el formulario
+  manda `skip_holidays` en falso con cualquier otra repetición (`skipsHolidays()`).
 
 ## Botones en las respuestas
 
@@ -1433,10 +1489,10 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
-- 🔴 **Medido el 2026-10-15 contra el endpoint real: treinta y cinco de treinta y cinco
-  comandos y veinticinco de veinticinco payloads**, con `gemini-3.1-flash-lite`. Es la
-  corrida de después de sumar la forma mensual a `recordar`; la del 2026-09-28, con
-  `recordar`, había dado treinta y cuatro de treinta y cuatro. `deploy/measure_router.py` es esa
+- 🔴 **Medido el 2026-10-15 contra el endpoint real: treinta y seis de treinta y seis
+  comandos y veintiséis de veintiséis payloads**, con `gemini-3.1-flash-lite`. Es la
+  corrida de después de sumar `hábiles` a `recordar`; la anterior, con la forma mensual,
+  había dado treinta y cinco de treinta y cinco. `deploy/measure_router.py` es esa
   corrida: vive en el repo porque la regla de volver a medir no sirve si medir es un trabajo.
   Corre **adentro del CT**, que es donde está la clave.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
@@ -1454,7 +1510,7 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; hoy son treinta y cinco de treinta y cinco con los comandos que se sumaron después. Si se toca el
+  limpios; hoy son treinta y seis de treinta y seis con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -1586,7 +1642,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (treinta y cinco de treinta y cinco) y un segundo prompt es un segundo
+  prompt del router **está medido** (treinta y seis de treinta y seis) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
