@@ -161,11 +161,24 @@ def test_volume_out_of_range_is_rejected(bad):
 
 def test_stop_stops_playback():
     device = FakeDevice()
+    device.media_controller.status.player_state = "PLAYING"
     caster = Caster(DEVICE_UUID, discover=discovery_of(device))
 
     caster.stop()
 
     assert device.media_controller.stopped == 1
+
+
+@pytest.mark.parametrize("state", ["IDLE", "UNKNOWN"])
+def test_stop_without_audio_does_nothing(state):
+    device = FakeDevice()
+    device.media_controller.status.player_state = state
+    found = discovery_of(device)
+    caster = Caster(DEVICE_UUID, discover=found)
+
+    caster.stop()
+
+    assert device.media_controller.stopped == 0
 
 
 # --- confirmar que sonó de verdad ------------------------------------------
