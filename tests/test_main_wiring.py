@@ -724,12 +724,33 @@ def _spy_init(monkeypatch, cls):
     return seen
 
 
-def test_an_alarm_offers_to_be_postponed(wired, tmp_path, monkeypatch):
+def test_an_alarm_offers_to_be_turned_off_or_postponed(wired, tmp_path, monkeypatch):
     seen = _spy_init(monkeypatch, main.Announcer)
 
     run_main(monkeypatch, config_file(tmp_path))
 
-    assert seen["actions"] == main.SNOOZE_ACTIONS
+    off, *snooze = seen["actions"]
+    assert off[1].format(job=17) == "callar 17"
+    assert tuple(snooze) == main.SNOOZE_ACTIONS
+    [(label, data)] = seen["ring_actions"]
+    assert label == "🔕 Apagar"
+    assert data.format(job=17) == "callar 17"
+
+
+def test_a_ringing_alarm_is_kept_in_the_one_database_and_can_be_stopped(
+    wired, tmp_path, monkeypatch
+):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    ringing = reminders["ringing"]
+    assert ringing.db_path == tmp_path / "jobs.db"
+    ringing.remember(17, 42, "arriba", None, main.datetime(2026, 10, 15, 7, 0))
+    assert ringing.take(17).message == "arriba"
+    stop = reminders["stop_audio"]
+    assert stop.__self__ is reminders["announce"], "corta el audio con los equipos del anunciador"
+    stop([])
 
 
 def test_what_fired_is_kept_in_the_one_database(wired, tmp_path, monkeypatch):

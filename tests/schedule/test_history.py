@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from homeauto.schedule.history import KEEP, HistoryStore
+from homeauto.schedule.history import KEEP, OFF, HistoryStore
 from homeauto.schedule.store import ALARM, REMINDER
 
 OWNER = 42
@@ -173,3 +173,24 @@ def test_it_shares_the_file_with_the_other_tables(tmp_path):
     conn.close()
     assert {"awaiting_done", "fired_history"} <= tables
     assert "fired_history_fired_at" in indexes
+
+
+def test_an_alarm_turned_off_keeps_who_turned_it_off(history):
+    record(history, kind=ALARM, repeat="once")
+    history.mark_nag(7)
+    later = NOW + timedelta(minutes=3)
+
+    assert history.mark_off(7, later, "Eze")
+
+    [entry] = history.between(NOW, NOW + timedelta(minutes=1))
+    assert entry.closed == OFF == "off"
+    assert entry.done_by == "Eze"
+    assert entry.closed_at == later
+    assert entry.nags == 1
+
+
+def test_turning_off_what_is_already_closed_says_so(history):
+    record(history, kind=ALARM, repeat="once")
+    history.mark_off(7, NOW, "Eze")
+
+    assert not history.mark_off(7, NOW, "Ana")

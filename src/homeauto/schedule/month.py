@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable
 
-from homeauto.schedule.history import CANCEL, DONE, SNOOZE, Entry
+from homeauto.schedule.history import CANCEL, DONE, OFF, SNOOZE, Entry
 from homeauto.schedule.store import ALARM, DAILY, ONCE, WEEKLY, Job, next_run
 from homeauto.timespec import next_weekday
 
@@ -27,6 +27,7 @@ class Item:
     nags: int = 0
     snoozed: bool = False
     cancelled: bool = False
+    off: bool = False
     job_id: int | None = None
 
 
@@ -75,4 +76,5 @@ def from_history(entry: Entry) -> Item:
         nags=entry.nags,
         snoozed=entry.closed == SNOOZE,
         cancelled=entry.closed == CANCEL,
+        off=entry.closed == OFF,
     )

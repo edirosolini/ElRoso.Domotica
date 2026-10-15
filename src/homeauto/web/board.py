@@ -86,6 +86,8 @@ def marks(item: Item) -> list[str]:
         found.append("💤 pospuesto")
     if item.cancelled:
         found.append("✖️ cancelado")
+    if item.off:
+        found.append(f"🔕 apagada {item.done_by or ''}".rstrip())
     if item.silent:
         found.append("⚠️ no sonó")
     return found

@@ -707,8 +707,9 @@ class Commands:
             return self.free_text(chat_id, data[len(ANSWER_MARK):].strip())
 
         command, _, argument = data.strip().partition(" ")
-        # «hecho» y «borrar» solo existen como botón: el router nunca los nombra.
-        run = {**self._dispatch(), "hecho": self.done, "borrar": self.discard}.get(command)
+        # «hecho», «borrar» y «callar» solo existen como botón: el router nunca los nombra.
+        buttons = {"hecho": self.done, "borrar": self.discard, "callar": self.alarm_off}
+        run = {**self._dispatch(), **buttons}.get(command)
         if run is None:
             log.warning("botón desconocido: %r", data)
             return "No sé qué hacer con ese botón."
@@ -733,6 +734,22 @@ class Commands:
         if message is None:
             return "Eso ya estaba marcado como hecho."
         return f"✅ Hecho: «{message}»"
+
+    def alarm_off(self, chat_id: int, text: str) -> str:
+        """Apaga la alarma que sigue sonando y avisa a los demás chats."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        try:
+            job_id = int(text.strip().lstrip("#"))
+        except ValueError:
+            return "No sé cuál apagar."
+
+        message = self.reminders.silence(chat_id, job_id, _WHO.get() or "Alguien")
+        if message is None:
+            return "Esa alarma ya estaba apagada."
+        return f"🔕 Apagada: «{message}»"
 
     def discard(self, chat_id: int, text: str) -> str:
         """Borra un aviso de cualquiera, desde el botón de la pantalla, y avisa a los demás."""

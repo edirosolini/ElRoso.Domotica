@@ -205,3 +205,120 @@ def test_without_actions_the_chat_gets_plain_text():
     announcer(JOB)
 
     assert len(sent) == 1
+
+
+def test_the_alarm_actions_carry_its_number():
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=FakeSpeaker("parlante")),
+        notify=lambda chat_id, text, actions=(): sent.append(actions),
+        fallback="parlante",
+        actions=(("🔕 Apagar", "callar {job}"), ("Posponer 10 min", "posponer 10m")),
+    )
+
+    announcer(JOB)
+
+    assert sent == [(("🔕 Apagar", "callar 7"), ("Posponer 10 min", "posponer 10m"))]
+
+
+# --- la alarma que sigue sonando -------------------------------------------
+
+
+class Quiet:
+    label = "22:00–05:25"
+
+    def __init__(self, quiet):
+        self.quiet = quiet
+
+    def is_quiet(self, _now):
+        return self.quiet
+
+
+def ringing(quiet=False):
+    speaker = FakeSpeaker("parlante")
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=speaker),
+        notify=lambda chat_id, text, actions=(): sent.append((chat_id, text, actions)),
+        fallback="parlante",
+        quiet=Quiet(quiet),
+        actions=(("🔕 Apagar", "callar {job}"), ("Posponer 10 min", "posponer 10m")),
+        ring_actions=(("🔕 Apagar", "callar {job}"),),
+        chat_ids=(42, 99),
+    )
+    return announcer, speaker, sent
+
+
+@pytest.mark.parametrize(
+    "rings, level", [(1, chime.WAKE_LEVELS[1]), (2, chime.WAKE_LEVELS[2]), (9, chime.WAKE_LEVELS[2])]
+)
+def test_each_repetition_wakes_louder_with_the_alarm_floor(rings, level):
+    announcer, speaker, _ = ringing()
+
+    announcer(JOB, rings=rings, write=False)
+
+    assert speaker.said == ["arriba"]
+    assert speaker.chimes == [level]
+    assert speaker.min_volumes == [ALARM_MIN_VOLUME]
+
+
+def test_a_repetition_that_does_not_write_leaves_the_chat_alone():
+    announcer, _, sent = ringing()
+
+    announcer(JOB, rings=1, write=False)
+
+    assert sent == []
+
+
+def test_a_repetition_that_writes_says_it_keeps_ringing_with_the_off_button():
+    announcer, _, sent = ringing()
+
+    announcer(JOB, rings=5, write=True)
+
+    assert [chat for chat, *_ in sent] == [42, 99]
+    _, text, actions = sent[0]
+    assert text.startswith("⏰ Sigue sonando: «arriba»")
+    assert actions == (("🔕 Apagar", "callar 7"),)
+
+
+def test_in_the_quiet_hours_a_repetition_only_writes():
+    announcer, speaker, sent = ringing(quiet=True)
+
+    announcer(JOB, rings=5, write=True)
+    announcer(JOB, rings=6, write=False)
+
+    assert speaker.said == []
+    assert len(sent) == 2, "una por chat, solo la repetición que escribe"
+    assert "Sigue sonando" in sent[0][1]
+    assert "Horario de descanso" in sent[0][1]
+
+
+def test_the_alarm_stops_on_its_devices():
+    cocina = FakeSpeaker("cocina")
+    parlante = FakeSpeaker("parlante")
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=parlante, cocina=cocina),
+        notify=lambda *_: None,
+        fallback="parlante",
+    )
+
+    announcer.stop(["cocina"])
+    announcer.stop([])
+
+    assert cocina.stopped == 1
+    assert parlante.stopped == 1, "sin equipos va al de siempre"
+
+
+def test_a_device_that_cannot_stop_does_not_stop_the_others():
+    broken = FakeSpeaker("cocina")
+    broken.stop = lambda: (_ for _ in ()).throw(CastError("apagado"))
+    parlante = FakeSpeaker("parlante")
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=parlante, cocina=broken),
+        notify=lambda *_: None,
+        fallback="parlante",
+    )
+
+    announcer.stop(["cocina", "parlante"])
+
+    assert parlante.stopped == 1
