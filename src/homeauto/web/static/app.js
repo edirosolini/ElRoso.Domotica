@@ -42,8 +42,28 @@
     return pad(Math.max(0, now.getHours() - 1)) + ":00:00";
   }
 
+  // La repetición que admite cada tipo, si se puede elegir y si se ven los días de la semana.
+  function repeatRule(type, repeat) {
+    if (type === "timer") {
+      repeat = "once";
+    } else if (type === "reminder" && repeat === "once") {
+      repeat = "daily";
+    }
+    return {
+      repeat: repeat,
+      locked: type === "timer",
+      onceOff: type === "reminder",
+      showDays: repeat === "weekly",
+    };
+  }
+
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { isPastToday: isPastToday, toLocalInput: toLocalInput, nowScroll: nowScroll };
+    module.exports = {
+      isPastToday: isPastToday,
+      toLocalInput: toLocalInput,
+      nowScroll: nowScroll,
+      repeatRule: repeatRule,
+    };
   }
   if (typeof document === "undefined") {
     return;
@@ -321,17 +341,12 @@
 
   // Ajusta repetición y días a lo que permite cada tipo.
   function syncRepeat() {
-    var type = byId("editor-type").value;
     var repeat = byId("editor-repeat");
-    var once = repeat.querySelector('option[value="once"]');
-    repeat.disabled = type === "timer";
-    once.disabled = type === "reminder";
-    if (type === "timer") {
-      repeat.value = "once";
-    } else if (type === "reminder" && repeat.value === "once") {
-      repeat.value = "daily";
-    }
-    byId("editor-days").hidden = repeat.value !== "weekly";
+    var rule = repeatRule(byId("editor-type").value, repeat.value);
+    repeat.disabled = rule.locked;
+    repeat.querySelector('option[value="once"]').disabled = rule.onceOff;
+    repeat.value = rule.repeat;
+    byId("editor-days").hidden = !rule.showDays;
   }
 
   function showEditorError(text) {

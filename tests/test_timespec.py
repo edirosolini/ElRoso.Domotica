@@ -6,6 +6,7 @@ from homeauto.timespec import (
     TimeSpecError,
     format_weekdays,
     next_weekday,
+    parse_monthday,
     parse_schedule,
     parse_weekdays,
 )
@@ -159,3 +160,26 @@ def test_clock_time_accepts_a_dot_as_separator():
     when, message = parse_schedule("5.30 arriba", now=NOW)
     assert when == datetime(2026, 8, 30, 5, 30)
     assert message == "arriba"
+
+
+# --- día del mes -----------------------------------------------------------
+
+
+@pytest.mark.parametrize("word", ["mensual", "Mensual", "MENSUAL"])
+def test_monthly_word_with_a_day_is_that_day(word):
+    assert parse_monthday(word, "10") == 10
+
+
+def test_something_that_is_not_monthly_is_none():
+    assert parse_monthday("diaria", "10") is None
+    assert parse_monthday("lun-vie", "5:30") is None
+
+
+@pytest.mark.parametrize("token", ["", "9:00", "diez", "10m"])
+def test_monthly_without_a_day_number_is_rejected(token):
+    with pytest.raises(TimeSpecError, match="día"):
+        parse_monthday("mensual", token)
+
+
+def test_the_range_of_the_day_is_left_to_the_rules():
+    assert parse_monthday("mensual", "32") == 32

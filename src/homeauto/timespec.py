@@ -9,7 +9,8 @@ Formas aceptadas, siempre seguidas del mensaje:
 
 Las alarmas semanales agregan los días delante de la hora ("lun-vie 5:30
 arriba"). Se parsean aparte, con `parse_weekdays`, porque los días eligen qué
-ocurrencia de la hora dispara, no la hora.
+ocurrencia de la hora dispara, no la hora. Las mensuales, igual: "mensual 10
+9:00 pagar la luz", con `parse_monthday`.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import re
 from datetime import datetime, timedelta
 
 TOMORROW_WORDS = {"mañana", "manana"}
+MONTHLY_WORDS = ("mensual",)
 
 # "5.30" es como la gente escribe la hora tanto como "5:30"; significan lo mismo.
 _CLOCK_RE = re.compile(r"(\d{1,2})[:.](\d{2})")
@@ -147,6 +149,16 @@ def parse_weekdays(token: str) -> tuple[int, ...] | None:
         else:
             return None
     return tuple(sorted(days))
+
+
+def parse_monthday(head: str, token: str) -> int | None:
+    """El día del mes de "mensual 10"; None si `head` no es mensual, TimeSpecError sin número."""
+    if head.strip().lower() not in MONTHLY_WORDS:
+        return None
+    token = token.strip()
+    if not token.isdigit():
+        raise TimeSpecError("Con mensual necesito el día del mes. Ej: mensual 10 9:00 pagar la luz")
+    return int(token)
 
 
 def next_weekday(when: datetime, days: tuple[int, ...] | list[int]) -> datetime:

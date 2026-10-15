@@ -193,3 +193,64 @@ def test_list_shows_which_days_a_weekly_alarm_uses(cmd):
     cmd.alarm(OWNER, "mar,jue 20:00 gimnasia")
 
     assert "mar, jue" in cmd.list(OWNER)
+
+
+# --- alarmas mensuales -----------------------------------------------------
+
+
+def test_monthly_alarm_lands_on_its_day_this_month(cmd):
+    reply = cmd.alarm(OWNER, "mensual 10 9:00 pagar la luz")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.repeat == "monthly"
+    assert job.monthday == 10
+    assert job.when == datetime(2026, 9, 10, 9, 0)  # NOW es 29 de agosto
+    assert job.message == "pagar la luz"
+    assert reply.startswith("Alarma el 10 de cada mes #")
+
+
+def test_monthly_alarm_later_today_stays_today(cmd):
+    cmd.alarm(OWNER, "mensual 29 23:00 novela")  # NOW es 29 a las 21:00
+
+    assert cmd.reminders.list(OWNER)[0].when == datetime(2026, 8, 29, 23, 0)
+
+
+def test_monthly_alarm_accepts_the_target_device(cmd):
+    cmd.alarm(OWNER, "en parlante mensual 10 9:00 pagar la luz")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.devices == ["parlante"]
+    assert job.monthday == 10
+
+
+def test_monthly_on_a_day_some_months_lack_says_what_happens(cmd):
+    reply = cmd.alarm(OWNER, "mensual 31 9:00 pagar el alquiler")
+
+    assert cmd.reminders.list(OWNER)[0].when == datetime(2026, 8, 31, 9, 0)
+    assert "Los meses que no tienen 31, el último día." in reply
+
+
+def test_monthly_on_a_day_every_month_has_says_nothing_else(cmd):
+    assert "último día" not in cmd.alarm(OWNER, "mensual 28 9:00 x")
+
+
+def test_monthly_alarm_needs_a_clock_time(cmd):
+    reply = cmd.alarm(OWNER, "mensual 10 10m arriba")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "hora" in reply.lower()
+
+
+@pytest.mark.parametrize("text", ["mensual 9:00 arriba", "mensual 0 9:00 arriba",
+                                  "mensual 32 9:00 arriba"])
+def test_monthly_alarm_needs_a_day_that_exists(cmd, text):
+    reply = cmd.alarm(OWNER, text)
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "día" in reply
+
+
+def test_list_shows_the_day_of_a_monthly_alarm(cmd):
+    cmd.alarm(OWNER, "mensual 10 9:00 pagar la luz")
+
+    assert "· el 10 de cada mes —" in cmd.list(OWNER)

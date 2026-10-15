@@ -12,8 +12,8 @@ from datetime import datetime
 from typing import Callable, Iterable
 
 from homeauto.polish import as_is
+from homeauto.schedule.spec import ringing_label
 from homeauto.schedule.store import Job
-from homeauto.timespec import format_weekdays
 from homeauto.voice import chime
 from homeauto.voice.caster import CastError
 from homeauto.voice.registry import UnknownDevice
@@ -123,10 +123,9 @@ class Announcer:
     def _text(self, message: str, job: Job, problem: str | None, resting: bool = False) -> str:
         icon, noun = ("🔔", "recordatorio") if job.is_reminder else ("⏰", "alarma")
         text = f"{icon} {message}"
-        if job.is_daily:
-            text += f"\n({noun} de todos los días)"
-        elif job.is_weekly:
-            text += f"\n({noun} de {format_weekdays(job.weekdays)})"
+        repetition = ringing_label(job)
+        if repetition:
+            text += f"\n({noun} {repetition})"
         return self._tail(text, problem, resting)
 
     def _tail(self, text: str, problem: str | None, resting: bool) -> str:

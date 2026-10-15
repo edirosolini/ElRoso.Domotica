@@ -140,6 +140,17 @@ def test_a_weekly_reminder_names_its_days():
     assert "(recordatorio de lun, mar, mié, jue, vie)" in text
 
 
+def test_a_monthly_reminder_names_its_day_in_words():
+    job = Job(id=9, chat_id=OWNER, when=SOON, message="pagar la luz", repeat="monthly",
+              kind=REMINDER, monthday=10)
+
+    _, [(_, text, _)] = announce(job)
+
+    label = text.splitlines()[1]
+    assert label == "(recordatorio del diez de cada mes)"
+    assert not any(char.isdigit() for char in label)
+
+
 def test_only_a_reminder_offers_done_and_it_names_its_job():
     _, [(_, _, alarm)] = announce(ALARM_JOB)
     _, [(_, _, reminder)] = announce(REMINDER_JOB)

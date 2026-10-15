@@ -29,13 +29,20 @@ from homeauto.correct import as_written
 from homeauto.polish import as_is
 from homeauto.route import Decision, RouteError
 from homeauto.translate import TranslateError
-from homeauto.schedule.spec import SpecError, resolve as resolve_when
-from homeauto.schedule.store import ALARM, DAILY, ONCE, REMINDER, WEEKLY
+from homeauto.schedule.spec import (
+    SpecError,
+    monthly_label,
+    repetition_label,
+    resolve as resolve_when,
+    short_month_note,
+)
+from homeauto.schedule.store import ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY
 from homeauto.quiet import Hush
 from homeauto.timespec import (
     TimeSpecError,
     format_weekdays,
     parse_duration,
+    parse_monthday,
     parse_schedule,
     parse_weekdays,
 )
@@ -123,8 +130,10 @@ HELP = """Hola. Manejo los equipos de casa.
 /timer 10m sacá la pizza — avisa una vez · /timer mañana 10:00 llamar al médico
 /recordar diaria 8:00 la pastilla — un recordatorio todos los días
 /recordar lun-vie 7:30 salir al colegio — solo esos días
+/recordar mensual 10 9:00 pagar la luz — el 10 de cada mes
 /alarma 7:30 arriba — para despertarse; suena fuerte
 /alarma diaria 7:30 arriba — todos los días · /alarma lun-vie 5:30 arriba
+/alarma mensual 10 9:00 pagar la luz — el 10 de cada mes
 /lista — lo que está programado
 /cancelar <n> — cancela uno
 /posponer — repite en 10 minutos la alarma que acaba de sonar · /posponer 30m
@@ -1098,6 +1107,7 @@ class Commands:
         label: str,
         days: tuple[int, ...] | None = None,
         kind: str = ALARM,
+        monthday: int | None = None,
     ) -> str:
         denial = self._denial(chat_id)
         if denial:
@@ -1115,18 +1125,21 @@ class Commands:
             return str(exc)
 
         try:
-            when = resolve_when(repeat, when, now, days)
+            when = resolve_when(repeat, when, now, days, monthday)
         except SpecError as exc:
             return str(exc)
 
         job = self.reminders.add(
-            chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days, kind=kind
+            chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days, kind=kind,
+            monthday=monthday,
         )
         offer(_cancel_button(job.id))
-        return (
+        reply = (
             f"{label} #{job.id} en {', '.join(aliases)} "
             f"para {format_when(when, now)}: «{message}»"
         )
+        note = short_month_note(monthday) if monthday else ""
+        return f"{reply}\n{note}" if note else reply
 
     def timer(self, chat_id: int, text: str) -> str:
         return self._schedule(chat_id, text, ONCE, "Programado", kind=REMINDER)
@@ -1152,6 +1165,21 @@ class Commands:
         )
         head, _, tail = rest.strip().partition(" ")
         prefix = f"{TARGET_WORD} {','.join(aliases)} "
+
+        day_token, _, after_day = tail.strip().partition(" ")
+        try:
+            monthday = parse_monthday(head, day_token)
+        except TimeSpecError as exc:
+            return str(exc)
+        if monthday is not None:
+            if not _CLOCK.fullmatch(after_day.strip().split(" ")[0]):
+                command = "recordar" if kind == REMINDER else "alarma"
+                return f"Con mensual necesito una hora. Ej: /{command} mensual 10 9:00 pagar la luz"
+            return self._schedule(
+                chat_id, prefix + after_day, MONTHLY, f"{noun} {monthly_label(monthday)}",
+                kind=kind, monthday=monthday,
+            )
+
         if head.lower() in slots.DAILY_WORDS:
             return self._schedule(
                 chat_id, prefix + tail, DAILY, f"{noun} todos los días", kind=kind
@@ -1213,11 +1241,8 @@ class Commands:
 
     @staticmethod
     def _repetition(job) -> str:
-        if job.is_daily:
-            return " · todos los días"
-        if job.is_weekly:
-            return f" · {format_weekdays(job.weekdays)}"
-        return ""
+        label = repetition_label(job)
+        return f" · {label}" if label else ""
 
     def cancel(self, chat_id: int, text: str) -> str:
         denial = self._denial(chat_id)

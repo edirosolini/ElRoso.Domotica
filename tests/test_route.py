@@ -177,3 +177,20 @@ def test_the_prompt_does_not_convert_times_inside_what_is_said():
     rule = PROMPT[start:PROMPT.index("\n\n", start)]
     assert "timer" in rule and "recordar" in rule
     assert "En decir y\n  llamar no" in rule
+
+
+def test_the_prompt_names_the_monthly_form():
+    from homeauto.route import PROMPT
+
+    assert '"mensual 10 9:00 pagar la luz"' in PROMPT
+    assert (
+        "Mensaje: recordame el 10 de cada mes a las nueve pagar la luz\n"
+        "COMANDO: recordar\n"
+        "ARGUMENTO: mensual 10 9:00 pagar la luz"
+    ) in PROMPT
+
+
+def test_the_router_measurement_covers_the_monthly_form():
+    from deploy.measure_router import CASES
+
+    assert ("recordame el 10 de cada mes a las nueve pagar la luz", "recordar", "mensual 10") in CASES

@@ -14,7 +14,13 @@ import re
 from dataclasses import dataclass
 
 from homeauto.route import strip_target
-from homeauto.timespec import TOMORROW_WORDS, TimeSpecError, parse_duration, parse_weekdays
+from homeauto.timespec import (
+    MONTHLY_WORDS,
+    TOMORROW_WORDS,
+    TimeSpecError,
+    parse_duration,
+    parse_weekdays,
+)
 
 # Las palabras que ya dicen cómo repite una alarma. `Commands._repeating` lee la
 # misma tupla, así que una nueva se agrega en un solo lugar.
@@ -112,11 +118,20 @@ def _timed(text: str, when: Slot) -> Slot | None:
     return None
 
 
+def _monthly(tail: str) -> Slot | None:
+    """Si a un "mensual <día> <hora> <mensaje>" le falta la hora o el mensaje."""
+    day, _, rest = tail.strip().partition(" ")
+    # Sin número de día no pregunta nada y deja que el comando rechace la forma.
+    return _timed(rest, TIME) if day.isdigit() else None
+
+
 def _alarm(argument: str) -> Slot | None:
     if not argument:
         return TIME
 
     head, _, tail = argument.partition(" ")
+    if head.lower() in MONTHLY_WORDS:
+        return _monthly(tail)
     if head.lower() in DAILY_WORDS or parse_weekdays(head):
         # Cómo repite ya está dicho; falta la hora y el texto.
         return _timed(tail, TIME)
@@ -132,6 +147,8 @@ def _reminder(argument: str) -> Slot | None:
         return TIME
 
     head, _, tail = argument.partition(" ")
+    if head.lower() in MONTHLY_WORDS:
+        return _monthly(tail)
     if head.lower() in DAILY_WORDS or parse_weekdays(head):
         return _timed(tail, TIME)
     return _timed(argument, TIME) or DAYS

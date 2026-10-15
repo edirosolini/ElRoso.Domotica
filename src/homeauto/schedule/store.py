@@ -6,6 +6,7 @@ desaparece porque el servicio se actualizó a medianoche es peor que no tenerla.
 
 from __future__ import annotations
 
+import calendar
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -17,7 +18,8 @@ from homeauto.timespec import next_weekday
 ONCE = "once"
 DAILY = "daily"
 WEEKLY = "weekly"
-REPEATS = (ONCE, DAILY, WEEKLY)
+MONTHLY = "monthly"
+REPEATS = (ONCE, DAILY, WEEKLY, MONTHLY)
 
 ALARM = "alarm"
 REMINDER = "reminder"
@@ -32,7 +34,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     repeat   TEXT    NOT NULL DEFAULT 'once',
     device   TEXT,
     days     TEXT,
-    kind     TEXT    NOT NULL DEFAULT 'alarm'
+    kind     TEXT    NOT NULL DEFAULT 'alarm',
+    monthday INTEGER
 );
 CREATE INDEX IF NOT EXISTS jobs_by_time ON jobs (fires_at);
 """
@@ -48,6 +51,7 @@ class Job:
     device: str | None = None
     days: str | None = None
     kind: str = ALARM
+    monthday: int | None = None
 
     @property
     def is_reminder(self) -> bool:
@@ -62,6 +66,10 @@ class Job:
         return self.repeat == WEEKLY
 
     @property
+    def is_monthly(self) -> bool:
+        return self.repeat == MONTHLY
+
+    @property
     def weekdays(self) -> list[int]:
         """Días ISO de un job semanal; vacío para todo lo demás."""
         return [int(part) for part in (self.days or "").split(",") if part.strip()]
@@ -72,6 +80,18 @@ class Job:
         return [part.strip() for part in (self.device or "").split(",") if part.strip()]
 
 
+def on_monthday(year: int, month: int, monthday: int, like: datetime) -> datetime:
+    """El día `monthday` de ese mes a la hora de `like`; el último si el mes no lo tiene."""
+    last = calendar.monthrange(year, month)[1]
+    return like.replace(year=year, month=month, day=min(monthday, last))
+
+
+def next_month(when: datetime, monthday: int) -> datetime:
+    """El día `monthday` del mes que sigue al de `when`, a la misma hora."""
+    year, month = (when.year + 1, 1) if when.month == 12 else (when.year, when.month + 1)
+    return on_monthday(year, month, monthday, when)
+
+
 def next_run(job: Job, after: datetime) -> datetime | None:
     """La ocurrencia del job que sigue a la de `after`; None si no repite."""
     if job.repeat == DAILY:
@@ -79,11 +99,15 @@ def next_run(job: Job, after: datetime) -> datetime | None:
     if job.repeat == WEEKLY:
         # Busca desde el día siguiente al de `after`.
         return next_weekday(after + timedelta(days=1), job.weekdays)
+    if job.repeat == MONTHLY and job.monthday:
+        return next_month(after, job.monthday)
     return None
 
 
-def _validate(repeat: str, kind: str, days: Iterable[int] | None) -> str | None:
-    """Chequea repetición, tipo y días; devuelve los días como se guardan."""
+def _validate(
+    repeat: str, kind: str, days: Iterable[int] | None, monthday: int | None
+) -> str | None:
+    """Chequea repetición, tipo, días y día del mes; devuelve los días como se guardan."""
     if repeat not in REPEATS:
         raise ValueError(f"repeat inválido: {repeat}")
     if kind not in KINDS:
@@ -92,6 +116,8 @@ def _validate(repeat: str, kind: str, days: Iterable[int] | None) -> str | None:
     # Un job semanal sin días no encontraría nunca un día para disparar.
     if repeat == WEEKLY and not stored_days:
         raise ValueError("una alarma semanal necesita días")
+    if repeat == MONTHLY and monthday not in range(1, 32):
+        raise ValueError("una alarma mensual necesita el día del mes")
     return stored_days
 
 
@@ -105,6 +131,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         device=row["device"],
         days=row["days"],
         kind=row["kind"],
+        monthday=row["monthday"],
     )
 
 
@@ -126,6 +153,8 @@ class Store:
             conn.execute("ALTER TABLE jobs ADD COLUMN days TEXT")
         if "kind" not in existing:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT '{ALARM}'")
+        if "monthday" not in existing:
+            conn.execute("ALTER TABLE jobs ADD COLUMN monthday INTEGER")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -141,13 +170,15 @@ class Store:
         device: str | None = None,
         days: Iterable[int] | None = None,
         kind: str = ALARM,
+        monthday: int | None = None,
     ) -> Job:
-        stored_days = _validate(repeat, kind, days)
+        stored_days = _validate(repeat, kind, days, monthday)
+        monthday = monthday if repeat == MONTHLY else None
         with self._connect() as conn:
             cursor = conn.execute(
-                "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days, kind)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (chat_id, when.isoformat(), message, repeat, device, stored_days, kind),
+                "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days, kind, monthday)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (chat_id, when.isoformat(), message, repeat, device, stored_days, kind, monthday),
             )
             return Job(
                 id=cursor.lastrowid,
@@ -158,6 +189,7 @@ class Store:
                 device=device,
                 days=stored_days,
                 kind=kind,
+                monthday=monthday,
             )
 
     def pending(self, chat_id: int | None = None) -> list[Job]:
@@ -188,14 +220,16 @@ class Store:
         device: str | None = None,
         days: Iterable[int] | None = None,
         kind: str = ALARM,
+        monthday: int | None = None,
     ) -> Job | None:
         """Reescribe un job conservando su id y su dueño; None si ya no existe."""
-        stored_days = _validate(repeat, kind, days)
+        stored_days = _validate(repeat, kind, days, monthday)
+        monthday = monthday if repeat == MONTHLY else None
         with self._connect() as conn:
             changed = conn.execute(
                 "UPDATE jobs SET fires_at = ?, message = ?, repeat = ?, device = ?, days = ?,"
-                " kind = ? WHERE id = ?",
-                (when.isoformat(), message, repeat, device, stored_days, kind, job_id),
+                " kind = ?, monthday = ? WHERE id = ?",
+                (when.isoformat(), message, repeat, device, stored_days, kind, monthday, job_id),
             ).rowcount
         return self.get(job_id) if changed else None
 

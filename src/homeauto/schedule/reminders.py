@@ -102,8 +102,9 @@ class Reminders:
         device: str | None = None,
         days: Iterable[int] | None = None,
         kind: str = ALARM,
+        monthday: int | None = None,
     ) -> Job:
-        job = self.store.add(chat_id, when, message, repeat, device, days, kind)
+        job = self.store.add(chat_id, when, message, repeat, device, days, kind, monthday)
         self._arm(job)
         return job
 
@@ -116,9 +117,10 @@ class Reminders:
         device: str | None = None,
         days: Iterable[int] | None = None,
         kind: str = ALARM,
+        monthday: int | None = None,
     ) -> Job | None:
         """Reescribe un job y lo rearma; lo que ya sonó y espera su «Hecho» no se toca."""
-        job = self.store.update(job_id, when, message, repeat, device, days, kind)
+        job = self.store.update(job_id, when, message, repeat, device, days, kind, monthday)
         if job is None:
             return None
         self.timer.unschedule(str(job_id))
