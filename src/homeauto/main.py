@@ -56,6 +56,7 @@ from homeauto.schedule.ringing import RingingStore
 from homeauto.schedule.store import Store
 from homeauto.people import People, PeopleStore
 from homeauto.strangers import Strangers, StrangerStore
+from homeauto.voice import chime
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
 from homeauto.voice.broadcast import SAME, HouseVoice
@@ -186,6 +187,8 @@ REMINDER_ACTIONS = DONE_ACTIONS + SNOOZE_ACTIONS
 OFF_ACTIONS = (("🔕 Apagar", "callar {job}"),)
 ALARM_ACTIONS = OFF_ACTIONS + SNOOZE_ACTIONS
 MONITOR_ACTIONS = (("Ver estado", "estado"), ("Silenciar 1 h", "silencio 1h"))
+# `{name}` lo completa el aviso de caída con el nombre del chequeo.
+CONFIRM_ACTIONS = (("✅ Confirmar", "confirmar {name}"),)
 SEQ_ACTIONS = (("Silenciar 1 h", "silencio 1h"),)
 
 # Un error que no llega al chat se ve igual que un bot colgado.
@@ -356,6 +359,38 @@ def _alert(
     result = house.announce(text, urgent=urgent, written=written, actions=actions, others=None)
     if result["spoken"]:
         house.tell(f"{'🚨' if urgent else '⚠️'} {written}", None, actions)
+
+
+def _monitor_actions(name: str = "") -> tuple[tuple[str, str], ...]:
+    """Los botones de un aviso del monitor; con `name`, también confirmar esa caída."""
+    if not name:
+        return MONITOR_ACTIONS
+    confirm = tuple((label, data.format(name=name)) for label, data in CONFIRM_ACTIONS)
+    return confirm + MONITOR_ACTIONS
+
+
+def _still_down(house: HouseVoice, text: str, name: str, detail: str = "") -> None:
+    """Re-avisa una caída sin confirmar: suena como lo urgente pero nunca despierta."""
+    written = f"🚨 Sigue caído: {name}"
+    if detail:
+        written = f"{written}\n{detail}"
+    actions = _monitor_actions(name)
+    result = house.announce(
+        text, urgent=False, written=written, actions=actions, others=None, chime=chime.ALARM
+    )
+    if result["spoken"]:
+        house.tell(written, None, actions)
+
+
+def _tell_alert_chats(notify, chat_ids, skip: int, text: str) -> None:
+    """Escribe `text` a los chats de alertas menos a `skip`."""
+    for chat_id in chat_ids:
+        if chat_id == skip:
+            continue
+        try:
+            notify(chat_id, text)
+        except Exception:
+            log.exception("could not tell alert chat %s", chat_id)
 
 
 def _announce(house: HouseVoice, text: str, written: str | None = None, others=SAME) -> None:
@@ -810,10 +845,14 @@ def main() -> None:
         monitor = Monitor(
             checks=checks,
             store=StatusStore(db_path),
-            announce=lambda text, urgent, detail="": _alert(
-                house, text, urgent, detail, MONITOR_ACTIONS
+            announce=lambda text, urgent, detail="", check="": _alert(
+                house, text, urgent, detail, _monitor_actions(check)
             ),
             polish=polish,
+            remind=lambda text, name, detail="": _still_down(house, text, name, detail),
+            tell_others=lambda chat_id, text: _tell_alert_chats(
+                notifier, config.alert_recipients, chat_id, text
+            ),
         )
         log.info("vigilando %s servicios: %s", len(checks), ", ".join(c.name for c in checks))
     else:

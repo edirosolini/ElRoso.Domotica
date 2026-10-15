@@ -12,6 +12,8 @@ from pathlib import Path
 from homeauto.watch.checks import Check
 
 ALLOWED_FIELDS = {"name", "url", "host", "port", "expect", "urgent", "timeout", "attempts"}
+# Telegram corta `callback_data` en 64 bytes y el botón lleva "confirmar <nombre>".
+MAX_NAME_BYTES = 64 - len("confirmar ")
 
 
 class ChecksError(Exception):
@@ -47,6 +49,10 @@ def load_checks(path: Path | str) -> list[Check]:
         except (TypeError, ValueError) as exc:
             raise ChecksError(f"{path}: {exc}") from exc
 
+        if len(check.name.encode()) > MAX_NAME_BYTES:
+            raise ChecksError(
+                f"{path}: nombre demasiado largo, más de {MAX_NAME_BYTES} bytes: '{check.name}'"
+            )
         if check.name in seen:
             raise ChecksError(f"{path}: nombre repetido: '{check.name}'")
         seen.add(check.name)

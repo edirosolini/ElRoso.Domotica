@@ -7,7 +7,7 @@ declarar una caída.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 from homeauto.polish import as_is
@@ -17,6 +17,9 @@ from homeauto.watch.status import Status, StatusStore
 log = logging.getLogger(__name__)
 
 FAILURES_TO_DECLARE = 2
+# Los primeros re-avisos, contados desde el aviso de caída; después, uno cada `REMIND_EVERY`.
+REMIND_DELAYS = (timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=15))
+REMIND_EVERY = timedelta(minutes=30)
 
 
 def down_line(monitor, polish: Callable[..., str] = as_is) -> str:
@@ -46,10 +49,14 @@ class Monitor:
         clock: Callable[[], datetime] = datetime.now,
         failures_to_declare: int = FAILURES_TO_DECLARE,
         polish: Callable[..., str] = as_is,
+        remind: Callable[..., None] | None = None,
+        tell_others: Callable[[int, str], None] | None = None,
     ):
         self.checks = checks
         self.store = store
         self.announce = announce
+        self.remind = remind
+        self.tell_others = tell_others
         self.run = run
         self.http = http or HttpProbe()
         self.tcp = tcp or TcpProbe()
@@ -100,14 +107,56 @@ class Monitor:
                 message = self._say(f"{check.name} volvió a responder.", check.name)
                 self.announce(message, False, result.detail)
             self.store.save(Status(check.name, True, 0, False, result.detail, now))
+            self.store.clear_alert(check.name)
             return message
 
         failures += 1
-        message = None
         if not was_alerted and failures >= self.failures_to_declare:
+            # Se guarda antes de avisar: el botón de confirmar llega con el aviso.
+            self.store.clear_alert(check.name)
+            self.store.save(Status(check.name, False, failures, True, result.detail, now))
+            self.store.plan_reminder(check.name, 0, now + REMIND_DELAYS[0])
             message = self._say(f"Atención: {check.name} no responde.", check.name)
-            self.announce(message, result.urgent, result.detail)
-            was_alerted = True
+            self.announce(message, result.urgent, result.detail, check=check.name)
+            return message
 
         self.store.save(Status(check.name, False, failures, was_alerted, result.detail, now))
+        if was_alerted and self._reminder_due(previous, now):
+            return self._remind(check, previous.reminders + 1, result.detail, now)
+        return None
+
+    def _reminder_due(self, state: Status, now: datetime) -> bool:
+        """Si toca re-avisar una caída que nadie confirmó."""
+        return (
+            self.remind is not None
+            and not state.acked_by
+            and state.next_reminder is not None
+            and now >= state.next_reminder
+        )
+
+    def _remind(self, check: Check, count: int, detail: str, now: datetime) -> str:
+        """Re-avisa la caída y agenda el re-aviso siguiente."""
+        self.store.plan_reminder(check.name, count, now + _gap(count))
+        message = self._say(f"Atención: {check.name} sigue sin responder.", check.name)
+        self.remind(message, check.name, detail)
         return message
+
+    def acknowledge(self, name: str, who: str, chat_id: int) -> str:
+        """Confirma la caída de `name` a nombre de `who` y avisa a los otros chats de alertas."""
+        if name not in {check.name for check in self.checks}:
+            return f"No vigilo nada llamado {name}."
+        if self.store.acknowledge(name, who, self.clock()):
+            if self.tell_others is not None:
+                self.tell_others(chat_id, f"✅ {who} confirmó: {name} no responde")
+            return f"✅ Confirmado: {name} no responde. No vuelvo a avisar hasta que vuelva."
+        state = self.store.get(name)
+        if state is None or state.up or not state.alerted:
+            return f"{name} ya volvió a responder."
+        return f"La caída de {name} ya estaba confirmada por {state.acked_by}."
+
+
+def _gap(count: int) -> timedelta:
+    """Lo que falta del re-aviso número `count` al siguiente."""
+    if count < len(REMIND_DELAYS):
+        return REMIND_DELAYS[count] - REMIND_DELAYS[count - 1]
+    return REMIND_EVERY

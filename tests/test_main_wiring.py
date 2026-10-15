@@ -832,6 +832,50 @@ def test_the_watchers_alert_with_their_buttons(wired, tmp_path, monkeypatch):
     assert alerted == [main.MONITOR_ACTIONS, main.SEQ_ACTIONS]
 
 
+class _FakeNotifier:
+    """Anota lo que se escribiría a cada chat, como el `ChatNotifier` real."""
+
+    sent = []
+
+    def __init__(self, bot):
+        _FakeNotifier.sent = []
+
+    def bind(self, loop):
+        pass
+
+    def __call__(self, chat_id, text, actions=()):
+        _FakeNotifier.sent.append((chat_id, text, actions))
+
+
+def test_the_monitor_offers_to_confirm_reminds_and_tells_the_other_alert_chats(
+    wired, tmp_path, monkeypatch
+):
+    monitor = _spy_init(monkeypatch, main.Monitor)
+    monkeypatch.setattr(main, "ChatNotifier", _FakeNotifier)
+    checks = tmp_path / "checks.json"
+    checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
+    run_main(
+        monkeypatch,
+        config_file(
+            tmp_path, f"CHECKS_FILE={checks}\nALLOWED_CHAT_IDS=42,43,77\nALERT_CHAT_IDS=42,43\n"
+        ),
+    )
+    alerted = []
+    reminded = []
+    monkeypatch.setattr(main, "_alert", lambda *args: alerted.append(args[-1]))
+    monkeypatch.setattr(main, "_still_down", lambda *args: reminded.append(args))
+
+    monitor["announce"]("vpn no responde", True, "timeout", check="vpn")
+    monitor["remind"]("vpn sigue sin responder", "vpn", "timeout")
+    monitor["tell_others"](42, "✅ Eze confirmó: vpn no responde")
+
+    assert alerted == [main._monitor_actions("vpn")]
+    [(house, text, name, detail)] = reminded
+    assert isinstance(house, main.HouseVoice)
+    assert (text, name, detail) == ("vpn sigue sin responder", "vpn", "timeout")
+    assert _FakeNotifier.sent == [(43, "✅ Eze confirmó: vpn no responde", ())]
+
+
 def test_newcomers_are_announced_from_the_one_database(wired, tmp_path, monkeypatch):
     seen = _spy_init(monkeypatch, main.Strangers)
 
