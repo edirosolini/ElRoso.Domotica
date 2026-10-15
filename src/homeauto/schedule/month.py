@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Iterable
+from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING, Callable, Iterable
 
-from homeauto.schedule.history import CANCEL, DONE, OFF, SNOOZE, Entry
+from homeauto.schedule.history import CANCEL, DONE, HOLIDAY, OFF, SNOOZE, Entry
 from homeauto.schedule.store import (
     ALARM, DAILY, MONTHLY, ONCE, WEEKLY, Job, next_month, next_run, on_monthday,
 )
 from homeauto.timespec import next_weekday
+
+if TYPE_CHECKING:
+    from homeauto.holidays import Holiday
 
 ALARM_ITEM = "alarm"
 REMINDER_ITEM = "reminder"
@@ -31,6 +34,8 @@ class Item:
     cancelled: bool = False
     off: bool = False
     job_id: int | None = None
+    # Nombre del feriado por el que no suena; vacío si viene del historial.
+    holiday: str | None = None
 
 
 def item_kind(kind: str, repeat: str) -> str:
@@ -41,9 +46,16 @@ def item_kind(kind: str, repeat: str) -> str:
 
 
 def occurrences_between(
-    jobs: Iterable[Job], start: datetime, end: datetime, now: datetime
+    jobs: Iterable[Job],
+    start: datetime,
+    end: datetime,
+    now: datetime,
+    holidays: Callable[[date], Holiday | None] | None = None,
 ) -> list[Item]:
-    """Lo que los jobs van a hacer sonar entre `start` y `end`, desde `now` en adelante."""
+    """Lo que los jobs van a hacer sonar entre `start` y `end`, desde `now`, con sus feriados."""
+    # Import tardío: spec importa este módulo.
+    from homeauto.schedule.spec import skips
+
     since = max(start, now)
     found = []
     for job in jobs:
@@ -51,7 +63,13 @@ def occurrences_between(
         at = _first_from(job, since)
         while at is not None and at < end:
             if at >= since:
-                found.append(Item(at=at, kind=kind, message=job.message, job_id=job.id))
+                holiday = skips(job, at.date(), holidays)
+                found.append(
+                    Item(
+                        at=at, kind=kind, message=job.message, job_id=job.id,
+                        holiday=holiday.name if holiday is not None else None,
+                    )
+                )
             at = next_run(job, at)
     return sorted(found, key=lambda item: item.at)
 
@@ -77,11 +95,12 @@ def from_history(entry: Entry) -> Item:
         kind=item_kind(entry.kind, entry.repeat),
         message=entry.message,
         past=True,
-        silent=not entry.announced,
+        silent=not entry.announced and entry.closed != HOLIDAY,
         done=entry.closed == DONE,
         done_by=entry.done_by,
         nags=entry.nags,
         snoozed=entry.closed == SNOOZE,
         cancelled=entry.closed == CANCEL,
         off=entry.closed == OFF,
+        holiday="" if entry.closed == HOLIDAY else None,
     )

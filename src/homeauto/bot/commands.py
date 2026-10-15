@@ -35,16 +35,17 @@ from homeauto.schedule.spec import (
     repetition_label,
     resolve as resolve_when,
     short_month_note,
+    weekdays_label,
 )
 from homeauto.schedule.store import ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY
 from homeauto.quiet import Hush
 from homeauto.timespec import (
     TimeSpecError,
-    format_weekdays,
     parse_duration,
     parse_monthday,
     parse_schedule,
     parse_weekdays,
+    skips_holidays,
 )
 from homeauto.voice.caster import CastError
 from homeauto.voice.registry import UnknownDevice
@@ -133,6 +134,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /recordar mensual 10 9:00 pagar la luz — el 10 de cada mes
 /alarma 7:30 arriba — para despertarse; suena fuerte
 /alarma diaria 7:30 arriba — todos los días · /alarma lun-vie 5:30 arriba
+/alarma hábiles 6:30 arriba — no suena en feriados
 /alarma mensual 10 9:00 pagar la luz — el 10 de cada mes
 /lista — lo que está programado
 /cancelar <n> — cancela uno
@@ -1108,6 +1110,7 @@ class Commands:
         days: tuple[int, ...] | None = None,
         kind: str = ALARM,
         monthday: int | None = None,
+        skip_holidays: bool = False,
     ) -> str:
         denial = self._denial(chat_id)
         if denial:
@@ -1131,7 +1134,7 @@ class Commands:
 
         job = self.reminders.add(
             chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days, kind=kind,
-            monthday=monthday,
+            monthday=monthday, skip_holidays=skip_holidays,
         )
         offer(_cancel_button(job.id))
         reply = (
@@ -1191,9 +1194,10 @@ class Commands:
             # una hora: "lun-vie 10m" significaría diez minutos desde ahora.
             if not _CLOCK.fullmatch(tail.strip().split(" ")[0]):
                 return f"Con días de la semana necesito una hora. Ej: {example}"
+            skip = skips_holidays(head)
             return self._schedule(
-                chat_id, prefix + tail, WEEKLY, f"{noun} {format_weekdays(days)}",
-                days=days, kind=kind,
+                chat_id, prefix + tail, WEEKLY, f"{noun} {weekdays_label(days, skip)}",
+                days=days, kind=kind, skip_holidays=skip,
             )
 
         if kind == REMINDER:

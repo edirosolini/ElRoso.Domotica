@@ -24,6 +24,7 @@ CASES = (
     ("recordame tomar la pastilla todos los días a las ocho", "recordar", "8:00"),
     ("recordame de lunes a viernes a las 7:30 salir al colegio", "recordar", "colegio"),
     ("recordame el 10 de cada mes a las nueve pagar la luz", "recordar", "mensual 10"),
+    ("recordame los días hábiles a las siete salida al colegio", "recordar", "hábiles"),
     ("recordame mañana a las diez llamar al médico", "timer", "10:00"),
     ("qué tengo programado", "lista", ""),
     ("cancelá el 3", "cancelar", "3"),

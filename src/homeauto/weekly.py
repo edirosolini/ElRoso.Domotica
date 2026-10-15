@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Callable
 
-from homeauto.schedule.history import DONE, Entry, HistoryStore
+from homeauto.schedule.history import DONE, HOLIDAY, Entry, HistoryStore
 from homeauto.schedule.reminders import RING_LIMIT
 from homeauto.schedule.store import ALARM, ONCE, REMINDER
 from homeauto.timespec import DAY_NAMES
@@ -43,7 +43,10 @@ class Weekly:
     def text(self) -> str:
         """El balance de los últimos siete días, o "" si no sonó nada que contar."""
         now = self.clock()
-        fired = self.history.between(now - WINDOW, now)
+        # Deja afuera lo salteado por feriado.
+        fired = [
+            entry for entry in self.history.between(now - WINDOW, now) if entry.closed != HOLIDAY
+        ]
         # Deja afuera los timers, salvo lo pospuesto de un recordatorio que repite.
         repeating = {entry.message for entry in fired if entry.kind == REMINDER and entry.repeat != ONCE}
         entries = [

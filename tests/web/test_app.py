@@ -118,12 +118,15 @@ def test_the_agenda_has_a_form_to_write_and_the_script_uses_it(app):
     script = get(app, "/static/app.js").body.decode("utf-8")
 
     for field in ("editor-type", "editor-message", "editor-when", "editor-repeat",
-                  "editor-device", "editor-author", "detail-edit", "detail-delete", "new-job"):
+                  "editor-device", "editor-author", "editor-holidays", "detail-edit",
+                  "detail-delete", "new-job"):
         assert f'id="{field}"' in page, field
     assert 'maxlength="500"' in page
     assert "/api/jobs" in script and "/api/people" in script
     assert '"Content-Type": "application/json"' in script
     assert "innerHTML" not in script
+    assert "No suena en feriados" in page
+    assert "skip_holidays" in script
 
 
 def test_the_agenda_has_its_own_bar_and_four_views(app):

@@ -7,10 +7,11 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from homeauto.agenda.ical import CalendarClient
+from homeauto.holidays import BRIDGE, MOVABLE, Holiday, HolidayStore
 from homeauto.lists import ListStore
 from homeauto.quiet import Hush, HushStore, QuietHours
 from homeauto.schedule.history import HistoryStore
-from homeauto.schedule.store import DAILY, REMINDER, Store
+from homeauto.schedule.store import DAILY, REMINDER, WEEKLY, Store
 from homeauto.weather import WeatherClient
 from homeauto.web.board import KIND_COLORS, MAX_RANGE, PALETTE, Board, RangeError, sky_icon
 
@@ -100,10 +101,11 @@ def parts(tmp_path):
         "history": HistoryStore(db),
         "lists": ListStore(db),
         "hush": HushStore(db),
+        "holidays": HolidayStore(db),
     }
 
 
-def board(parts, clock=None, calendar=None, weather=None, quiet=None):
+def board(parts, clock=None, calendar=None, weather=None, quiet=None, holidays=None):
     return Board(
         store=parts["store"],
         history=parts["history"],
@@ -113,6 +115,7 @@ def board(parts, clock=None, calendar=None, weather=None, quiet=None):
         weather=weather,
         lists=parts["lists"],
         quiet=quiet,
+        holidays=holidays,
     )
 
 
@@ -605,3 +608,112 @@ def test_an_alarm_turned_off_is_marked_with_who(parts):
     [off] = board(parts).events(datetime(2026, 10, 1), datetime(2026, 10, 2))["events"]
 
     assert "🔕 apagada Eze" in off["extendedProps"]["marks"]
+
+
+# --- feriados ---
+
+COLUMBUS = Holiday(datetime(2026, 10, 12).date(), MOVABLE, "Día del Respeto a la Diversidad Cultural")
+BRIDGE_DAY = Holiday(datetime(2026, 10, 9).date(), BRIDGE, "Puente turístico no laborable")
+
+
+def with_holidays(parts):
+    parts["holidays"].replace(2026, [BRIDGE_DAY, COLUMBUS])
+    return parts["holidays"]
+
+
+def school(parts, skip=True):
+    return parts["store"].add(
+        42, datetime(2026, 10, 6, 7, 0), "el colegio", repeat=WEEKLY, days=(1, 2, 3, 4, 5),
+        kind=REMINDER, skip_holidays=skip,
+    )
+
+
+def test_a_holiday_is_an_all_day_event(parts):
+    found = board(parts, holidays=with_holidays(parts)).events(
+        datetime(2026, 10, 12), datetime(2026, 10, 13)
+    )["events"]
+
+    [holiday] = found
+    assert holiday["allDay"] is True
+    assert holiday["start"] == "2026-10-12"
+    assert holiday["end"] == "2026-10-13"
+    assert "Diversidad Cultural" in holiday["title"]
+    assert holiday["extendedProps"]["source"] == "feriado"
+
+
+def test_a_bridge_is_shown_too(parts):
+    found = board(parts, holidays=with_holidays(parts)).events(
+        datetime(2026, 10, 9), datetime(2026, 10, 10)
+    )["events"]
+
+    assert ["Puente" in event["title"] for event in found] == [True]
+
+
+def test_what_skips_a_holiday_is_marked_and_not_hidden(parts):
+    school(parts)
+
+    found = board(parts, holidays=with_holidays(parts)).events(
+        datetime(2026, 10, 12), datetime(2026, 10, 14)
+    )["events"]
+
+    house = [event for event in found if event["extendedProps"]["source"] == "casa"]
+    assert [event["start"] for event in house] == ["2026-10-12T07:00:00", "2026-10-13T07:00:00"]
+    assert "🏖 feriado, no suena" in house[0]["extendedProps"]["marks"]
+    assert "feriado" in house[0]["title"]
+    assert house[1]["extendedProps"]["marks"] == []
+
+
+def test_without_the_flag_a_holiday_is_not_marked(parts):
+    school(parts, skip=False)
+
+    found = board(parts, holidays=with_holidays(parts)).events(
+        datetime(2026, 10, 12), datetime(2026, 10, 13)
+    )["events"]
+
+    house = [event for event in found if event["extendedProps"]["source"] == "casa"]
+    assert house[0]["extendedProps"]["marks"] == []
+
+
+def test_what_was_skipped_for_a_holiday_is_not_unsaid(parts):
+    history = parts["history"]
+    history.record(7, 42, REMINDER, WEEKLY, "el colegio", datetime(2026, 10, 5, 7, 0))
+    history.mark_closed(7, "holiday", datetime(2026, 10, 5, 7, 0))
+
+    [event] = board(parts).events(*WEEK)["events"]
+
+    assert event["extendedProps"]["marks"] == ["🏖 feriado"]
+
+
+def test_next_skips_what_does_not_ring_on_a_holiday(parts):
+    school(parts)
+    parts["store"].add(42, datetime(2026, 10, 12, 9, 0), "la pizza")
+
+    upcoming = board(parts, clock=Clock(datetime(2026, 10, 12, 6, 0)),
+                     holidays=with_holidays(parts)).screen()["next"]
+
+    assert upcoming["title"] == "⏰ la pizza"
+
+
+def test_today_shows_the_holiday(parts):
+    screen = board(parts, clock=Clock(datetime(2026, 10, 12, 6, 0)),
+                   holidays=with_holidays(parts)).screen()
+
+    assert ["Diversidad Cultural" in item["title"] for item in screen["today"]] == [True]
+    assert screen["today"][0]["time"] is None
+
+
+def test_broken_holidays_leave_the_rest_of_the_board(parts):
+    class Broken:
+        def get(self, day):
+            raise RuntimeError("sin base")
+
+        def between(self, start, end):
+            raise RuntimeError("sin base")
+
+    school(parts)
+
+    found = board(parts, holidays=Broken()).events(
+        datetime(2026, 10, 12), datetime(2026, 10, 13)
+    )["events"]
+
+    assert [event["start"] for event in found] == ["2026-10-12T07:00:00"]

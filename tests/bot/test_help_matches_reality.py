@@ -21,3 +21,9 @@ def test_help_mentions_the_commands_people_actually_need():
 def test_help_names_the_monthly_form_of_reminders_and_alarms():
     assert "/recordar mensual 10 9:00 pagar la luz" in HELP
     assert "/alarma mensual 10 9:00 pagar la luz" in HELP
+
+
+def test_help_names_the_working_days_that_skip_holidays():
+    line = next(line for line in HELP.splitlines() if "/alarma hábiles 6:30 arriba" in line)
+
+    assert "feriados" in line

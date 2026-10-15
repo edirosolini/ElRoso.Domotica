@@ -1,12 +1,15 @@
 """Las reglas de lo programado, compartidas por el chat y la pantalla."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
+from homeauto.holidays import BRIDGE, FIXED, MOVABLE, Holiday
+
 from homeauto.schedule.month import ALARM_ITEM, REMINDER_ITEM, TIMER_ITEM
 from homeauto.schedule.spec import (
-    SpecError, classify, repetition_label, resolve, ringing_label, short_month_note,
+    SpecError, check_skip_holidays, classify, repetition_label, resolve, ringing_label,
+    short_month_note, skips,
 )
 from homeauto.schedule.store import ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY, Job
 
@@ -157,3 +160,63 @@ def test_the_repetition_when_it_rings_has_no_digits():
     assert ringing_of(MONTHLY, monthday=10) == "del diez de cada mes"
     assert ringing_of(MONTHLY, monthday=31) == "del treinta y uno de cada mes"
     assert ringing_of(MONTHLY, monthday=1) == "del uno de cada mes"
+
+
+# --- los feriados ---
+
+COLUMBUS = date(2026, 10, 12)
+HOLIDAYS = {
+    COLUMBUS: Holiday(COLUMBUS, MOVABLE, "Día del Respeto a la Diversidad Cultural"),
+    date(2026, 12, 25): Holiday(date(2026, 12, 25), FIXED, "Navidad"),
+    date(2026, 12, 7): Holiday(date(2026, 12, 7), BRIDGE, "Puente turístico no laborable"),
+}
+
+
+def weekdays_job(skip=True, repeat=WEEKLY, days="1,2,3,4,5"):
+    return Job(
+        id=1, chat_id=42, when=NOW, message="el colegio", repeat=repeat, days=days,
+        kind=REMINDER, skip_holidays=skip,
+    )
+
+
+def test_a_job_that_skips_holidays_is_quiet_on_one():
+    assert skips(weekdays_job(), COLUMBUS, HOLIDAYS.get) == HOLIDAYS[COLUMBUS]
+    assert skips(weekdays_job(), date(2026, 12, 25), HOLIDAYS.get) == HOLIDAYS[date(2026, 12, 25)]
+
+
+def test_a_working_day_is_not_skipped():
+    assert skips(weekdays_job(), date(2026, 10, 13), HOLIDAYS.get) is None
+
+
+def test_a_bridge_still_rings():
+    assert skips(weekdays_job(), date(2026, 12, 7), HOLIDAYS.get) is None
+
+
+def test_a_job_without_the_flag_rings_on_a_holiday():
+    assert skips(weekdays_job(skip=False), COLUMBUS, HOLIDAYS.get) is None
+
+
+def test_without_holidays_everything_rings():
+    assert skips(weekdays_job(), COLUMBUS, None) is None
+    assert skips(weekdays_job(), COLUMBUS, lambda day: None) is None
+
+
+@pytest.mark.parametrize("repeat", [ONCE, DAILY, MONTHLY])
+def test_skipping_holidays_is_only_for_weekdays(repeat):
+    with pytest.raises(SpecError, match="días de la semana"):
+        check_skip_holidays(repeat, True)
+
+
+@pytest.mark.parametrize("repeat", [ONCE, DAILY, WEEKLY, MONTHLY])
+def test_not_skipping_holidays_is_always_fine(repeat):
+    check_skip_holidays(repeat, False)
+
+
+def test_weekly_skipping_holidays_is_fine():
+    check_skip_holidays(WEEKLY, True)
+
+
+def test_the_repetition_tells_it_skips_holidays():
+    assert repetition_label(weekdays_job()) == "días hábiles"
+    assert repetition_label(weekdays_job(days="1,3")) == "lun, mié, sin feriados"
+    assert repetition_label(weekdays_job(skip=False)) == "lun, mar, mié, jue, vie"

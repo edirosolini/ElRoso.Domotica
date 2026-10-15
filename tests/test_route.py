@@ -194,3 +194,18 @@ def test_the_router_measurement_covers_the_monthly_form():
     from deploy.measure_router import CASES
 
     assert ("recordame el 10 de cada mes a las nueve pagar la luz", "recordar", "mensual 10") in CASES
+
+
+def test_the_prompt_names_the_working_days_that_skip_holidays():
+    from homeauto.route import PROMPT
+
+    assert '"hábiles 7:00 salida al colegio"' in PROMPT
+    assert "feriados" in PROMPT
+
+
+def test_the_router_measurement_covers_the_working_days():
+    from deploy.measure_router import CASES
+
+    assert (
+        "recordame los días hábiles a las siete salida al colegio", "recordar", "hábiles"
+    ) in CASES

@@ -14,6 +14,7 @@ DONE = "done"
 SNOOZE = "snooze"
 CANCEL = "cancel"
 OFF = "off"
+HOLIDAY = "holiday"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS fired_history (
@@ -138,15 +139,15 @@ class HistoryStore:
         )
 
     def mark_closed(self, job_id: int, how: str, at: datetime) -> bool:
-        """Cierra el último aviso abierto del job como pospuesto o cancelado; False si no había."""
+        """Cierra el último aviso abierto del job como pospuesto, cancelado o feriado; False si no había."""
         if how == SNOOZE:
             return self._update(
                 job_id,
                 "snoozed_at = ?, closed = ?, closed_at = ?",
                 (at.isoformat(), SNOOZE, at.isoformat()),
             )
-        if how == CANCEL:
-            return self._update(job_id, "closed = ?, closed_at = ?", (CANCEL, at.isoformat()))
+        if how in (CANCEL, HOLIDAY):
+            return self._update(job_id, "closed = ?, closed_at = ?", (how, at.isoformat()))
         raise ValueError(f"unknown way of closing: {how}")
 
     def between(self, start: datetime, end: datetime) -> list[Entry]:

@@ -171,3 +171,21 @@ def test_a_reminder_never_offers_once():
 
 def test_monthly_is_not_one_of_the_offered_repetitions():
     assert all("mes" not in answer for _, answer in slots.REPEAT.choices)
+
+
+# --- hábiles ---
+
+
+@pytest.mark.parametrize("command", ["alarma", "recordar"])
+def test_working_days_already_say_how_it_repeats(command):
+    assert slots.missing(command, "hábiles 7:00 salida al colegio") is None
+
+
+@pytest.mark.parametrize("command", ["alarma", "recordar"])
+def test_working_days_without_an_hour_ask_for_it(command):
+    assert slots.missing(command, "hábiles") == slots.TIME
+
+
+@pytest.mark.parametrize("command", ["alarma", "recordar"])
+def test_working_days_with_an_hour_ask_for_the_message(command):
+    assert slots.missing(command, "habiles 7:00") == slots.MESSAGE

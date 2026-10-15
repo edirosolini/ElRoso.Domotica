@@ -39,7 +39,7 @@ class FakeReminders:
         self.added = []
 
     def add(self, chat_id, when, message, repeat="once", device="", days=None, kind="alarm",
-            monthday=None):
+            monthday=None, skip_holidays=False):
         self.added.append((chat_id, when, message, repeat, days))
 
         class Job:

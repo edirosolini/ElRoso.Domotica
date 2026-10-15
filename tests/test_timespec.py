@@ -9,6 +9,7 @@ from homeauto.timespec import (
     parse_monthday,
     parse_schedule,
     parse_weekdays,
+    skips_holidays,
 )
 
 NOW = datetime(2026, 8, 29, 21, 0)  # sábado 21:00
@@ -183,3 +184,16 @@ def test_monthly_without_a_day_number_is_rejected(token):
 
 def test_the_range_of_the_day_is_left_to_the_rules():
     assert parse_monthday("mensual", "32") == 32
+
+
+# --- hábiles saltea feriados ---
+
+
+@pytest.mark.parametrize("token", ["hábiles", "habiles", "Hábiles", "hábiles,sáb"])
+def test_working_days_skip_holidays(token):
+    assert skips_holidays(token) is True
+
+
+@pytest.mark.parametrize("token", ["lun-vie", "semana", "lun,mar,mie,jue,vie", "finde", ""])
+def test_other_days_do_not_skip_holidays(token):
+    assert skips_holidays(token) is False

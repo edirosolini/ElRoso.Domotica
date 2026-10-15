@@ -73,4 +73,10 @@ assert.deepStrictEqual(agenda.repeatRule("timer", "monthly"), {
 // Un recordatorio no puede ser de una sola vez.
 assert.strictEqual(agenda.repeatRule("reminder", "once").repeat, "daily");
 
+// «No suena en feriados» solo vale con días de la semana.
+assert.strictEqual(agenda.skipsHolidays(agenda.repeatRule("alarm", "weekly"), true), true);
+assert.strictEqual(agenda.skipsHolidays(agenda.repeatRule("alarm", "weekly"), false), false);
+assert.strictEqual(agenda.skipsHolidays(agenda.repeatRule("alarm", "daily"), true), false);
+assert.strictEqual(agenda.skipsHolidays(agenda.repeatRule("timer", "weekly"), true), false);
+
 console.log("ok");
