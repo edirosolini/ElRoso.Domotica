@@ -37,6 +37,7 @@ class Announcer:
         actions: tuple[tuple[str, str], ...] = (),
         chat_ids: Iterable[int] = (),
         reminder_actions: tuple[tuple[str, str], ...] = (),
+        ring_actions: tuple[tuple[str, str], ...] = (),
     ):
         self.speakers = speakers
         self.notify = notify
@@ -49,10 +50,13 @@ class Announcer:
         self.actions = actions
         # Los de un recordatorio; `{job}` se reemplaza por su número.
         self.reminder_actions = reminder_actions
+        # Los de una alarma que sigue sonando.
+        self.ring_actions = ring_actions
         # Los chats que reciben el aviso; vacío es solo el que lo pidió.
         self.chat_ids = list(chat_ids)
 
-    def __call__(self, job: Job) -> None:
+    def __call__(self, job: Job, rings: int = 0, write: bool = True) -> None:
+        """Dice el job y lo escribe; `rings` es la repetición y `write` si va al chat."""
         problem = None
         resting = self.quiet is not None and self.quiet.is_quiet(self.clock())
         message = self.polish(job.message)
@@ -64,15 +68,21 @@ class Announcer:
             for alias in job.devices or [self.fallback]:
                 try:
                     self.speakers.get(alias).say(
-                        message, chime=self._sound(job), min_volume=self._floor(job)
+                        message, chime=self._sound(job, rings), min_volume=self._floor(job)
                     )
                 except DEVICE_ERRORS as exc:
                     problems.append(f"{alias}: {exc}")
                     log.warning("el job %s no sonó en %s: %s", job.id, alias, exc)
             problem = "; ".join(problems) if problems else None
 
-        text = self._text(message, job, problem, resting)
-        actions = self._actions(job)
+        if not write:
+            return
+        if rings:
+            text = self._ringing_text(job, problem, resting)
+            actions = _numbered(self.ring_actions, job)
+        else:
+            text = self._text(message, job, problem, resting)
+            actions = self._actions(job)
         for chat_id in self.chat_ids or [job.chat_id]:
             try:
                 if actions:
@@ -83,9 +93,19 @@ class Announcer:
                 # El parlante puede ya haber hablado; un chat roto no deshace eso.
                 log.exception("no se pudo avisar al chat %s del job %s", chat_id, job.id)
 
+    def stop(self, devices: Iterable[str]) -> None:
+        """Corta lo que esté sonando en esos equipos, o en el de siempre."""
+        for alias in list(devices) or [self.fallback]:
+            try:
+                self.speakers.get(alias).stop()
+            except Exception:
+                log.exception("could not stop %s", alias)
+
     @staticmethod
-    def _sound(job: Job) -> str:
-        return chime.SOFT if job.is_reminder else chime.WAKE
+    def _sound(job: Job, rings: int = 0) -> str:
+        if job.is_reminder:
+            return chime.SOFT
+        return chime.WAKE_LEVELS[min(rings, len(chime.WAKE_LEVELS) - 1)]
 
     @staticmethod
     def _floor(job: Job) -> int | None:
@@ -94,10 +114,11 @@ class Announcer:
 
     def _actions(self, job: Job) -> tuple[tuple[str, str], ...]:
         if not job.is_reminder:
-            return self.actions
-        return tuple(
-            (label, data.format(job=job.id)) for label, data in self.reminder_actions
-        ) or self.actions
+            return _numbered(self.actions, job)
+        return _numbered(self.reminder_actions, job) or _numbered(self.actions, job)
+
+    def _ringing_text(self, job: Job, problem: str | None, resting: bool) -> str:
+        return self._tail(f"⏰ Sigue sonando: «{job.message}»", problem, resting)
 
     def _text(self, message: str, job: Job, problem: str | None, resting: bool = False) -> str:
         icon, noun = ("🔔", "recordatorio") if job.is_reminder else ("⏰", "alarma")
@@ -106,8 +127,17 @@ class Announcer:
             text += f"\n({noun} de todos los días)"
         elif job.is_weekly:
             text += f"\n({noun} de {format_weekdays(job.weekdays)})"
+        return self._tail(text, problem, resting)
+
+    def _tail(self, text: str, problem: str | None, resting: bool) -> str:
+        """Suma al texto por qué no se dijo en voz alta, si no se dijo."""
         if resting:
             text += f"\n\nHorario de descanso ({self.quiet.label}): no lo dije en voz alta."
         elif problem:
             text += f"\n\nNo pude decirlo en voz alta: {problem}"
         return text
+
+
+def _numbered(actions: tuple[tuple[str, str], ...], job: Job) -> tuple[tuple[str, str], ...]:
+    """Los botones con `{job}` reemplazado por el número del job."""
+    return tuple((label, data.format(job=job.id)) for label, data in actions)

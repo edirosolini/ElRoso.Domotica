@@ -594,3 +594,14 @@ def test_today_carries_the_bare_title_and_how_it_ended(parts):
         ("Fútbol", ""),
         ("⏰ la basura", ""),
     ]
+
+
+def test_an_alarm_turned_off_is_marked_with_who(parts):
+    history = parts["history"]
+    at = datetime(2026, 10, 1, 9, 0)
+    history.record(1, 42, "alarm", "once", "arriba", at)
+    history.mark_off(1, at, "Eze")
+
+    [off] = board(parts).events(datetime(2026, 10, 1), datetime(2026, 10, 2))["events"]
+
+    assert "🔕 apagada Eze" in off["extendedProps"]["marks"]

@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timedelta
 
-from homeauto.schedule.history import CANCEL, DONE, SNOOZE, Entry
+from homeauto.schedule.history import CANCEL, DONE, OFF, SNOOZE, Entry
 from homeauto.schedule.month import (
     ALARM_ITEM,
     REMINDER_ITEM,
@@ -220,3 +220,12 @@ def test_the_history_keeps_how_each_one_ended():
     assert snoozed.snoozed and not snoozed.done
     assert cancelled.cancelled
     assert silent.silent and not done.silent
+
+
+def test_an_alarm_turned_off_shows_as_off():
+    at = datetime(2026, 10, 2, 8, 0)
+
+    item = from_history(entry(at, closed=OFF, done_by="Eze", nags=3))
+
+    assert item.off and item.done_by == "Eze" and item.nags == 3
+    assert not item.done and not item.cancelled

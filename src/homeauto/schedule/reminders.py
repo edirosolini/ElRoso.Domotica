@@ -13,6 +13,7 @@ from typing import Callable, Iterable, Protocol
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import CANCEL, SNOOZE, HistoryStore
+from homeauto.schedule.ringing import Ringing, RingingStore
 from homeauto.schedule.store import ALARM, ONCE, Job, Store, next_run
 
 log = logging.getLogger(__name__)
@@ -23,6 +24,12 @@ SNOOZE_WINDOW = timedelta(minutes=30)
 # Cada cuánto y cuántas veces vuelve a avisar por el chat un recordatorio sin «Hecho».
 NAG_DELAY = timedelta(minutes=5)
 NAG_LIMIT = 3
+
+# Una alarma vuelve a sonar un minuto después de terminar, hasta media hora desde que sonó.
+RING_DELAY = timedelta(minutes=1)
+RING_LIMIT = timedelta(minutes=30)
+# Cada cuántas repeticiones se escribe al chat.
+RING_WRITE_EVERY = 5
 
 
 class Timer(Protocol):
@@ -43,6 +50,8 @@ class Reminders:
         notify: Callable[..., None] | None = None,
         nag_actions: tuple[tuple[str, str], ...] = (),
         history: HistoryStore | None = None,
+        ringing: RingingStore | None = None,
+        stop_audio: Callable[[list[str]], None] | None = None,
     ):
         self.store = store
         self.timer = timer
@@ -50,6 +59,9 @@ class Reminders:
         self.fired = fired
         self.awaiting = awaiting
         self.history = history
+        self.ringing = ringing
+        # Corta el audio en curso en esos equipos.
+        self.stop_audio = stop_audio
         self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
@@ -60,6 +72,12 @@ class Reminders:
     def start(self, now: datetime | None = None) -> None:
         """Rearma todo tras un reinicio, disparando lo que se haya perdido."""
         now = now or datetime.now()
+        if self.ringing is not None:
+            for ringing in self.ringing.all():
+                if ringing.next_ring is None or ringing.next_ring <= now:
+                    self._ring(ringing.job_id)
+                else:
+                    self._arm_ring(ringing.job_id, ringing.next_ring)
         if self._nags():
             for wait in self.awaiting.due_nags():
                 job = self.store.get(wait.job_id)
@@ -116,7 +134,8 @@ class Reminders:
         if job is None or (not any_owner and job.chat_id != chat_id):
             return False
         self.timer.unschedule(str(job_id))
-        if self._close_wait(job_id):
+        rang = self._stop_ringing(job_id) is not None
+        if self._close_wait(job_id) or rang:
             now = self.clock()
             self._write_history(lambda history: history.mark_closed(job_id, CANCEL, now))
         return self.store.remove(job_id)
@@ -146,6 +165,7 @@ class Reminders:
         for chat in self._audience(chat_id):
             self.fired.forget(chat)
         if last.job_id is not None:
+            self._stop_ringing(last.job_id)
             self._close_wait(last.job_id)
             self._write_history(lambda history: history.mark_closed(last.job_id, SNOOZE, now))
         return self.add(chat_id, now + delay, last.message, device=last.device, kind=last.kind)
@@ -173,8 +193,79 @@ class Reminders:
                 log.exception("no se pudo avisar al chat %s del hecho %s", chat, job_id)
         return message
 
+    def silence(self, chat_id: int, job_id: int, who: str) -> str | None:
+        """Apaga la alarma que suena y avisa al resto; None si ya estaba apagada."""
+        ringing = self._stop_ringing(job_id)
+        if ringing is None:
+            return None
+        if self.stop_audio is not None:
+            try:
+                self.stop_audio(_ringing_job(ringing).devices)
+            except Exception:
+                log.exception("could not stop the audio of job %s", job_id)
+        audience = self._audience(chat_id)
+        if self.fired is not None:
+            for chat in audience:
+                if (last := self.fired.last(chat)) and last.job_id == job_id:
+                    self.fired.forget(chat)
+        now = self.clock()
+        self._write_history(lambda history: history.mark_off(job_id, now, who))
+        self._tell_others(chat_id, f"🔕 {who} apagó la alarma: «{ringing.message}»")
+        return ringing.message
+
     def _audience(self, chat_id: int | None) -> list[int]:
         return self.chat_ids or ([chat_id] if chat_id is not None else [])
+
+    def _tell_others(self, chat_id: int, text: str) -> None:
+        """Escribe a todos los chats menos al que tocó el botón."""
+        for chat in self._audience(chat_id):
+            if chat != chat_id:
+                self._write(chat, text)
+
+    def _stop_ringing(self, job_id: int) -> Ringing | None:
+        """Deja de repetir la alarma; devuelve lo que sonaba, o None si no sonaba."""
+        self.timer.unschedule(_ring_key(job_id))
+        if self.ringing is None:
+            return None
+        return self.ringing.take(job_id)
+
+    def _arm_ring(self, job_id: int, when: datetime) -> None:
+        self.timer.schedule(_ring_key(job_id), when, lambda: self._ring(job_id))
+
+    def _next_ring(self, job_id: int, fired_at: datetime) -> None:
+        """Agenda la repetición siguiente, sin pasar el tope; nada si ya la apagaron."""
+        when = min(self.clock() + RING_DELAY, fired_at + RING_LIMIT)
+        if self.ringing.set_next(job_id, when):
+            self._arm_ring(job_id, when)
+
+    def _ring(self, job_id: int) -> None:
+        """Vuelve a hacer sonar una alarma que nadie apagó, o la cierra en el tope."""
+        ringing = self.ringing.get(job_id)
+        if ringing is None:
+            return
+        if self.clock() - ringing.fired_at >= RING_LIMIT:
+            if self._stop_ringing(job_id) is not None:
+                for chat in self._audience(ringing.chat_id):
+                    self._write(chat, f"⏰ Dejé de sonar: «{ringing.message}», nadie la apagó")
+            return
+
+        rings = ringing.rings + 1
+        self.ringing.mark_rang(job_id)
+        self._write_history(lambda history: history.mark_nag(job_id))
+        try:
+            self.announce(_ringing_job(ringing), rings=rings, write=rings % RING_WRITE_EVERY == 0)
+        except Exception:
+            log.exception("could not ring job %s again", job_id)
+        self._next_ring(job_id, ringing.fired_at)
+
+    def _write(self, chat: int, text: str) -> None:
+        """Escribe a un chat sin que una falla frene a los demás."""
+        if self.notify is None:
+            return
+        try:
+            self.notify(chat, text)
+        except Exception:
+            log.exception("could not tell chat %s", chat)
 
     def _nags(self) -> bool:
         return self.awaiting is not None and self.notify is not None
@@ -246,6 +337,9 @@ class Reminders:
             if next_nag is not None:
                 self._arm_nag(job.id, job.chat_id, next_nag)
         fired_at = self.clock()
+        rings = self.ringing is not None and job.kind == ALARM
+        if rings:
+            self.ringing.remember(job.id, job.chat_id, job.message, job.device, fired_at)
         self._write_history(
             lambda history: history.record(
                 job.id, job.chat_id, job.kind, job.repeat, job.message, fired_at
@@ -259,6 +353,8 @@ class Reminders:
             log.exception("no se pudo anunciar el job %s", job_id)
         else:
             self._write_history(lambda history: history.mark_announced(job.id))
+        if rings:
+            self._next_ring(job.id, fired_at)
 
         next_time = next_run(job, job.when)
         if next_time is None:
@@ -267,6 +363,22 @@ class Reminders:
         else:
             self.store.reschedule(job_id, next_time)
             self._arm(self.store.get(job_id))
+
+
+def _ring_key(job_id: int) -> str:
+    """La clave del timer de la repetición, distinta de la del job y la del re-aviso."""
+    return f"ring:{job_id}"
+
+
+def _ringing_job(ringing: Ringing) -> Job:
+    """La alarma que suena como job, aunque ya no esté en `jobs`."""
+    return Job(
+        id=ringing.job_id,
+        chat_id=ringing.chat_id,
+        when=ringing.fired_at,
+        message=ringing.message,
+        device=ringing.devices,
+    )
 
 
 def _nag_key(job_id: int) -> str:

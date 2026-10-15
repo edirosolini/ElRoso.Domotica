@@ -52,6 +52,7 @@ from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
+from homeauto.schedule.ringing import RingingStore
 from homeauto.schedule.store import Store
 from homeauto.people import People, PeopleStore
 from homeauto.strangers import Strangers, StrangerStore
@@ -182,6 +183,8 @@ SNOOZE_ACTIONS = (("Posponer 10 min", "posponer 10m"), ("Posponer 30 min", "posp
 # `{job}` lo completa quien avisa con el número del recordatorio.
 DONE_ACTIONS = (("✅ Hecho", "hecho {job}"),)
 REMINDER_ACTIONS = DONE_ACTIONS + SNOOZE_ACTIONS
+OFF_ACTIONS = (("🔕 Apagar", "callar {job}"),)
+ALARM_ACTIONS = OFF_ACTIONS + SNOOZE_ACTIONS
 MONITOR_ACTIONS = (("Ver estado", "estado"), ("Silenciar 1 h", "silencio 1h"))
 SEQ_ACTIONS = (("Silenciar 1 h", "silencio 1h"),)
 
@@ -749,22 +752,26 @@ def main() -> None:
     hush = Hush(hours=config.quiet_hours, store=HushStore(db_path))
     store = Store(db_path)
     history = HistoryStore(db_path)
+    announcer = Announcer(
+        speakers=speakers,
+        notify=notifier,
+        fallback=config.default_device,
+        quiet=hush,
+        polish=polish,
+        actions=ALARM_ACTIONS,
+        reminder_actions=REMINDER_ACTIONS,
+        ring_actions=OFF_ACTIONS,
+        chat_ids=config.allowed_chat_ids,
+    )
     reminders = Reminders(
         store=store,
         timer=JobQueueTimer(app.job_queue),
-        announce=Announcer(
-            speakers=speakers,
-            notify=notifier,
-            fallback=config.default_device,
-            quiet=hush,
-            polish=polish,
-            actions=SNOOZE_ACTIONS,
-            reminder_actions=REMINDER_ACTIONS,
-            chat_ids=config.allowed_chat_ids,
-        ),
+        announce=announcer,
         fired=FiredStore(db_path),
         awaiting=AwaitingStore(db_path),
         history=history,
+        ringing=RingingStore(db_path),
+        stop_audio=announcer.stop,
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
         nag_actions=DONE_ACTIONS,

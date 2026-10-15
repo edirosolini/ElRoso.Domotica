@@ -13,6 +13,7 @@ KEEP = timedelta(days=365)
 DONE = "done"
 SNOOZE = "snooze"
 CANCEL = "cancel"
+OFF = "off"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS fired_history (
@@ -126,6 +127,14 @@ class HistoryStore:
             job_id,
             "done_at = ?, done_by = ?, closed = ?, closed_at = ?",
             (at.isoformat(), who, DONE, at.isoformat()),
+        )
+
+    def mark_off(self, job_id: int, at: datetime, who: str) -> bool:
+        """Cierra como apagada la última alarma abierta del job; False si no había."""
+        return self._update(
+            job_id,
+            "done_by = ?, closed = ?, closed_at = ?",
+            (who, OFF, at.isoformat()),
         )
 
     def mark_closed(self, job_id: int, how: str, at: datetime) -> bool:
