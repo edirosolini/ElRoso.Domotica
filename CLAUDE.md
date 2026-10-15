@@ -36,6 +36,7 @@ Domotica/
 │   ├── lists.py         # las listas de compras y de pendientes
 │   ├── translate.py     # traducir, solo para leer
 │   ├── people.py        # el nombre visible de cada chat de la casa
+│   ├── screen.py        # la pantalla de la casa en las teles: kiosco y vista de alarma
 │   ├── api.py           # servidor HTTP de la LAN: /say para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
@@ -98,7 +99,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con diecisiete tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con dieciocho tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -120,6 +121,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `holidays.HolidayStore` | los feriados del año, y desde noviembre los del siguiente (`holidays`) |
 | `schedule.StockStore` | cuántas dosis quedan de cada remedio y cuándo avisar (`pill_stock`) |
 | `quiet.AwayStore` | hasta cuándo dura el modo vacaciones (`away`) |
+| `screen.ScreenStore` | qué alarma prendió cada tele y cuándo se cierra (`screens`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -181,8 +183,8 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son cuarenta llamadas al
-modelo barato, con pausa para no chocar el límite por minuto.
+en el historial del shell, igual que el token de `domotica-say`. Son cuarenta y dos llamadas
+al modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
 `deploy/domotica.service` es la referencia de con qué entorno corre de verdad; leerlo antes de
@@ -823,7 +825,7 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
   la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
 - ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
   comportamiento medido. Un ejemplo nuevo puede correrle la atención al modelo en los otros
-  comandos, así que se vuelve a medir: la última corrida dio cuarenta de cuarenta.
+  comandos, así que se vuelve a medir: la última corrida dio cuarenta y dos de cuarenta y dos.
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
@@ -1082,6 +1084,8 @@ reunión. `quiet.Hush` la implementa.
   que chequear dos cosas.
 - Los comandos verifican con `isinstance` que haya un `Hush` de verdad: con unas `QuietHours`
   sueltas no hay nada que mover y contestan que no está configurado, en vez de reventar.
+- **En descanso la tele no se prende sola**: ni la vista de alarma ni el kiosco después de un
+  anuncio. `/pantalla` a pedido sí, porque mostrar no hace ruido. Ver **Pantalla en la TV**.
 
 ### Modo vacaciones
 
@@ -1110,10 +1114,11 @@ leer, contesta cómo están y cómo se usa.
   el historial abierto, como el tope. Durante las vacaciones **una alarma no repite** y sale
   sin «🔕 Apagar»: no hay nada que apagar.
 - **`/decir`, `/llamar` y lo pedido «por el parlante» se niegan** con el motivo y la pista
-  `/vacaciones off`. `/apagar`, `/parar` y `/volumen` siguen andando: no hablan. El resumen,
+  `/vacaciones off`. `/pantalla` tampoco prende la tele. `/apagar`, `/parar` y `/volumen` siguen andando: no hablan. El resumen,
   el cierre, el clima y la agenda salen solo por chat, como en descanso.
 - ⚠️ **Todo camino nuevo que castee tiene que preguntarle a `Hush`**, o se saltea las
-  vacaciones sin que nada avise. Una pantalla de alarma en la TV lo va a necesitar.
+  vacaciones sin que nada avise. Hoy se cumple: la pantalla en la tele le pregunta por
+  `ScreenPages` y `/pantalla` por `away_of()`. Ver **Pantalla en la TV**.
 
 ## Alarma, recordatorio y timer
 
@@ -1192,6 +1197,9 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   vuelve a sonar como recordatorio.
 - **En vacaciones una alarma no suena: se escribe una sola vez**, no repite y sale sin
   «🔕 Apagar». Activarlas corta las que estaban sonando. Ver **Modo vacaciones**.
+- **Una alarma en un equipo con pantalla prende su vista en la tele** mientras suena, y la
+  cierra a los quince minutos de que deja de sonar. Solo `kind=alarm`; un recordatorio o un
+  timer no. Ver **Pantalla en la TV**.
 - ⚠️ **Se tocó el prompt del router** para sumar `recordar` y el ejemplo "recordame mañana a
   las diez" → `timer`. Medido el 2026-09-28: treinta y cuatro de treinta y cuatro, después
   de acotar la regla de las duraciones (ver **Texto libre**).
@@ -1318,7 +1326,7 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
   de silenciar.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
-  treinta y uno de treinta y uno (la última medición, cuarenta). Ver **Texto libre**.
+  treinta y uno de treinta y uno (la última medición, cuarenta y dos). Ver **Texto libre**.
 
 ## Historial de lo que sonó
 
@@ -1417,14 +1425,16 @@ basura». `schedule/rota.py` es la lógica; los nombres viven en dos columnas de
 
 ## Pantalla de la casa
 
-`homeauto/web/` sirve dos páginas y sus datos en el mismo `ApiServer` de la API (puerto
+`homeauto/web/` sirve tres páginas y sus datos en el mismo `ApiServer` de la API (puerto
 `API_PORT`, 8099), y **existe solo si la API arrancó**, o sea con `API_TOKEN`.
 
 | Ruta | Qué es |
 | --- | --- |
 | `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes |
-| `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy y las dos listas |
+| `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy y las dos listas. `?ver=1` es solo lectura |
+| `/alarma?job=<id>` | la vista de una alarma que suena, para la tele. Ver **Pantalla en la TV** |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
+| `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima y listas como `[{id, text}]` |
 | `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre y los equipos |
 | `POST /api/jobs` | crea un aviso de la casa |
@@ -1536,12 +1546,12 @@ reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres column
   `label` —el ícono del tipo y el mensaje— y `mark`, cómo terminó, que se muestra solo si
   ya pasó.
 - **Cada tarjeta de lista y la de «Hoy» llevan un contador** de lo que tienen.
-- ⚠️ **`app.js` y `kiosk.js` van en ES5** —`var` y `function`, sin flechas, `const`,
+- ⚠️ **`app.js`, `kiosk.js` y `alarm.js` van en ES5** —`var` y `function`, sin flechas, `const`,
   template strings ni `?.`— para andar en el navegador viejo de un dispositivo reciclado. Sí
-  necesitan `fetch`. Hay test que busca esa sintaxis, y `innerHTML`, en los dos.
-- **La lógica pura de los dos scripts se prueba con node.** Cada uno exporta sus funciones
-  sin DOM por `module.exports` cuando corre fuera del navegador; `tests/web/agenda_logic.js`
-  y `kiosk_logic.js` las ejercitan y `test_agenda_js.py` los corre. ⚠️ **Sin `node` en la
+  necesitan `fetch`. Hay test que busca esa sintaxis, y `innerHTML`, en los tres.
+- **La lógica pura de los scripts se prueba con node.** Cada uno exporta sus funciones
+  sin DOM por `module.exports` cuando corre fuera del navegador; `tests/web/agenda_logic.js`,
+  `kiosk_logic.js` y `alarm_logic.js` las ejercitan y `test_agenda_js.py` los corre. ⚠️ **Sin `node` en la
   máquina, ese test se saltea**: no falla.
 - **Pantalla completa al primer toque**: el navegador solo la concede desde un gesto. Que la
   pantalla no se apague y el cargador son cosa del dispositivo.
@@ -1553,6 +1563,9 @@ reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres column
   comas y por «y», como `/agregar`, y un repetido no entra. Agregar tampoco avisa a los
   chats, decisión del dueño: es una lista, no un aviso. ⚠️ El campo lleva el teclado del
   dispositivo: en uno sin teclado en pantalla no sirve.
+- 🔴 **Con `?ver=1` el kiosco es solo lectura**: `kiosk.js` le pone la clase `read-only` al
+  `body`, que esconde los campos y los círculos, y no consulta `/api/people`. Es lo único que
+  se castea: en la tele no hay con qué tocar.
 
 **Escribir desde la pantalla.** `/agenda` crea, edita y borra avisos de la casa con un
 formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
@@ -1632,6 +1645,71 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
 - **La casilla «No suena en feriados» aparece solo con «Algunos días»**, y el formulario
   manda `skip_holidays` en falso con cualquier otra repetición (`skipsHolidays()`).
 
+## Pantalla en la TV
+
+`screen.py` pone la pantalla de la casa en las teles por **DashCast** (app `84912283`):
+`/pantalla` muestra el kiosco a pedido y una alarma que suena prende su propia vista. Sin
+`API_TOKEN` no hay páginas que mostrar, así que tampoco hay pantalla.
+
+- 🔴 **`Caster.show()` lanza DashCast con `force=True`.** Sin `force` abre la página en un
+  iframe, y ahí la bloquean la CSP (`frame-ancestors 'none'`, que **no se toca**) y el mixed
+  content: DashCast es https y la casa, http.
+- **Probado el 2026-10-15 en las tres teles**: comedor (Google TV Streamer), recámara
+  (Chromecast con Google TV) y habitación (Chromecast HD). Aguantó cuarenta minutos seguidos
+  sin que Cast lo cerrara; lo que lo reemplazó fue una app abierta a mano.
+- 🔴 **Lo que se castea es siempre `/pantalla?ver=1`**, el kiosco de solo lectura. Ver
+  **Pantalla de la casa**.
+- **Tres piezas.** `ScreenPages` decide qué URL va en cada tele y le pregunta a `Hush`;
+  `Screens` prende, apaga y agenda el cierre; `ScreenStore` (`screens`) guarda qué alarma
+  prendió cada tele y cuándo se cierra. `main()` arma el `Hush` y `ScreenPages` **antes** de
+  `build_speakers(restore=...)`, porque cada `Caster` recibe la página a restaurar por
+  constructor.
+
+**`/pantalla`.** Sin argumento muestra en `SCREEN_DEVICE` (default `comedor`); `en <equipo>`
+la manda a otra tele y `apagar`, adelante o atrás, la saca.
+
+- **`apagar` solo cierra si DashCast sigue abierto** (`Caster.hide()`): si alguien ya puso
+  otra app, `quit_app()` se la cortaría. Contesta que la pantalla no estaba prendida.
+- **Un equipo fuera de `SCREEN_DEVICES` contesta que no tiene pantalla**, sin castear nada.
+- **Trae «Apagar pantalla»**, que manda `pantalla apagar en <equipo>`.
+- 🔴 **Respeta las vacaciones pero no el descanso.** Mostrar no hace ruido: a las once de la
+  noche alguien puede querer ver la agenda. En vacaciones contesta que no prende la tele.
+- **No está en el menú, sí en `HELP`.** Ver **Comandos y alias**.
+
+**Después de un anuncio.** Hablarle a una tele cierra DashCast: el receptor de audio lo
+desaloja.
+
+- 🔴 **Si el anuncio desalojó a DashCast, al terminar el clip vuelve a mostrar.** `Caster`
+  mira la app antes de hablar y, si era DashCast, espera el final del clip aunque no haya
+  subido el volumen, y después pide la página a `ScreenPages.restore_url()`. Si la tele tenía
+  otra cosa, no se toca.
+- **La página entra por constructor** (`Caster(screen=...)`), así que sobrevive un reinicio:
+  no depende de recordar qué se mostró.
+- **Restaurar que falla no hace fallar el anuncio**: se loguea y sigue. El anuncio ya sonó.
+- **En descanso o en vacaciones no restaura**: `restore_url()` devuelve `None` y la tele
+  queda con lo que dejó el receptor de audio.
+
+**Vista de alarma.** `/alarma?job=<id>` muestra la hora grande, el mensaje y la fecha, y
+consulta `/api/ringing/<id>` cada cinco segundos.
+
+- **Una alarma cuyo equipo está en `SCREEN_DEVICES` prende la vista en esa tele al sonar**
+  (`Screens.ring()` al disparar y `light()` después del primer anuncio). Sin equipo, cuenta
+  el `CAST_DEFAULT`.
+- 🔴 **Qué equipos tienen pantalla es config, no se deduce**: `SCREEN_DEVICES`, default
+  `comedor,recamara,habitacion`. `model_name` no sirve para saberlo (ver **Gotchas**).
+- **Mientras suena, lo que se restaura después de cada repetición es la vista de alarma**, no
+  el kiosco: `ScreenStore.job_for()` dice qué alarma tiene esa tele.
+- **Cuando deja de sonar, la página pasa sola a `/pantalla?ver=1`**: el feed contesta
+  `ringing: false` y `alarm.js` cambia de dirección.
+- 🔴 **A los quince minutos de que deja de sonar se cierra DashCast** (`OFF_DELAY`), con el
+  timer `screen-off:<equipo>`, y **solo si sigue abierto**, igual que `apagar`. Una alarma
+  nueva en esa tele antes del cierre lo cancela.
+- **Se rearma en `start()`**: un cierre pendiente vuelve a agendarse, uno vencido se cierra
+  ya, y una tele de una alarma que ya no suena queda con quince minutos desde el arranque.
+- **En descanso o en vacaciones no se prende nada** (`Hush.is_quiet()` cubre las dos). Una
+  alarma igual se escribe al chat.
+- **Una tele que falla no frena la alarma**: `Reminders._on_screen()` loguea y sigue.
+
 ## Botones en las respuestas
 
 Además de los avisos, la respuesta de un comando puede traer botones. Los comandos siguen
@@ -1676,15 +1754,21 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
-- 🔴 **Medido el 2026-10-15 contra el endpoint real: cuarenta de cuarenta comandos y treinta
-  de treinta payloads**, con `gemini-3.1-flash-lite`. Es la corrida de después de sumar
-  `turnos`, con el ejemplo «la basura la sacan Cin y Die una semana cada uno, es el 7» →
-  `7 Cin, Die`. La anterior, con `vacaciones` y su caso negativo de los pasajes, había dado
-  treinta y nueve de treinta y nueve. `deploy/measure_router.py` es esa corrida: vive en el
-  repo porque la regla de volver a medir no sirve si medir es un trabajo. Corre **adentro del
-  CT**, que es donde está la clave.
+- 🔴 **Medido el 2026-10-15 contra el endpoint real: cuarenta y dos de cuarenta y dos
+  comandos y treinta y uno de treinta y uno payloads**, con `gemini-3.1-flash-lite`. Es la
+  corrida de después de sumar `pantalla`, con el ejemplo «poné la pantalla en la tele de la
+  recámara» → `en recamara` y el caso negativo «mostrame la agenda» → `agenda`: ver la agenda
+  no es pedir la pantalla. La anterior, con `turnos`, había dado cuarenta de cuarenta.
+  `deploy/measure_router.py` es esa corrida: vive en el repo porque la regla de volver a medir
+  no sirve si medir es un trabajo. Corre **adentro del CT**, que es donde está la clave.
+- ⚠️ **«recordame comprar los pasajes de las vacaciones» acepta `recordar` o `agregar`.** El
+  caso está para que no vaya a `vacaciones`. Con el ejemplo de `pantalla`, una de cada seis
+  veces se va a pendientes, y sin hora es una lectura razonable. Un caso de la medición puede
+  llevar una tupla de comandos válidos.
+- ⚠️ **Un `Read timed out` de la API en la medición no es el prompt**: el router corta a los
+  seis segundos y el caso sale como `RouteError`. Se vuelve a correr.
 - ⚠️ **La medición usa el `LLM_MODEL` del env del CT.** Con un modelo que la API no acepta, las
-  cuarenta llamadas dan `400` y el resultado es cero: es el modelo, no el prompt.
+  cuarenta y dos llamadas dan `400` y el resultado es cero: es el modelo, no el prompt.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
   `traducir → "hola al inglés"`, con el idioma **atrás**, y `split_language()` solo lo leía
   adelante: "traducí hola al francés" iba a traducir el texto *"hola al francés"* al inglés.
@@ -1700,7 +1784,7 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; hoy son cuarenta de cuarenta con los comandos que se sumaron después. Si se toca el
+  limpios; hoy son cuarenta y dos de cuarenta y dos con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -1835,7 +1919,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (cuarenta de cuarenta) y un segundo prompt es un segundo
+  prompt del router **está medido** (cuarenta y dos de cuarenta y dos) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
@@ -1868,16 +1952,16 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 39 nombres: 29 comandos y 10 **alias** (`help`, `tiempo`,
+`ALL_COMMANDS` tiene 40 nombres: 30 comandos y 10 **alias** (`help`, `tiempo`,
 `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
 funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
 
-🔴 **El menú de Telegram tiene 10, no los 29.** `recordar` entró como el décimo, y es el
+🔴 **El menú de Telegram tiene 10, no los 30.** `recordar` entró como el décimo, y es el
 tope que fija el test. Con los 18, la lista que sale al escribir `/`
 era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
 argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
 `parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
-`sacar`, `traducir`, `posponer`, `pastillas`, `vacaciones`, `turnos`— **siguen andando escritos** y se alcanzan sin barra por el router.
+`sacar`, `traducir`, `posponer`, `pastillas`, `vacaciones`, `turnos`, `pantalla`— **siguen andando escritos** y se alcanzan sin barra por el router.
 
 - **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
   va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
@@ -2007,12 +2091,13 @@ abajo en ese orden a propósito.
   siempre hace esperar al test lo mismo que esperaría a un equipo colgado, y esconde el bug.
 - **No existe apagar por Cast.** Lo máximo es `quit_app()`, que deja el equipo en reposo;
   el televisor se apaga solo si está configurado para dormirse al perder señal. El apagado
-  real pide ADB, y los dos equipos de la casa son Google TV, así que los dos podrían.
+  real pide ADB, y las tres teles de la casa son Google TV, así que las tres podrían.
 - 🔴 **El `model_name` de mDNS no dice si el equipo es Android TV.** Un **Chromecast con
   Google TV** se anuncia como `Chromecast`, igual que uno viejo sin sistema operativo. No
   deducir capacidades de ese string: preguntarle al equipo o al dueño.
-- **Castear a un equipo con pantalla prende el televisor.** Tenerlo en cuenta antes de
-  mandar una alarma de las 7 AM al comedor.
+- **Castear a un equipo con pantalla prende el televisor.** Con la vista de alarma es lo
+  buscado: una alarma en el comedor prende la tele y la deja mostrando la hora. Ver
+  **Pantalla en la TV**.
 - **Un Speaker por equipo, pero síntesis y servidor HTTP compartidos.** Lo único distinto
   entre equipos es el Caster; duplicar lo demás sería sintetizar dos veces la misma frase.
   Los Speaker se construyen recién al usarse: al arrancar, casi todos los equipos están
