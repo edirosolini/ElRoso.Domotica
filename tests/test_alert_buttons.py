@@ -118,6 +118,25 @@ def test_a_reminder_is_written_as_still_down_with_the_detail_and_the_confirm_but
     assert house.told == [("🚨 Sigue caído: vps\nHTTP 502 en 1.2s", None, main._monitor_actions("vps"))]
 
 
+def test_a_reminder_with_the_default_wording_keeps_its_text():
+    house = RemindHouse(spoken=True)
+
+    main._still_down(house, "x", "vps", "", "sigue sin responder")
+
+    assert house.told[0][0] == "🚨 Sigue caído: vps"
+
+
+def test_a_reminder_is_written_with_the_wording_of_its_check():
+    house = RemindHouse(spoken=True)
+    name = "las máquinas del proxmox"
+
+    main._still_down(house, "x", name, "paradas: 301 (recetas)", "siguen sin estar todas en marcha")
+
+    assert house.told[0][0] == (
+        f"🚨 Siguen sin estar todas en marcha: {name}\nparadas: 301 (recetas)"
+    )
+
+
 def test_an_unspoken_reminder_hands_its_text_and_button_to_the_house():
     house = RemindHouse(spoken=False)
 

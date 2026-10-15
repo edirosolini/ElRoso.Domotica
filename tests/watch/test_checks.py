@@ -1,6 +1,6 @@
 import pytest
 
-from homeauto.watch.checks import Check, CheckResult, HttpProbe, TcpProbe
+from homeauto.watch.checks import Check, CheckResult, HttpProbe, ProbeSkipped, TcpProbe
 from homeauto.watch.checks import run_check as _run_check
 
 
@@ -141,3 +141,50 @@ def test_the_result_carries_the_urgency():
 
     assert result.urgent is True
     assert isinstance(result, CheckResult)
+
+
+# --- sondas propias -----------------------------------------------------------
+
+
+def test_a_check_with_its_own_probe_needs_no_target():
+    check = Check(name="proxmox", probe=lambda check: (True, "ok"))
+
+    assert check.target == ""
+
+
+def test_run_check_uses_the_probe_of_the_check():
+    seen = []
+
+    def probe(check):
+        seen.append(check.name)
+        return False, "el disco está al noventa"
+
+    check = Check(name="disco", probe=probe, attempts=1)
+    result = run_check(check, http=None, tcp=None)
+
+    assert seen == ["disco"]
+    assert result.up is False
+    assert result.detail == "el disco está al noventa"
+
+
+def test_a_skipped_probe_is_not_a_failure_and_is_not_retried():
+    calls = []
+
+    def probe(check):
+        calls.append(1)
+        raise ProbeSkipped("sin datos")
+
+    check = Check(name="disco", probe=probe, attempts=3)
+
+    with pytest.raises(ProbeSkipped):
+        run_check(check, http=None, tcp=None)
+    assert calls == [1]
+
+
+def test_the_default_wording_is_the_one_of_a_service():
+    check = Check(name="landing", url="https://elroso.ar")
+
+    assert check.down == "no responde"
+    assert check.up == "volvió a responder"
+    assert check.still == "sigue sin responder"
+    assert check.remind is True

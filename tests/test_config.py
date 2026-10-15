@@ -212,3 +212,125 @@ def test_a_broken_weekly_summary_stops_the_service(tmp_path, raw):
 
 def test_a_config_built_in_code_has_no_weekly_summary():
     assert make_config().weekly_at is None
+
+
+# --- Proxmox ------------------------------------------------------------------
+
+# Inventado: la forma de un token de la API de Proxmox, no uno real.
+PVE_TOKEN = "monitor@pve!casa=0b6f3a52-1c7e-4d2a-9e8b-5f4c3d2a1b0e"
+PVE_SECRET = PVE_TOKEN.split("=", 1)[1]
+
+
+def pve_env(tmp_path, extra):
+    return write_env(tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\n{extra}")
+
+
+def ca_file(tmp_path):
+    path = tmp_path / "pve-ca.pem"
+    path.write_text("-----BEGIN CERTIFICATE-----\n", encoding="utf-8")
+    return path
+
+
+def test_without_a_pve_url_there_is_no_proxmox_watch(tmp_path):
+    cfg = Config.from_file(pve_env(tmp_path, ""))
+
+    assert cfg.pve_enabled is False
+
+
+def test_a_config_built_in_code_has_no_proxmox():
+    assert make_config().pve_enabled is False
+
+
+def test_the_proxmox_pair_is_read(tmp_path):
+    ca = ca_file(tmp_path)
+    cfg = Config.from_file(pve_env(
+        tmp_path, f"PVE_URL=https://192.0.2.10:8006/\nPVE_TOKEN={PVE_TOKEN}\nPVE_CA_FILE={ca}\n"
+    ))
+
+    assert cfg.pve_enabled is True
+    assert cfg.pve_url == "https://192.0.2.10:8006"
+    assert cfg.pve_token == PVE_TOKEN
+    assert cfg.pve_ca_file == str(ca)
+    assert cfg.pve_disk_alert == 85
+
+
+def test_the_disk_threshold_can_be_moved(tmp_path):
+    ca = ca_file(tmp_path)
+    cfg = Config.from_file(pve_env(
+        tmp_path,
+        f"PVE_URL=https://pve:8006\nPVE_TOKEN={PVE_TOKEN}\nPVE_CA_FILE={ca}\nPVE_DISK_ALERT=90\n",
+    ))
+
+    assert cfg.pve_disk_alert == 90
+
+
+@pytest.mark.parametrize("raw", ["0", "100", "noventa", "-5"])
+def test_a_disk_threshold_out_of_range_stops_the_service(tmp_path, raw):
+    ca = ca_file(tmp_path)
+    path = pve_env(
+        tmp_path,
+        f"PVE_URL=https://pve:8006\nPVE_TOKEN={PVE_TOKEN}\nPVE_CA_FILE={ca}\nPVE_DISK_ALERT={raw}\n",
+    )
+
+    with pytest.raises(ConfigError, match="PVE_DISK_ALERT"):
+        Config.from_file(path)
+
+
+def test_a_url_without_a_token_stops_the_service(tmp_path):
+    with pytest.raises(ConfigError, match="PVE_TOKEN"):
+        Config.from_file(pve_env(tmp_path, "PVE_URL=https://pve:8006\n"))
+
+
+def test_a_token_without_a_url_stops_the_service(tmp_path):
+    with pytest.raises(ConfigError, match="PVE_URL"):
+        Config.from_file(pve_env(tmp_path, f"PVE_TOKEN={PVE_TOKEN}\n"))
+
+
+def test_the_proxmox_url_has_to_be_https(tmp_path):
+    with pytest.raises(ConfigError, match="https"):
+        Config.from_file(pve_env(tmp_path, f"PVE_URL=http://pve:8006\nPVE_TOKEN={PVE_TOKEN}\n"))
+
+
+@pytest.mark.parametrize("raw", [
+    "monitor@pve!casa",
+    "monitor@pve=0b6f3a52-1c7e-4d2a-9e8b-5f4c3d2a1b0e",
+    "monitor!casa=0b6f3a52-1c7e-4d2a-9e8b-5f4c3d2a1b0e",
+    f"PVEAPIToken={PVE_TOKEN}",
+    "monitor@pve!casa=no-es-un-secreto",
+])
+def test_a_malformed_token_stops_the_service_without_showing_it(tmp_path, raw):
+    path = pve_env(tmp_path, f"PVE_URL=https://pve:8006\nPVE_TOKEN={raw}\n")
+
+    with pytest.raises(ConfigError, match="PVE_TOKEN") as caught:
+        Config.from_file(path)
+    assert raw not in str(caught.value)
+    assert PVE_SECRET not in str(caught.value)
+
+
+def test_a_url_without_a_ca_file_stops_the_service(tmp_path):
+    path = pve_env(tmp_path, f"PVE_URL=https://pve:8006\nPVE_TOKEN={PVE_TOKEN}\n")
+
+    with pytest.raises(ConfigError, match="Falta PVE_CA_FILE"):
+        Config.from_file(path)
+
+
+def test_a_ca_file_that_does_not_exist_stops_the_service(tmp_path):
+    path = pve_env(
+        tmp_path,
+        f"PVE_URL=https://pve:8006\nPVE_TOKEN={PVE_TOKEN}\nPVE_CA_FILE={tmp_path / 'no.pem'}\n",
+    )
+
+    with pytest.raises(ConfigError, match="PVE_CA_FILE"):
+        Config.from_file(path)
+
+
+def test_no_error_shows_the_proxmox_secret(tmp_path):
+    for extra in (
+        f"PVE_TOKEN={PVE_TOKEN}\n",
+        f"PVE_URL=http://pve:8006\nPVE_TOKEN={PVE_TOKEN}\n",
+        f"PVE_URL=https://pve:8006\nPVE_TOKEN={PVE_TOKEN}\nPVE_CA_FILE=/no/existe.pem\n",
+        f"PVE_URL=https://pve:8006\nPVE_TOKEN={PVE_TOKEN}\nPVE_DISK_ALERT=200\n",
+    ):
+        with pytest.raises(ConfigError) as caught:
+            Config.from_file(pve_env(tmp_path, extra))
+        assert PVE_SECRET not in str(caught.value)

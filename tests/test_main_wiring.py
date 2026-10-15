@@ -889,9 +889,10 @@ def test_the_monitor_offers_to_confirm_reminds_and_tells_the_other_alert_chats(
     monitor["tell_others"](42, "✅ Eze confirmó: vpn no responde")
 
     assert alerted == [main._monitor_actions("vpn")]
-    [(house, text, name, detail)] = reminded
+    [(house, text, name, detail, still)] = reminded
     assert isinstance(house, main.HouseVoice)
     assert (text, name, detail) == ("vpn sigue sin responder", "vpn", "timeout")
+    assert still == "sigue sin responder"
     assert _FakeNotifier.sent == [(43, "✅ Eze confirmó: vpn no responde", ())]
 
 
@@ -1357,3 +1358,81 @@ def test_the_vacations_stop_the_alarms_of_the_wired_reminders(wired, tmp_path, m
     reminders["ringing"].remember(17, 42, "arriba", None, main.datetime(2026, 10, 15, 7, 0))
     assert stop() == 1
     assert reminders["ringing"].get(17) is None
+
+
+# Inventado: la forma de un token de la API de Proxmox, no uno real.
+PVE_TOKEN = "monitor@pve!casa=0b6f3a52-1c7e-4d2a-9e8b-5f4c3d2a1b0e"
+
+
+def pve_config(tmp_path, checks="[]"):
+    ca = tmp_path / "pve-ca.pem"
+    ca.write_text("-----BEGIN CERTIFICATE-----\n", encoding="utf-8")
+    checks_file = tmp_path / "checks.json"
+    checks_file.write_text(checks, encoding="utf-8")
+    return config_file(
+        tmp_path,
+        f"CHECKS_FILE={checks_file}\nPVE_URL=https://192.0.2.10:8006\n"
+        f"PVE_TOKEN={PVE_TOKEN}\nPVE_CA_FILE={ca}\nPVE_DISK_ALERT=90\n",
+    )
+
+
+async def test_the_proxmox_is_watched_even_with_an_empty_checks_file(wired, tmp_path, monkeypatch):
+    monitor = _spy_init(monkeypatch, main.Monitor)
+    commands = _spy_init(monkeypatch, main.Commands)
+    said = []
+    monkeypatch.setattr(main, "_alert", lambda house, text, urgent, detail, actions: said.append(text))
+
+    run_main(monkeypatch, pve_config(tmp_path))
+
+    names = [check.name for check in monitor["checks"]]
+    assert names == ["proxmox", "el disco del proxmox", "las máquinas del proxmox", "los respaldos"]
+    assert commands["monitor"] is not None
+    assert monitor["store"].db_path == tmp_path / "jobs.db"
+
+    client = monitor["checks"][0].probe.client
+    assert client.url == "https://192.0.2.10:8006"
+    assert client.verify == str(tmp_path / "pve-ca.pem")
+    assert monitor["checks"][1].probe.alert == 90
+
+    calls = []
+
+    def fetch(url, headers, verify, timeout):
+        calls.append(url)
+        return 401, None
+
+    client.fetch = fetch
+    monkeypatch.setattr(main.Uplink, "run_once", lambda self: True)
+    await wired.job_queue.callbacks["service-watch"](None)
+    await wired.job_queue.callbacks["service-watch"](None)
+
+    assert calls, "la ronda del monitor consulta el Proxmox"
+    assert said and "proxmox" in said[0]
+
+
+def test_the_proxmox_adds_to_the_checks_of_the_file(wired, tmp_path, monkeypatch):
+    monitor = _spy_init(monkeypatch, main.Monitor)
+
+    run_main(monkeypatch, pve_config(tmp_path, '[{"name": "vpn", "host": "10.0.0.1", "port": 443}]'))
+
+    assert [check.name for check in monitor["checks"]][:2] == ["vpn", "proxmox"]
+
+
+def test_the_stopped_machines_are_reminded_with_their_wording(wired, tmp_path, monkeypatch):
+    monitor = _spy_init(monkeypatch, main.Monitor)
+    reminded = []
+    monkeypatch.setattr(main, "_still_down", lambda *args: reminded.append(args))
+
+    run_main(monkeypatch, pve_config(tmp_path))
+    monitor["remind"]("x", "las máquinas del proxmox", "paradas: 301 (recetas)")
+
+    assert reminded[0][2:] == (
+        "las máquinas del proxmox", "paradas: 301 (recetas)", "siguen sin estar todas en marcha"
+    )
+
+
+def test_without_proxmox_an_empty_checks_file_has_no_monitor(wired, tmp_path, monkeypatch):
+    commands = _spy_init(monkeypatch, main.Commands)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert commands["monitor"] is None

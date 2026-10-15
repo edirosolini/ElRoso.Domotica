@@ -19,6 +19,10 @@ DEFAULT_ATTEMPTS = 2
 RETRY_PAUSE = 2
 
 
+class ProbeSkipped(Exception):
+    """La sonda no tiene dato esta vuelta: no cuenta como caída ni como recuperación."""
+
+
 @dataclass
 class Check:
     name: str
@@ -29,16 +33,24 @@ class Check:
     urgent: bool = False
     timeout: int = DEFAULT_TIMEOUT
     attempts: int = DEFAULT_ATTEMPTS
+    probe: Callable[["Check"], tuple[bool, str]] | None = None
+    # Lo que se dice después del nombre al caer, al volver y al re-avisar.
+    down: str = "no responde"
+    up: str = "volvió a responder"
+    still: str = "sigue sin responder"
+    remind: bool = True
 
     def __post_init__(self):
         if not self.name.strip():
             raise ValueError("cada chequeo necesita un nombre")
-        if not self.url and not (self.host and self.port):
+        if self.probe is None and not self.url and not (self.host and self.port):
             raise ValueError(f"'{self.name}': falta url, o host y port")
 
     @property
     def target(self) -> str:
-        return self.url or f"{self.host}:{self.port}"
+        if self.url:
+            return self.url
+        return f"{self.host}:{self.port}" if self.host else ""
 
 
 @dataclass(frozen=True)
@@ -88,7 +100,7 @@ class TcpProbe:
 
 
 def run_check(check: Check, http: HttpProbe | None, tcp: TcpProbe | None, pause: float = RETRY_PAUSE) -> CheckResult:
-    probe = http if check.url else tcp
+    probe = check.probe or (http if check.url else tcp)
     if probe is None:
         return CheckResult(check.name, False, "no hay forma de chequearlo", check.urgent, check.target)
 
@@ -99,6 +111,8 @@ def run_check(check: Check, http: HttpProbe | None, tcp: TcpProbe | None, pause:
             if ok:
                 return CheckResult(check.name, True, detail, check.urgent, check.target)
             problem = detail
+        except ProbeSkipped:
+            raise
         except Exception as exc:  # noqa: BLE001 - cualquier fallo es "no responde"
             problem = f"{type(exc).__name__}: {exc}"
 
