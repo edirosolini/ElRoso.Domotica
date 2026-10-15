@@ -24,7 +24,7 @@ ROUTABLE = (
     "decir", "llamar", "timer", "alarma", "recordar", "lista", "cancelar", "silencio", "hablar",
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
-    "agregar", "compras", "pendientes", "sacar", "traducir", "posponer",
+    "agregar", "compras", "pendientes", "sacar", "traducir", "posponer", "pastillas",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -75,6 +75,8 @@ Comandos y qué lleva cada uno:
 - pendientes: sin argumento, qué falta hacer
 - sacar: el número a sacar de una lista, o "todo" para vaciarla
 - traducir: el texto a traducir, con "al <idioma>" adelante si se nombra uno
+- pastillas: sin argumento, cuántas quedan de cada remedio; para reponer, el remedio y
+  la cantidad con "+", así: "enalapril +30"
 
 Reglas:
 - Si el mensaje es una pregunta, o no encaja claramente en ningún comando, contestá
@@ -137,6 +139,10 @@ ARGUMENTO: 15 por 4
 Mensaje: agregá leche y pan a la lista de compras
 COMANDO: agregar
 ARGUMENTO: leche y pan
+
+Mensaje: compré 30 de enalapril
+COMANDO: pastillas
+ARGUMENTO: enalapril +30
 
 Contestá solo con dos líneas:
 COMANDO: <nombre o ninguno>

@@ -72,6 +72,15 @@ ITEM_ID = "id:"
 MAX_BUTTONS = 20
 MAX_LABEL = 40
 
+# Las tres formas de /pastillas con argumento: cambiar el aviso, reponer y atar un recordatorio.
+_PILL_THRESHOLD = re.compile(r"^(.+?)\s+aviso\s+(\d+)$", re.IGNORECASE)
+_PILL_RESTOCK = re.compile(r"^(.+?)\s+\+\s*(\d+)$")
+_PILL_BIND = re.compile(r"^#?(\d+)\s+(.+?)(?:\s+(\d+))?$")
+PILLS_USAGE = (
+    "Así: /pastillas 7 enalapril 30 cuenta las del recordatorio #7"
+    " · /pastillas enalapril +30 repone · /pastillas enalapril aviso 5 cambia el aviso"
+)
+
 
 class TargetError(Exception):
     """Alguno de los equipos pedidos no existe."""
@@ -132,6 +141,9 @@ HELP = """Hola. Manejo los equipos de casa.
 /recordar diaria 8:00 la pastilla — un recordatorio todos los días
 /recordar lun-vie 7:30 salir al colegio — solo esos días
 /recordar mensual 10 9:00 pagar la luz — el 10 de cada mes
+/pastillas — cuántas quedan de cada remedio
+/pastillas 7 enalapril 30 — cada «Hecho» del recordatorio #7 descuenta una
+/pastillas enalapril +30 — repone · /pastillas enalapril aviso 5 — avisa con 5 o menos
 /alarma 7:30 arriba — para despertarse; suena fuerte
 /alarma diaria 7:30 arriba — todos los días · /alarma lun-vie 5:30 arriba
 /alarma hábiles 6:30 arriba — no suena en feriados
@@ -201,6 +213,7 @@ class Commands:
         translator=None,
         transcribe=None,
         voicemail=None,
+        stock=None,
         correct=as_written,
         polish=as_is,
         clock: Callable[[], datetime] = datetime.now,
@@ -220,6 +233,7 @@ class Commands:
         self.translator = translator
         self.transcribe = transcribe
         self.voicemail = voicemail
+        self.stock = stock
         self.correct = correct
         self.polish = polish
         self.clock = clock
@@ -671,6 +685,76 @@ class Commands:
             return f"En {list_name} no hay ningún {position}. Fijate con /{list_name}"
         return f"Saqué de {list_name}: {removed}"
 
+    # --- pastillas ---------------------------------------------------------
+
+    def pills(self, chat_id: int, text: str = "") -> str:
+        """Lista los stocks, ata un recordatorio a uno, lo repone o le cambia el aviso."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.stock is None:
+            return "No tengo el conteo de pastillas configurado."
+
+        text = " ".join(text.split())
+        if not text:
+            return self._pill_list()
+        if match := _PILL_THRESHOLD.fullmatch(text):
+            supply = self.stock.set_threshold(match.group(1), int(match.group(2)))
+            if supply is None:
+                return self._unknown_pill(match.group(1))
+            reply = f"💊 {supply.name}: aviso con {supply.threshold} o menos."
+            if supply.count <= supply.threshold and not supply.alerted:
+                reply += f"\nOjo: ya quedan {supply.count}, por debajo del aviso."
+            return reply
+        if match := _PILL_RESTOCK.fullmatch(text):
+            supply = self.stock.restock(match.group(1), int(match.group(2)))
+            if supply is None:
+                return self._unknown_pill(match.group(1))
+            return f"💊 {supply.name}: quedan {supply.count}."
+        if match := _PILL_BIND.fullmatch(text):
+            count = int(match.group(3)) if match.group(3) else None
+            return self._bind_pill(int(match.group(1)), match.group(2), count)
+        return PILLS_USAGE
+
+    def _pill_list(self) -> str:
+        stocks = self.stock.all()
+        if not stocks:
+            return f"No estoy contando ninguna pastilla.\n{PILLS_USAGE}"
+        lines = ["Pastillas"]
+        lines += [
+            f"💊 {supply.name}: quedan {supply.count} · aviso con {supply.threshold}"
+            for supply in stocks
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def _unknown_pill(name: str) -> str:
+        return f"No estoy contando {name}. Empezá con /pastillas <número> {name} 30"
+
+    def _bind_pill(self, job_id: int, name: str, count: int | None) -> str:
+        """Ata el recordatorio a un stock; lo crea con `count`, o le fija `count` si ya existe."""
+        job = self.reminders.get(job_id) if self.reminders is not None else None
+        if job is None:
+            return f"No encontré el recordatorio #{job_id}. Fijate con /lista"
+        if not job.is_reminder:
+            return f"El #{job_id} es una alarma: solo cuento pastillas de un recordatorio."
+        if job.repeat == ONCE:
+            return f"El #{job_id} suena una sola vez: solo cuento pastillas de un recordatorio que repite."
+        if count is None and self.stock.find(name) is None:
+            return f"¿Cuántas tenés de {name}? Ej: /pastillas {job_id} {name} 30"
+
+        supply, created = self.stock.ensure(name, count or 0)
+        self.reminders.attach_stock(job_id, supply.id)
+        if created:
+            return (
+                f"💊 El #{job_id} cuenta {supply.name}: quedan {supply.count},"
+                f" aviso con {supply.threshold}."
+            )
+        if count is not None:
+            supply = self.stock.set_count(name, count)
+            return f"💊 El #{job_id} cuenta {supply.name}: fijé la cantidad en {supply.count}."
+        return f"💊 El #{job_id} cuenta {supply.name}, que ya tenía: quedan {supply.count}."
+
     def _dispatch(self) -> dict:
         """Todos los comandos alcanzables sin barra, por nombre.
 
@@ -703,6 +787,7 @@ class Commands:
             "sacar": self.remove_item,
             "traducir": self.translate,
             "posponer": self.postpone,
+            "pastillas": self.pills,
         }
 
     def press(self, chat_id: int, data: str, who: str = "") -> str:

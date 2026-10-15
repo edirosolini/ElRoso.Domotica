@@ -14,3 +14,7 @@ def test_every_command_name_is_valid_for_telegram():
 
 def test_there_are_no_duplicate_command_names():
     assert len(ALL_COMMANDS) == len(set(ALL_COMMANDS))
+
+
+def test_the_pills_command_is_registered():
+    assert "pastillas" in ALL_COMMANDS

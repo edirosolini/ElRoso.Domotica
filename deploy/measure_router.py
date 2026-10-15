@@ -53,6 +53,7 @@ CASES = (
     ("qué tengo pendiente", "pendientes", ""),
     ("sacá el 2 de la lista de compras", "sacar", "2"),
     ("traducí hola al inglés", "traducir", "hola"),
+    ("compré 30 de enalapril", "pastillas", "enalapril +30"),
 )
 
 

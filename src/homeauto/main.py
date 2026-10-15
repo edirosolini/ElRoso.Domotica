@@ -56,6 +56,7 @@ from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.preferences import Preferences
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.ringing import RingingStore
+from homeauto.schedule.stock import StockStore
 from homeauto.schedule.store import Store
 from homeauto.people import People, PeopleStore
 from homeauto.strangers import Strangers, StrangerStore
@@ -153,6 +154,7 @@ SHOPPING_COMMANDS = ("compras",)
 TODO_COMMANDS = ("pendientes",)
 REMOVE_COMMANDS = ("sacar",)
 TRANSLATE_COMMANDS = ("traducir",)
+PILLS_COMMANDS = ("pastillas",)
 AGENDA_COMMANDS = ("agenda",)
 STATUS_COMMANDS = ("estado",)
 SILENCE_COMMANDS = ("silencio", "siesta")
@@ -164,7 +166,7 @@ ALL_COMMANDS = (
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
     + ASK_COMMANDS + CALC_COMMANDS
     + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
-    + TRANSLATE_COMMANDS + POSTPONE_COMMANDS
+    + TRANSLATE_COMMANDS + POSTPONE_COMMANDS + PILLS_COMMANDS
 )
 
 # Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
@@ -716,6 +718,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
         (TODO_COMMANDS, commands.todo),
         (REMOVE_COMMANDS, commands.remove_item),
         (TRANSLATE_COMMANDS, commands.translate),
+        (PILLS_COMMANDS, commands.pills),
         (AGENDA_COMMANDS, commands.agenda_command),
         (STATUS_COMMANDS, commands.status),
         (SILENCE_COMMANDS, commands.silence),
@@ -829,6 +832,7 @@ def main() -> None:
     store = Store(db_path)
     history = HistoryStore(db_path)
     holidays = HolidayStore(db_path)
+    stock = StockStore(db_path)
     announcer = Announcer(
         speakers=speakers,
         notify=notifier,
@@ -853,6 +857,8 @@ def main() -> None:
         chat_ids=config.allowed_chat_ids,
         nag_actions=DONE_ACTIONS,
         holidays=holidays.get,
+        stock=stock,
+        lists=ListStore(db_path),
     )
     calendar = None
     agenda = None
@@ -950,6 +956,7 @@ def main() -> None:
         lists=ListStore(db_path),
         transcribe=build_transcriber(config),
         voicemail=build_voicemail(synth),
+        stock=stock,
         correct=build_corrector(config),
         # Solo para /llamar, que es texto nuestro; lo que escribe una persona
         # va por `correct`.

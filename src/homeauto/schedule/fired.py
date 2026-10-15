@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS last_fired (
     device   TEXT,
     fired_at TEXT    NOT NULL,
     kind     TEXT    NOT NULL DEFAULT 'alarm',
-    job_id   INTEGER
+    job_id   INTEGER,
+    stock_id INTEGER
 );
 """
 
@@ -28,6 +29,7 @@ class Fired:
     at: datetime
     kind: str = ALARM
     job_id: int | None = None
+    stock_id: int | None = None
 
 
 class FiredStore:
@@ -41,6 +43,8 @@ class FiredStore:
                 conn.execute(f"ALTER TABLE last_fired ADD COLUMN kind TEXT NOT NULL DEFAULT '{ALARM}'")
             if "job_id" not in columns:
                 conn.execute("ALTER TABLE last_fired ADD COLUMN job_id INTEGER")
+            if "stock_id" not in columns:
+                conn.execute("ALTER TABLE last_fired ADD COLUMN stock_id INTEGER")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -55,21 +59,23 @@ class FiredStore:
         at: datetime,
         kind: str = ALARM,
         job_id: int | None = None,
+        stock_id: int | None = None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO last_fired (chat_id, message, device, fired_at, kind, job_id)"
-                " VALUES (?, ?, ?, ?, ?, ?) "
+                "INSERT INTO last_fired (chat_id, message, device, fired_at, kind, job_id, stock_id)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(chat_id) DO UPDATE SET message = excluded.message, "
                 "device = excluded.device, fired_at = excluded.fired_at, kind = excluded.kind, "
-                "job_id = excluded.job_id",
-                (chat_id, message, device, at.isoformat(), kind, job_id),
+                "job_id = excluded.job_id, stock_id = excluded.stock_id",
+                (chat_id, message, device, at.isoformat(), kind, job_id, stock_id),
             )
 
     def last(self, chat_id: int) -> Fired | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT message, device, fired_at, kind, job_id FROM last_fired WHERE chat_id = ?",
+                "SELECT message, device, fired_at, kind, job_id, stock_id FROM last_fired"
+                " WHERE chat_id = ?",
                 (chat_id,),
             ).fetchone()
         if row is None:
@@ -80,6 +86,7 @@ class FiredStore:
             datetime.fromisoformat(row["fired_at"]),
             row["kind"],
             row["job_id"],
+            row["stock_id"],
         )
 
     def forget(self, chat_id: int) -> None:

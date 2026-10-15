@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS awaiting_done (
     message  TEXT    NOT NULL,
     fired_at TEXT    NOT NULL,
     nags     INTEGER NOT NULL DEFAULT 0,
-    next_nag TEXT
+    next_nag TEXT,
+    stock_id INTEGER
 );
 """
 
@@ -28,6 +29,7 @@ class Waiting:
     fired_at: datetime
     nags: int = 0
     next_nag: datetime | None = None
+    stock_id: int | None = None
 
 
 def _row_to_waiting(row: sqlite3.Row) -> Waiting:
@@ -37,6 +39,7 @@ def _row_to_waiting(row: sqlite3.Row) -> Waiting:
         fired_at=datetime.fromisoformat(row["fired_at"]),
         nags=row["nags"],
         next_nag=datetime.fromisoformat(row["next_nag"]) if row["next_nag"] else None,
+        stock_id=row["stock_id"],
     )
 
 
@@ -50,12 +53,14 @@ class AwaitingStore:
 
     @staticmethod
     def _add_missing_columns(conn: sqlite3.Connection) -> None:
-        """Agrega las columnas del re-aviso si la tabla no las tiene."""
+        """Agrega las columnas del re-aviso y del stock si la tabla no las tiene."""
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(awaiting_done)")}
         if "nags" not in existing:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN nags INTEGER NOT NULL DEFAULT 0")
         if "next_nag" not in existing:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN next_nag TEXT")
+        if "stock_id" not in existing:
+            conn.execute("ALTER TABLE awaiting_done ADD COLUMN stock_id INTEGER")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -63,17 +68,24 @@ class AwaitingStore:
         return conn
 
     def remember(
-        self, job_id: int, message: str, at: datetime, next_nag: datetime | None = None
+        self,
+        job_id: int,
+        message: str,
+        at: datetime,
+        next_nag: datetime | None = None,
+        stock_id: int | None = None,
     ) -> None:
         """Deja el job esperando su «Hecho» y borra lo que venció."""
         with self._connect() as conn:
             conn.execute("DELETE FROM awaiting_done WHERE fired_at < ?", ((at - KEEP).isoformat(),))
             conn.execute(
-                "INSERT INTO awaiting_done (job_id, message, fired_at, nags, next_nag)"
-                " VALUES (?, ?, ?, 0, ?) "
+                "INSERT INTO awaiting_done (job_id, message, fired_at, nags, next_nag, stock_id)"
+                " VALUES (?, ?, ?, 0, ?, ?) "
                 "ON CONFLICT(job_id) DO UPDATE SET message = excluded.message, "
-                "fired_at = excluded.fired_at, nags = 0, next_nag = excluded.next_nag",
-                (job_id, message, at.isoformat(), next_nag.isoformat() if next_nag else None),
+                "fired_at = excluded.fired_at, nags = 0, next_nag = excluded.next_nag, "
+                "stock_id = excluded.stock_id",
+                (job_id, message, at.isoformat(), next_nag.isoformat() if next_nag else None,
+                 stock_id),
             )
 
     def get(self, job_id: int) -> Waiting | None:

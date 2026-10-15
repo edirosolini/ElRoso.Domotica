@@ -209,3 +209,31 @@ def test_the_router_measurement_covers_the_working_days():
     assert (
         "recordame los días hábiles a las siete salida al colegio", "recordar", "hábiles"
     ) in CASES
+
+
+def test_the_pills_are_routable():
+    assert "pastillas" in ROUTABLE
+
+
+def test_the_prompt_names_the_restock_of_the_pills():
+    from homeauto.route import PROMPT
+
+    assert (
+        "Mensaje: compré 30 de enalapril\n"
+        "COMANDO: pastillas\n"
+        "ARGUMENTO: enalapril +30"
+    ) in PROMPT
+
+
+def test_buying_pills_is_routed_to_the_restock():
+    router = Router(model_saying("COMANDO: pastillas\nARGUMENTO: enalapril +30"))
+
+    decision = router.route("compré 30 de enalapril")
+
+    assert (decision.command, decision.argument) == ("pastillas", "enalapril +30")
+
+
+def test_the_router_measurement_covers_the_pills():
+    from deploy.measure_router import CASES
+
+    assert ("compré 30 de enalapril", "pastillas", "enalapril +30") in CASES
