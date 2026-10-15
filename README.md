@@ -394,6 +394,16 @@ creyendo que se vigilan dos VPS mientras se vigila uno. El par suelto `SEQ_URL`/
 de antes se sigue aceptando, sigue diciéndose "Seq" a secas y sigue apagándose sin ruido si
 le falta una mitad: así está el env desplegado y no puede dejar de arrancar por eso.
 
+**Internet.** Antes de los servicios, cada ronda prueba la salida de la casa: una conexión TCP
+al 443 de `1.1.1.1`, `8.8.8.8` y `9.9.9.9`, por IP y con tres segundos de timeout; con que
+conteste uno alcanza. Si no contesta ninguno, esa ronda no chequea los servicios ni consulta
+Seq: un corte del proveedor no se avisa como caída del VPS. Corre aunque no haya
+`checks.json`. Dos rondas seguidas sin salida declaran el corte, y la casa dice «Se cortó
+internet.» una sola vez, con un beep suave, **solo por el parlante** y nunca en el horario de
+descanso ni con `/silencio`: ahí se pierde. Cuando vuelve, lo dice con cuánto duró y escribe a
+todos los chats «🌐 Internet se cortó de HH:MM a HH:MM (N min)». Un corte de una sola ronda no
+dice nada. El estado sobrevive un reinicio.
+
 Tres reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
 
 - Un fallo suelto no es una caída: hacen falta dos rondas seguidas para avisar.

@@ -87,7 +87,8 @@ mensaje. Un mensaje sin barra termina en el mismo lugar que el comando escrito a
 que le falte un dato: ahí sale una pregunta al chat y el hilo queda esperando la respuesta,
 sin que nada de esto se entere.
 
-`HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat.
+`HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat, salvo
+`speak_only()`, que es solo parlante (ver **Caída de internet**).
 Las alarmas son la excepción: pasan por `Announcer`, que aplica la misma regla de descanso
 y escribe en todos los chats de `ALLOWED_CHAT_IDS`, no solo en el que la pidió.
 
@@ -498,6 +499,41 @@ La topología, que no es obvia: el CT de domótica manda `172.68.0.0/23` al rout
 tiene una ruta estática al CT 202, que hace MASQUERADE sobre `wg0`. El túnel del VPS es
 **WireGuard**, no OpenVPN como los otros.
 
+### Caída de internet
+
+`watch/uplink.py` vigila la salida a internet de la casa. `Uplink` prueba por TCP
+`1.1.1.1`, `8.8.8.8` y `9.9.9.9` en el 443, con tres segundos de timeout (`TARGETS`,
+`TIMEOUT`), y con un destino que conteste alcanza.
+
+- 🔴 **Sin internet, el túnel y Seq también fallan, y no es su culpa.** Sin esta guarda, un
+  corte del proveedor salía como caída del VPS. Por eso hay **una sola ronda**: el job
+  `service-watch` corre primero `uplink.run_once()` y después `monitor.run_once()`, y el
+  `Monitor` se saltea entero si esa ronda no tuvo salida —no chequea, no cuenta fallas, no
+  re-avisa—. Los `SeqWatcher` van en sus propios jobs y miran `uplink.online`, el resultado
+  de la última ronda; sin salida no consultan y **no mueven `last_check`**, así que al volver
+  leen lo que se perdió. Antes de la primera ronda se da por arriba.
+- 🔴 **`service-watch` se agenda siempre**, aunque no haya `checks.json`: el uplink corre
+  igual y Seq depende de él.
+- ⚠️ **El salto también calla los chequeos de la LAN.** Un `checks.json` con un servicio de
+  la casa deja de chequearse mientras dure el corte.
+- **Los destinos van por IP y por IPv4.** Por nombre, el DNS también depende de la salida; e
+  IPv6 está roto en el CT (ver **Gotchas**).
+- **La caída se declara con dos rondas seguidas sin respuesta**, como un servicio.
+  `uplink:down_since` se marca en la primera y `uplink:alerted` en la segunda, en
+  `watch.Marks`: un reinicio en medio del corte no lo vuelve a avisar. Al volver, las dos se
+  borran con `Marks.clear()`. Un corte de una sola ronda no dice nada.
+- 🔴 **Al caer, «Se cortó internet.» solo por el parlante**, una vez y con `chime.SOFT`.
+  Sale por `HouseVoice.speak_only()`, que no escribe al chat ni pule: con el corte, el chat
+  no llega. No es urgente: en descanso o con `/silencio` no se dice y **se pierde**, no se
+  repite al terminar el descanso. No hay re-aviso.
+- **Al volver, si se había declarado**, se dice «Volvió internet. Estuvo cortado …» y se
+  escribe a todos «🌐 Internet se cortó de HH:MM a HH:MM (N min)». La duración cuenta desde
+  la primera ronda fallida; hablada sale de `verbalize.duration()` —«una hora y un
+  minuto»— y pasado un día es «más de un día». Se escribe aunque el «Se cortó» se haya
+  perdido en el descanso.
+- **Una caída del VPS ya declarada no re-avisa durante el corte.** El re-aviso que venció
+  mientras tanto sale en la primera ronda con conexión.
+
 ## Quién puede usar el bot
 
 `ALLOWED_CHAT_IDS` es la lista blanca. `ALERT_CHAT_IDS`, un subconjunto, dice quién recibe
@@ -534,6 +570,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | repetición de una alarma sin apagar | todos, una de cada cinco veces y solo con «🔕 Apagar»; «Dejé de sonar» al tope |
 | alarma apagada | los demás chats: «🔕 <nombre> apagó la alarma» |
 | re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
+| corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
 | agenda, clima, lluvia, API | todos |
 | alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
 | borrado con ese «Cancelar #N» | los demás chats: «🗑 <nombre> borró #N» |
@@ -942,7 +979,7 @@ del wav de Piper. Hay tres:
   despertador, a 90, y repiten hasta que alguien los apague o pase la media hora.
 - **Suena lo que interrumpe**: alarmas, recordatorios y timers (`Announcer`), todo
   `announce(urgent=True)` —monitor y API— y el re-aviso de una caída, que pide los tres beeps
-  con `chime` sin ser urgente. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
+  con `chime` sin ser urgente. El corte de internet suena con el beep suave. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
   descanso no se habla, así que tampoco suena.
 
 ## Horario de descanso
@@ -1710,6 +1747,9 @@ abajo en ese orden a propósito.
   Como el DNS devuelve el AAAA y glibc prefiere IPv6, cualquier cliente HTTP se cuelga
   20 s contra hosts doble stack (`api.telegram.org`). Se arregla con
   `precedence ::ffff:0:0/96  100` en `/etc/gai.conf`. **Aplicarlo en todo CT nuevo.**
+- ⚠️ **Sin internet, escribir al chat bloquea.** `ChatNotifier` espera cada envío hasta
+  treinta segundos, así que durante un corte una alarma o un recordatorio puede tardar eso
+  por chat antes de seguir.
 - **El que castea sirve el audio por HTTP desde sí mismo**, y el parlante tiene que poder
   alcanzar ese puerto. No es "mandarle un archivo": es publicarlo y pasarle la URL.
 - 🔴 **No parar el browser de zeroconf antes de conectar.** `pychromecast` lo necesita vivo
