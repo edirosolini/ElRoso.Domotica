@@ -341,7 +341,7 @@ vigilar viven en `/etc/domotica/checks.json`:
 
 ```json
 [
-  {"name": "vpn-vps", "host": "172.68.0.7", "port": 5341, "urgent": true},
+  {"name": "vps", "host": "172.68.0.7", "port": 5341, "urgent": true},
   {"name": "landing", "url": "https://elroso.ar"}
 ]
 ```
@@ -376,7 +376,7 @@ creyendo que se vigilan dos VPS mientras se vigila uno. El par suelto `SEQ_URL`/
 de antes se sigue aceptando, sigue diciéndose "Seq" a secas y sigue apagándose sin ruido si
 le falta una mitad: así está el env desplegado y no puede dejar de arrancar por eso.
 
-Dos reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
+Tres reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
 
 - Un fallo suelto no es una caída: hacen falta dos rondas seguidas para avisar.
 - Se avisa **al cambiar de estado**; mientras dure, solo insiste si nadie confirmó la caída.
