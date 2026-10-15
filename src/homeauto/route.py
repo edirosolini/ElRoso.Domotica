@@ -25,6 +25,7 @@ ROUTABLE = (
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
     "agregar", "compras", "pendientes", "sacar", "traducir", "posponer", "pastillas",
+    "vacaciones",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -77,6 +78,8 @@ Comandos y qué lleva cada uno:
 - traducir: el texto a traducir, con "al <idioma>" adelante si se nombra uno
 - pastillas: sin argumento, cuántas quedan de cada remedio; para reponer, el remedio y
   la cantidad con "+", así: "enalapril +30"
+- vacaciones: hasta cuándo la casa no habla, con la fecha de vuelta, así: "hasta 25/10"
+  o "hasta 25/10 18:00"; "off" para cortarlas; sin argumento, cómo están
 
 Reglas:
 - Si el mensaje es una pregunta, o no encaja claramente en ningún comando, contestá
@@ -89,6 +92,7 @@ Reglas:
 - Las duraciones y horas de timer, alarma, recordar, posponer y silencio convertilas al
   formato de arriba: "diez minutos" es "10m", "las siete y media" es "7:30". En decir y
   llamar no: ahí los números quedan escritos como los escribió la persona.
+- La fecha de vuelta de vacaciones convertila a dd/mm: "el 25 de octubre" es "25/10".
 
 Ejemplos:
 
@@ -143,6 +147,10 @@ ARGUMENTO: leche y pan
 Mensaje: compré 30 de enalapril
 COMANDO: pastillas
 ARGUMENTO: enalapril +30
+
+Mensaje: nos vamos de vacaciones hasta el 25 de octubre
+COMANDO: vacaciones
+ARGUMENTO: hasta 25/10
 
 Contestá solo con dos líneas:
 COMANDO: <nombre o ninguno>

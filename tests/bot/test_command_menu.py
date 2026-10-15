@@ -26,6 +26,7 @@ OUT_OF_MENU = (
     "sacar",
     "posponer",
     "pastillas",
+    "vacaciones",
 )
 
 VALID = re.compile(r"^[a-z0-9_]{1,32}$")
@@ -64,6 +65,11 @@ def test_the_commands_people_use_are_in_the_menu():
 
 def test_the_menu_stays_short():
     assert len(COMMAND_MENU) <= 10, "el menú vuelve a ser una lista que nadie lee"
+
+
+def test_the_vacations_stay_out_of_the_menu():
+    assert "vacaciones" not in {name for name, _ in COMMAND_MENU}
+    assert len(COMMAND_MENU) == 10
 
 
 def test_what_left_the_menu_is_still_offered_somewhere():

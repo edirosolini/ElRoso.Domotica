@@ -296,3 +296,62 @@ def test_the_closing_text_is_still_what_is_spoken():
     closing = Closing(weather=FakeWeather(), monitor=FakeMonitor(vps=False))
 
     assert closing.text() == closing.speech().spoken
+
+
+# --- modo vacaciones ---------------------------------------------------------
+
+
+def test_on_vacation_an_urgent_outage_only_reaches_the_alert_chats_with_confirm(tmp_path):
+    from homeauto.quiet import AwayStore, Hush, HushStore
+
+    path = tmp_path / "jobs.db"
+    hush = Hush(
+        hours=QuietHours.parse("23:00", "07:00"),
+        store=HushStore(path),
+        clock=lambda: NOON,
+        away=AwayStore(path),
+    )
+    hush.start_away(datetime(2026, 10, 1, 0, 0))
+    speaker = FakeSpeaker("parlante")
+    sent = []
+    house = HouseVoice(
+        speakers=StubRegistry(parlante=speaker),
+        default_devices=["parlante"],
+        notify=lambda chat_id, text, actions=(): sent.append((chat_id, text, actions)),
+        chat_ids=[OWNER, OTHER],
+        quiet=hush,
+        clock=lambda: NOON,
+        alert_chat_ids=(OWNER,),
+    )
+
+    main._alert(house, "vps no responde", True, "timeout", main._monitor_actions("vps"))
+
+    assert speaker.said == []
+    [(chat, text, actions)] = sent
+    assert chat == OWNER
+    assert "vps no responde" in text
+    assert actions[0] == ("✅ Confirmar", "confirmar vps")
+
+
+def test_on_vacation_the_summaries_and_the_sky_are_still_written_to_everyone(tmp_path):
+    from homeauto.quiet import AwayStore, Hush, HushStore
+
+    path = tmp_path / "jobs.db"
+    hush = Hush(
+        hours=QuietHours.parse("23:00", "07:00"),
+        store=HushStore(path),
+        clock=lambda: NOON,
+        away=AwayStore(path),
+    )
+    hush.start_away(datetime(2026, 10, 1, 0, 0))
+    house, speaker, sent = build_house(quiet=hush)
+
+    main._announce(house, "dicho", "completo", "sin servicios")
+    main._announce(house, "Se viene la lluvia.")
+
+    assert speaker.said == []
+    copies = [(chat, text) for chat, text in sent]
+    assert "completo" in copies[0][1] and copies[0][0] == OWNER
+    assert "sin servicios" in copies[1][1] and copies[1][0] == OTHER
+    assert sorted(chat for chat, text in copies[2:]) == [OWNER, OTHER]
+    assert all("De vacaciones hasta el 01/10" in text for _, text in copies)

@@ -27,3 +27,9 @@ def test_help_names_the_working_days_that_skip_holidays():
     line = next(line for line in HELP.splitlines() if "/alarma hábiles 6:30 arriba" in line)
 
     assert "feriados" in line
+
+
+def test_help_names_the_vacations_and_how_to_cut_them():
+    line = next(line for line in HELP.splitlines() if "/vacaciones hasta 25/10" in line)
+
+    assert "/vacaciones off" in line

@@ -322,3 +322,48 @@ def test_a_device_that_cannot_stop_does_not_stop_the_others():
     announcer.stop(["cocina", "parlante"])
 
     assert parlante.stopped == 1
+
+
+# --- modo vacaciones ---------------------------------------------------------
+
+
+def test_on_vacation_the_alarm_is_only_written_with_its_buttons_and_the_reason(tmp_path):
+    from homeauto.quiet import AwayStore, Hush, HushStore, QuietHours
+
+    noon = datetime(2026, 10, 15, 12, 0)
+    path = tmp_path / "jobs.db"
+    hush = Hush(
+        hours=QuietHours.parse("22:00", "05:25"),
+        store=HushStore(path),
+        clock=lambda: noon,
+        away=AwayStore(path),
+    )
+    hush.start_away(datetime(2026, 10, 25, 0, 0))
+    speaker = FakeSpeaker("parlante")
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=speaker),
+        notify=lambda chat_id, text, actions=(): sent.append((chat_id, text, actions)),
+        fallback="parlante",
+        quiet=hush,
+        clock=lambda: noon,
+        actions=(("🔕 Apagar", "callar {job}"), ("Posponer 10 min", "posponer 10m")),
+        ring_actions=(("🔕 Apagar", "callar {job}"),),
+        chat_ids=(42, 99),
+    )
+
+    announcer(JOB)
+
+    assert speaker.said == []
+    assert [chat for chat, *_ in sent] == [42, 99]
+    _, text, actions = sent[0]
+    assert "De vacaciones hasta el 25/10: no lo dije en voz alta." in text
+    assert actions == (("Posponer 10 min", "posponer 10m"),), "no repite: no hay nada que apagar"
+
+
+def test_in_the_quiet_hours_the_alarm_keeps_its_off_button():
+    announcer, _, sent = ringing(quiet=True)
+
+    announcer(JOB)
+
+    assert sent[0][2] == (("🔕 Apagar", "callar 7"), ("Posponer 10 min", "posponer 10m"))

@@ -18,3 +18,7 @@ def test_there_are_no_duplicate_command_names():
 
 def test_the_pills_command_is_registered():
     assert "pastillas" in ALL_COMMANDS
+
+
+def test_the_vacations_command_is_registered():
+    assert "vacaciones" in ALL_COMMANDS

@@ -299,11 +299,20 @@ class Board:
             if now.tzinfo is None
             else now.isoformat(),
             "quiet": bool(self.quiet.is_quiet(now)) if self.quiet is not None else False,
+            "away": self._away(now),
             "weather": weather,
             "next": self._next(now),
             "lists": self._lists(),
             "problems": problems,
         }
+
+    def _away(self, now: datetime) -> str | None:
+        """La vuelta de las vacaciones en hora local sin zona, o None si no hay."""
+        away_until = getattr(self.quiet, "away_until", None)
+        if away_until is None:
+            return None
+        ends = away_until(self._naive(now))
+        return ends.isoformat() if ends is not None else None
 
     def _lists(self) -> dict:
         """Cada lista con el id de sus ítems, para poder tacharlos."""

@@ -11,6 +11,8 @@ import logging
 from datetime import datetime
 from typing import Callable, Iterable
 
+from homeauto.quiet import away_of, reason_of
+
 log = logging.getLogger(__name__)
 
 # Marca que los chats fuera de los de alertas reciben la misma copia.
@@ -59,10 +61,10 @@ class HouseVoice:
         """
         targets = list(devices or self.default_devices)
 
-        # Lo urgente es lo único que pasa por encima del horario de descanso.
-        if self.resting() and not urgent:
+        # Lo urgente pasa por encima del descanso, pero no de las vacaciones.
+        if self.resting() and (not urgent or away_of(self.quiet, self.clock())):
             log.info("aviso en horario de descanso: solo va al chat")
-            note = "\n\n(horario de descanso: no se dijo en voz alta)"
+            note = f"\n\n{reason_of(self.quiet, self.clock())}: no se dijo en voz alta."
             if others is not SAME:
                 others = f"🔔 {others}{note}" if others else None
             self.tell(f"🔔 {written or text}{note}", others, actions)

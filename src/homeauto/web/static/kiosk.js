@@ -75,9 +75,22 @@
     return sky.charAt(0).toUpperCase() + sky.slice(1) + " · sensación " + weather.feels_like + "°";
   }
 
+  // La leyenda de las vacaciones a partir de la vuelta «AAAA-MM-DDTHH:MM»; vacía si no hay.
+  function awayText(away) {
+    var match = /^\d{4}-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(away || "");
+    if (!match) {
+      return "";
+    }
+    var text = "De vacaciones hasta el " + match[2] + "/" + match[1];
+    if (match[3] !== "00" || match[4] !== "00") {
+      text += " a las " + match[3] + ":" + match[4];
+    }
+    return text;
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { untilText: untilText, nextMeta: nextMeta, nowIndex: nowIndex, skyLine: skyLine,
-      trimPast: trimPast };
+      trimPast: trimPast, awayText: awayText };
   }
   if (typeof document === "undefined") {
     return;
@@ -306,6 +319,9 @@
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
+    var away = awayText(data.away);
+    byId("away").textContent = away;
+    byId("away").hidden = !away;
     showWeather(data.weather);
     upcoming = data.next || null;
     fillToday(data.today);

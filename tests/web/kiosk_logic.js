@@ -53,4 +53,10 @@ assert.strictEqual(hours(kiosk.trimPast([{ time: "14:00", past: false }], 2)), "
 // El cielo con mayúscula y la sensación al lado.
 assert.strictEqual(kiosk.skyLine({ sky: "nublado", feels_like: 19 }), "Nublado · sensación 19°");
 
+// La leyenda de las vacaciones, con la hora solo si no es medianoche.
+assert.strictEqual(kiosk.awayText("2026-10-25T00:00:00"), "De vacaciones hasta el 25/10");
+assert.strictEqual(kiosk.awayText("2026-10-05T18:30:00"), "De vacaciones hasta el 05/10 a las 18:30");
+assert.strictEqual(kiosk.awayText(null), "");
+assert.strictEqual(kiosk.awayText("cualquier cosa"), "");
+
 console.log("ok");

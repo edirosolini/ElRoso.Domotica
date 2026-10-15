@@ -237,3 +237,41 @@ def test_the_router_measurement_covers_the_pills():
     from deploy.measure_router import CASES
 
     assert ("compré 30 de enalapril", "pastillas", "enalapril +30") in CASES
+
+
+def test_the_vacations_are_routable():
+    assert "vacaciones" in ROUTABLE
+
+
+def test_the_prompt_turns_the_return_date_into_day_and_month():
+    from homeauto.route import PROMPT
+
+    start = PROMPT.index("- vacaciones:")
+    line = PROMPT[start:PROMPT.index("\n- ", start + 1)]
+    assert '"hasta 25/10"' in line
+    assert "dd/mm" in PROMPT
+    assert (
+        "Mensaje: nos vamos de vacaciones hasta el 25 de octubre\n"
+        "COMANDO: vacaciones\n"
+        "ARGUMENTO: hasta 25/10"
+    ) in PROMPT
+
+
+def test_going_on_vacation_is_routed_with_its_date():
+    router = Router(model_saying("COMANDO: vacaciones\nARGUMENTO: hasta 25/10"))
+
+    decision = router.route("nos vamos de vacaciones hasta el 25 de octubre")
+
+    assert (decision.command, decision.argument) == ("vacaciones", "hasta 25/10")
+
+
+def test_the_router_measurement_covers_the_vacations_and_their_lookalike():
+    from deploy.measure_router import CASES
+
+    assert (
+        "nos vamos de vacaciones hasta el 25 de octubre", "vacaciones", "hasta 25/10"
+    ) in CASES
+    assert any(
+        message == "recordame comprar los pasajes de las vacaciones" and command == "recordar"
+        for message, command, _ in CASES
+    )

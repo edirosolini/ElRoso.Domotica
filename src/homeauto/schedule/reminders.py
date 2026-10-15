@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Callable, Iterable, Protocol
 
 from homeauto.lists import SHOPPING
+from homeauto.quiet import away_of
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import CANCEL, HOLIDAY, SNOOZE, HistoryStore
@@ -62,6 +63,7 @@ class Reminders:
         holidays: Callable[[date], Holiday | None] | None = None,
         stock: StockStore | None = None,
         lists: ListStore | None = None,
+        quiet=None,
     ):
         self.store = store
         self.timer = timer
@@ -77,6 +79,8 @@ class Reminders:
         # Las dosis que quedan de cada remedio y la lista donde va lo que hay que comprar.
         self.stock = stock
         self.lists = lists
+        # En vacaciones una alarma no se repite.
+        self.quiet = quiet
         self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
@@ -250,6 +254,14 @@ class Reminders:
         self._tell_others(chat_id, f"🔕 {who} apagó la alarma: «{ringing.message}»")
         return ringing.message
 
+    def stop_all_ringing(self) -> int:
+        """Corta las repeticiones de todas las alarmas que suenan, como el tope; devuelve cuántas."""
+        if self.ringing is None:
+            return 0
+        return sum(
+            self._stop_ringing(ringing.job_id) is not None for ringing in self.ringing.all()
+        )
+
     def _audience(self, chat_id: int | None) -> list[int]:
         return self.chat_ids or ([chat_id] if chat_id is not None else [])
 
@@ -400,7 +412,11 @@ class Reminders:
             if next_nag is not None:
                 self._arm_nag(job.id, job.chat_id, next_nag)
         fired_at = self.clock()
-        rings = self.ringing is not None and job.kind == ALARM
+        rings = (
+            self.ringing is not None
+            and job.kind == ALARM
+            and not away_of(self.quiet, fired_at)
+        )
         if rings:
             self.ringing.remember(job.id, job.chat_id, job.message, job.device, fired_at)
         self._write_history(

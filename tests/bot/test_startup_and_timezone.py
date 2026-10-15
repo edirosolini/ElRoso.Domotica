@@ -90,3 +90,26 @@ async def test_startup_binds_the_loop_and_publishes_the_menu():
     assert notifier.loop is asyncio.get_running_loop()
     assert app.bot.menu is not None
     assert len(app.bot.menu) == len(main.COMMAND_MENU)
+
+
+class SpyVacation:
+    def __init__(self, order):
+        self.order = order
+        self.threads = []
+
+    def start(self):
+        self.threads.append(threading.current_thread().name)
+        self.order.append("vacation")
+
+
+@pytest.mark.asyncio
+async def test_startup_rearms_the_end_of_the_vacations_before_the_alarms_off_the_loop():
+    order = []
+    reminders, notifier, app = SpyReminders(), SpyNotifier(), SpyApp()
+    reminders.start = lambda: order.append("reminders")
+    vacation = SpyVacation(order)
+
+    await main.build_post_init(notifier, reminders, vacation=vacation)(app)
+
+    assert order == ["vacation", "reminders"]
+    assert vacation.threads[0] != threading.current_thread().name

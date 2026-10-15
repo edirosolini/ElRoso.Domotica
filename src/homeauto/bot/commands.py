@@ -38,11 +38,12 @@ from homeauto.schedule.spec import (
     weekdays_label,
 )
 from homeauto.schedule.store import ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY
-from homeauto.quiet import Hush
+from homeauto.quiet import Hush, away_label, away_of, reason_of
 from homeauto.timespec import (
     TimeSpecError,
     parse_duration,
     parse_monthday,
+    parse_return_date,
     parse_schedule,
     parse_weekdays,
     skips_holidays,
@@ -114,14 +115,20 @@ def offer(*actions: tuple[str, str]) -> None:
     _ACTIONS.set(_ACTIONS.get() + actions)
 
 
-def with_actions(run: Callable[..., str | Reply], *args) -> Reply:
-    """Corre un comando y junta su respuesta con los botones que ofreció."""
+def with_actions(run: Callable[..., str | Reply], *args, who: str = "") -> Reply:
+    """Corre un comando y junta su respuesta con los botones que ofreció.
+
+    `who` es el nombre de quien escribió, como lo nombran los avisos a los demás.
+    """
     token = _ACTIONS.set(())
+    who_token = _WHO.set(who) if who else None
     try:
         answer = run(*args)
         actions = _ACTIONS.get()
     finally:
         _ACTIONS.reset(token)
+        if who_token is not None:
+            _WHO.reset(who_token)
     if isinstance(answer, Reply):
         return Reply(answer.text, answer.audio, actions or answer.actions)
     return Reply(answer, actions=actions)
@@ -152,6 +159,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /cancelar <n> — cancela uno
 /posponer — repite en 10 minutos la alarma que acaba de sonar · /posponer 30m
 /silencio 2h — no habla por un rato · /hablar lo cancela
+/vacaciones hasta 25/10 — no habla hasta la vuelta, ni lo urgente · /vacaciones off las corta
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
@@ -214,6 +222,7 @@ class Commands:
         transcribe=None,
         voicemail=None,
         stock=None,
+        vacation=None,
         correct=as_written,
         polish=as_is,
         clock: Callable[[], datetime] = datetime.now,
@@ -234,6 +243,8 @@ class Commands:
         self.transcribe = transcribe
         self.voicemail = voicemail
         self.stock = stock
+        # Arranca y corta el modo vacaciones avisando a los demás chats.
+        self.vacation_notice = vacation
         self.correct = correct
         self.polish = polish
         self.clock = clock
@@ -264,9 +275,13 @@ class Commands:
 
     def _resting(self) -> str | None:
         """La respuesta a mandar en vez de hablar, o None si puede sonar."""
-        if self.quiet is not None and self.quiet.is_quiet(self.clock()):
-            return f"Horario de descanso ({self.quiet.label}): no lo dije en voz alta."
-        return None
+        now = self.clock()
+        if self.quiet is None or not self.quiet.is_quiet(now):
+            return None
+        answer = f"{reason_of(self.quiet, now)}: no lo dije en voz alta."
+        if away_of(self.quiet, now):
+            answer += " /vacaciones off las corta."
+        return answer
 
     def _default_aliases(self, chat_id: int) -> list[str]:
         stored = self.preferences.default_device(chat_id) if self.preferences else None
@@ -788,6 +803,7 @@ class Commands:
             "traducir": self.translate,
             "posponer": self.postpone,
             "pastillas": self.pills,
+            "vacaciones": self.vacation,
         }
 
     def press(self, chat_id: int, data: str, who: str = "") -> str:
@@ -1176,6 +1192,8 @@ class Commands:
         return "Listo, vuelvo a hablar."
 
     def _silence_status(self) -> str:
+        if self.quiet.is_away():
+            return f"{self.quiet.reason()}. /vacaciones off las corta."
         ends = self.quiet.until()
         if ends is not None:
             return f"En silencio hasta las {ends.strftime('%H:%M')}. /hablar lo cancela."
@@ -1183,6 +1201,55 @@ class Commands:
             f"Estoy hablando. El horario de descanso va de {self.quiet.hours.label}. "
             "Para callarme un rato: /silencio 2h"
         )
+
+    # --- vacaciones ---------------------------------------------------------
+
+    def vacation(self, chat_id: int, text: str = "", who: str = "") -> str:
+        """Activa el modo vacaciones hasta una fecha, lo corta con «off» o dice el estado."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if not isinstance(self.quiet, Hush) or self.quiet.away is None:
+            return "No tengo el modo vacaciones configurado."
+
+        who = who or _WHO.get() or "Alguien"
+        asked = text.strip()
+        if not asked:
+            return self._vacation_status()
+        if asked.lower() == "off":
+            return self._end_vacation(chat_id, who)
+
+        head, _, rest = asked.partition(" ")
+        dated = head.lower() == "hasta"
+        try:
+            until = parse_return_date(rest if dated else asked, self.clock())
+        except TimeSpecError as exc:
+            if dated:
+                return str(exc)
+            return self._vacation_status()
+
+        if self.vacation_notice is not None:
+            self.vacation_notice.begin(until, chat_id, who)
+        else:
+            self.quiet.start_away(until)
+        return (
+            f"🧳 Listo, de vacaciones hasta el {away_label(until)}. No hablo por los parlantes, "
+            "ni lo urgente: todo llega por acá. /vacaciones off las corta."
+        )
+
+    def _end_vacation(self, chat_id: int, who: str) -> str:
+        if self.vacation_notice is not None:
+            ended = self.vacation_notice.end(chat_id, who)
+        else:
+            ended = self.quiet.stop_away()
+        if not ended:
+            return "No estaba de vacaciones."
+        return "🧳 Listo, se terminaron las vacaciones. Vuelvo a hablar."
+
+    def _vacation_status(self) -> str:
+        if self.quiet.is_away():
+            return f"🧳 {self.quiet.reason()}. /vacaciones off las corta."
+        return "No estoy de vacaciones. Para activarlo: /vacaciones hasta 25/10"
 
     # --- programados -------------------------------------------------------
 

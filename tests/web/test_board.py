@@ -431,6 +431,31 @@ def test_a_silence_on_demand_also_darkens_the_screen(parts):
     assert board(parts, clock=clock, quiet=quiet).screen()["quiet"] is True
 
 
+def test_on_vacation_the_screen_goes_dark_and_says_until_when(parts, tmp_path):
+    from homeauto.quiet import AwayStore
+
+    clock = Clock()
+    quiet = Hush(
+        hours=QuietHours.parse("22:00", "05:25"),
+        store=parts["hush"],
+        clock=clock,
+        away=AwayStore(tmp_path / "jobs.db"),
+    )
+    quiet.start_away(datetime(2026, 10, 25, 0, 0))
+
+    answer = board(parts, clock=clock, quiet=quiet).screen()
+
+    assert answer["quiet"] is True
+    assert answer["away"] == "2026-10-25T00:00:00"
+
+
+def test_without_vacations_the_screen_has_no_away(parts):
+    quiet = Hush(hours=QuietHours.parse("22:00", "05:25"), store=parts["hush"], clock=Clock())
+
+    assert board(parts, quiet=quiet).screen()["away"] is None
+    assert board(parts).screen()["away"] is None
+
+
 def test_the_screen_has_today_from_the_house_and_google(parts):
     clock = Clock(datetime(2026, 10, 6, 10, 30))
     history = parts["history"]

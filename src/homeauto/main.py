@@ -48,7 +48,7 @@ from homeauto.polish import GoogleModel, Polisher, as_is
 from homeauto.translate import TRANSLATE_TIMEOUT, Translator
 from homeauto.lists import ListStore
 from homeauto.pending import Conversation, PendingStore
-from homeauto.quiet import Hush, HushStore
+from homeauto.quiet import AwayStore, Hush, HushStore, Vacation
 from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
@@ -159,6 +159,7 @@ AGENDA_COMMANDS = ("agenda",)
 STATUS_COMMANDS = ("estado",)
 SILENCE_COMMANDS = ("silencio", "siesta")
 SPEAK_COMMANDS = ("hablar",)
+VACATION_COMMANDS = ("vacaciones",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
@@ -166,7 +167,7 @@ ALL_COMMANDS = (
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
     + ASK_COMMANDS + CALC_COMMANDS
     + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
-    + TRANSLATE_COMMANDS + POSTPONE_COMMANDS + PILLS_COMMANDS
+    + TRANSLATE_COMMANDS + POSTPONE_COMMANDS + PILLS_COMMANDS + VACATION_COMMANDS
 )
 
 # Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
@@ -363,11 +364,12 @@ def schedule_holidays(app, client, store) -> None:
     app.job_queue.run_daily(job, time=moment, name="holidays")
 
 
-def build_post_init(notifier, reminders, api=None):
+def build_post_init(notifier, reminders, api=None, vacation=None):
     """Lo que tiene que pasar con el loop ya corriendo, antes de atender a nadie.
 
     `reminders.start()` corre fuera del loop: recuperar un job perdido lo
-    anuncia, y anunciar bloquea.
+    anuncia, y anunciar bloquea. `vacation.start()` va antes: lee la fila de las
+    vacaciones antes de que una consulta la dé por vencida y la borre.
     """
 
     async def post_init(app) -> None:
@@ -376,6 +378,8 @@ def build_post_init(notifier, reminders, api=None):
         # por Telegram en vez de por los parlantes.
         if api is not None:
             api.start()
+        if vacation is not None:
+            await asyncio.to_thread(vacation.start)
         await asyncio.to_thread(reminders.start)
         await app.bot.set_my_commands(
             [BotCommand(name, description) for name, description in COMMAND_MENU]
@@ -685,7 +689,9 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
             waiting = await _say_working(update.message)
             markup = None
             try:
-                reply = await asyncio.to_thread(with_actions, run_command, chat_id, text)
+                reply = await asyncio.to_thread(
+                    with_actions, run_command, chat_id, text, who=_who(update)
+                )
                 answer, markup = reply.text, _keyboard(reply.actions)
             except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
                 log.exception("el comando se rompió")
@@ -723,6 +729,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
         (STATUS_COMMANDS, commands.status),
         (SILENCE_COMMANDS, commands.silence),
         (SPEAK_COMMANDS, commands.speak),
+        (VACATION_COMMANDS, commands.vacation),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -828,7 +835,8 @@ def main() -> None:
     db_path = STATE_DIR / "jobs.db"
     # El silencio que todos consultan: las horas fijas más lo que haya pedido
     # /silencio. Se arma antes que sus usuarios, como el resto del archivo.
-    hush = Hush(hours=config.quiet_hours, store=HushStore(db_path))
+    hush = Hush(hours=config.quiet_hours, store=HushStore(db_path), away=AwayStore(db_path))
+    timer = JobQueueTimer(app.job_queue)
     store = Store(db_path)
     history = HistoryStore(db_path)
     holidays = HolidayStore(db_path)
@@ -846,7 +854,7 @@ def main() -> None:
     )
     reminders = Reminders(
         store=store,
-        timer=JobQueueTimer(app.job_queue),
+        timer=timer,
         announce=announcer,
         fired=FiredStore(db_path),
         awaiting=AwaitingStore(db_path),
@@ -859,6 +867,14 @@ def main() -> None:
         holidays=holidays.get,
         stock=stock,
         lists=ListStore(db_path),
+        quiet=hush,
+    )
+    vacation = Vacation(
+        hush=hush,
+        timer=timer,
+        notify=notifier,
+        chat_ids=config.allowed_chat_ids,
+        stop_ringing=reminders.stop_all_ringing,
     )
     calendar = None
     agenda = None
@@ -957,6 +973,7 @@ def main() -> None:
         transcribe=build_transcriber(config),
         voicemail=build_voicemail(synth),
         stock=stock,
+        vacation=vacation,
         correct=build_corrector(config),
         # Solo para /llamar, que es texto nuestro; lo que escribe una persona
         # va por `correct`.
@@ -1022,7 +1039,7 @@ def main() -> None:
     else:
         log.info("API deshabilitada: no hay API_TOKEN en la configuración")
 
-    app.post_init = build_post_init(notifier, reminders, api)
+    app.post_init = build_post_init(notifier, reminders, api, vacation)
     if watcher is not None:
         schedule_calendar_jobs(app, watcher)
 

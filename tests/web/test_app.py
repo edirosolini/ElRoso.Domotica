@@ -113,6 +113,14 @@ def test_the_kiosk_goes_to_night_tokens_in_the_quiet_hours(app):
     assert ':root[data-theme="night"]' in css
 
 
+def test_the_kiosk_has_a_place_for_the_vacations(app):
+    page = get(app, "/pantalla").body.decode("utf-8")
+    script = get(app, "/static/kiosk.js").body.decode("utf-8")
+
+    assert 'id="away"' in page
+    assert "awayText(data.away)" in script
+
+
 def test_the_agenda_has_a_form_to_write_and_the_script_uses_it(app):
     page = get(app, "/agenda").body.decode("utf-8")
     script = get(app, "/static/app.js").body.decode("utf-8")
