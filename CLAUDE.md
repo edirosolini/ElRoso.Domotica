@@ -388,6 +388,34 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   VPS hacia la casa y ese sentido del túnel no está verificado. El de ida sí.
 - **El monitor solo habla cuando algo cambia**, y aguanta dos rondas antes de declarar una
   caída. Un monitor que llora en cada timeout enseña a ignorarlo, que es peor que no tenerlo.
+  La única insistencia es la de una caída que nadie confirmó.
+- 🔴 **Una caída sin confirmar se re-avisa** a los cinco, diez y quince minutos
+  (`REMIND_DELAYS`) y después cada media hora (`REMIND_EVERY`), hasta que alguien toca
+  «✅ Confirmar» o el servicio vuelve. Hablado, «Atención: X sigue sin responder.», pulido
+  como el resto; escrito, «🚨 Sigue caído: X» con el detalle, solo a alertas y con los mismos
+  botones que la caída.
+- 🔴 **Lo urgente despierta una vez; insistir no despierta.** El primer aviso conserva
+  `urgent`. Los re-avisos van con `urgent=False` y `chime=chime.ALARM`: suenan con los tres
+  beeps, pero en descanso o con «Silenciar 1 h» solo se escriben. Para eso
+  `HouseVoice.announce()` acepta `chime`; sin él, suena solo lo urgente. **Silenciar no
+  confirma**: pasado el silencio, vuelve a sonar.
+- ⚠️ **Los re-avisos cuelgan de la vuelta del monitor**, no de un timer propio: salen en la
+  primera vuelta pasada su hora, así que se atrasan hasta un `CHECK_INTERVAL_SECONDS`.
+- **Se confirma por chequeo y solo desde `ALERT_CHAT_IDS`.** El botón manda
+  `confirmar <nombre>` y `Monitor.acknowledge()` avisa a los otros chats de alertas
+  «✅ <nombre> confirmó: X no responde». El segundo toque contesta quién ya la había
+  confirmado; uno después de la recuperación, que ya volvió.
+- 🔴 **La confirmación y los re-avisos viven en `service_status`**: `acked_by`, `acked_at`,
+  `reminders` y `next_reminder`, por `_add_missing_columns`. Sobreviven un reinicio.
+  `save()` no las toca, `acknowledge()` es condicional —solo una caída avisada y sin
+  confirmar— y la recuperación las limpia. Una fila que ya estaba alertada al desplegar queda
+  con `next_reminder` vacío: **no re-avisa**.
+- 🔴 **El estado se guarda antes de avisar**, con el mismo criterio que posponer: el botón de
+  confirmar llega con el aviso y, guardado después, un toque rápido no encontraría la caída.
+- ⚠️ **El `name` de un chequeo tiene tope de `MAX_NAME_BYTES` (cincuenta y cuatro)**: va en
+  el `callback_data` del botón, que Telegram corta en sesenta y cuatro bytes. Uno más largo
+  hace fallar el arranque.
+- **Seq queda afuera**: sus avisos no traen «Confirmar» ni se re-avisan.
 - 🔴 **`/estado` muestra lo que se vigila ahora, no lo que quedó en la tabla.** `snapshot()`
   filtra por los chequeos configurados: renombrar uno deja su fila vieja y nadie la vuelve a
   chequear, así que quedaba en rojo para siempre, esperando una recuperación que no puede
@@ -399,7 +427,8 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   responde") y ahí **no hay validación** que lo frene, a diferencia del alias de Seq. Un
   nombre con dígitos o guiones se va a escuchar mal.
 - **La recuperación nunca es urgente.** Nadie se despierta por una buena noticia.
-- **Los avisos traen botones**: el del monitor, «Ver estado» y «Silenciar 1 h»; el de Seq,
+- **Los avisos traen botones**: el del monitor, «Ver estado» y «Silenciar 1 h», y la caída
+  y sus re-avisos además «✅ Confirmar» adelante —la recuperación no—; el de Seq,
   solo «Silenciar 1 h», porque `/estado` muestra los chequeos y no Seq. `HouseVoice` los pasa
   también cuando el aviso cae en descanso y solo se escribe.
 - 🔴 **«Silenciar 1 h» no calla lo urgente**, decisión del dueño. Es `/silencio 1h`, y lo
@@ -457,6 +486,8 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | Aviso | Llega a |
 | --- | --- |
 | monitor y Seq, dichos o en descanso | `ALERT_CHAT_IDS` |
+| re-aviso de una caída sin confirmar | `ALERT_CHAT_IDS`, con «✅ Confirmar»; en descanso o silencio, solo escrito |
+| caída confirmada | los otros chats de alertas: «✅ <nombre> confirmó: X no responde» |
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
 | alarmas, recordatorios y timers | todos, con posponer; la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
 | repetición de una alarma sin apagar | todos, una de cada cinco veces y solo con «🔕 Apagar»; «Dejé de sonar» al tope |
@@ -868,8 +899,9 @@ del wav de Piper. Hay tres:
   para `kind=alarm`. Ver el gotcha del piso de volumen.
 - ⚠️ **Los timers agendados antes de la columna `kind` son alarmas**: suenan con el
   despertador, a 90, y repiten hasta que alguien los apague o pase la media hora.
-- **Suena lo que interrumpe**: alarmas, recordatorios y timers (`Announcer`) y todo
-  `announce(urgent=True)` —monitor y API—. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
+- **Suena lo que interrumpe**: alarmas, recordatorios y timers (`Announcer`), todo
+  `announce(urgent=True)` —monitor y API— y el re-aviso de una caída, que pide los tres beeps
+  con `chime` sin ser urgente. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
   descanso no se habla, así que tampoco suena.
 
 ## Horario de descanso
@@ -1500,7 +1532,7 @@ argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cance
   ata las dos mitades.
 - **`/lista` nombra a `/cancelar` y `/compras` nombra a `/sacar`.** Son las salidas del menú
   que dejan a otro comando sin puerta: quien ve la lista ahí mismo lee cómo borrar de ella.
-- **`hecho`, `borrar` y `callar` no están en `ALL_COMMANDS`**: son solo botones, en
+- **`hecho`, `borrar`, `callar` y `confirmar` no están en `ALL_COMMANDS`**: son solo botones, en
   `Commands.press()`. Ni se escriben ni los nombra el router.
 
 ## Cableado

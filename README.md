@@ -348,7 +348,18 @@ vigilar viven en `/etc/domotica/checks.json`:
 
 Campos: `name`, y `url` **o** `host`+`port`. Opcionales: `expect` (código HTTP esperado),
 `urgent`, `timeout`, `attempts`. Un campo desconocido hace fallar el arranque a propósito —
-un typo en `urgent` significaría que nunca te despierta.
+un typo en `urgent` significaría que nunca te despierta—, y también un `name` de más de
+cincuenta y cuatro bytes, que no entra en el botón de confirmar.
+
+**Confirmar una caída.** El aviso de caída trae «✅ Confirmar», además de «Ver estado» y
+«Silenciar 1 h». Mientras nadie lo toque, la casa vuelve a avisar a los 5, 10 y 15 minutos y
+después cada 30, con «Atención: X sigue sin responder» dicho y «🚨 Sigue caído: X» escrito,
+hasta que alguien confirma o el servicio vuelve. Los re-avisos salen en la vuelta del
+monitor, así que se pueden atrasar hasta un intervalo de chequeo, y sobreviven un reinicio.
+Confirmar solo se puede desde un chat de `ALERT_CHAT_IDS` y les avisa a los otros chats de
+alertas quién lo hizo. Un aviso urgente despierta una sola vez: los re-avisos suenan con los
+tres beeps pero nunca pasan por encima del horario de descanso ni de `/silencio`, y ahí solo
+se escriben. Silenciar no confirma.
 
 **Los logs.** Consulta Seq y avisa si hay errores nuevos. Seq dice *por qué* se rompió algo,
 no solo que no responde; pero muere junto con el VPS, y por eso el túnel se vigila aparte.
@@ -368,7 +379,8 @@ le falta una mitad: así está el env desplegado y no puede dejar de arrancar po
 Dos reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
 
 - Un fallo suelto no es una caída: hacen falta dos rondas seguidas para avisar.
-- Se avisa **al cambiar de estado**, no mientras dure. La recuperación también se avisa, y
+- Se avisa **al cambiar de estado**; mientras dure, solo insiste si nadie confirmó la caída.
+  La recuperación también se avisa, y
   nunca como urgente: no hay que despertar a nadie por una buena noticia.
 - Los errores de Seq tienen enfriamiento (`SEQ_COOLDOWN_MINUTES`): un servicio roto logra
   cientos de errores por minuto y no puede convertirse en cientos de avisos. El enfriamiento
