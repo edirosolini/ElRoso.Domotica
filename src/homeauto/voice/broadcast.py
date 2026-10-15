@@ -84,6 +84,20 @@ class HouseVoice:
             "problems": problems,
         }
 
+    def speak_only(self, text: str, chime: bool | str = False) -> bool:
+        """Lo dice en los equipos por defecto sin escribir al chat; en descanso calla. Devuelve si sonó."""
+        if self.resting():
+            log.info("speak-only notice during quiet hours: dropped")
+            return False
+        spoken = False
+        for alias in self.default_devices:
+            try:
+                self.speakers.get(alias).say(text, chime=chime)
+                spoken = True
+            except Exception as exc:  # noqa: BLE001 - un equipo caído no frena a los otros
+                log.warning("could not speak on %s: %s", alias, exc)
+        return spoken
+
     def tell_everyone(self, text: str, actions: tuple[tuple[str, str], ...] = ()) -> None:
         """Lo escribe en todos los chats, con los botones de `actions` si hay."""
         self.tell(text, SAME, actions)

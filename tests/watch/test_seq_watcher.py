@@ -200,3 +200,21 @@ def test_the_marks_keep_the_alias_as_written(tmp_path):
                clock=lambda: NOW, alias="hosting_externo").check()
 
     assert marks.get("seq:hosting_externo:last_check") == NOW
+
+
+def test_without_internet_seq_is_not_asked_and_no_mark_moves(tmp_path):
+    said = []
+    seq = FakeSeq(rounds=[[error()]])
+    marks = Marks(tmp_path / "jobs.db")
+    watcher = SeqWatcher(
+        client=seq,
+        marks=marks,
+        announce=lambda text, detail="": said.append(text),
+        clock=lambda: NOW,
+        online=lambda: False,
+    )
+
+    assert watcher.check() is None
+    assert seq.asked == []
+    assert said == []
+    assert marks.get(watcher.last_check_key) is None

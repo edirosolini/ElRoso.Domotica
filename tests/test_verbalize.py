@@ -2,7 +2,7 @@
 
 import pytest
 
-from homeauto.verbalize import FEMININE, clock, decimal, number
+from homeauto.verbalize import FEMININE, clock, decimal, duration, number
 
 
 @pytest.mark.parametrize(
@@ -158,3 +158,25 @@ def test_a_bare_number_is_not_apocopated():
     assert cardinal(1) == "uno"
     assert cardinal(21) == "veintiuno"
     assert cardinal(119) == "ciento diecinueve"
+
+
+@pytest.mark.parametrize(
+    "minutes, expected",
+    [
+        (1, "un minuto"),
+        (21, "veintiún minutos"),
+        (59, "cincuenta y nueve minutos"),
+        (60, "una hora"),
+        (61, "una hora y un minuto"),
+        (70, "una hora y diez minutos"),
+        (120, "dos horas"),
+        (1440, "veinticuatro horas"),
+        (1441, "más de un día"),
+    ],
+)
+def test_a_duration_is_said_with_its_units(minutes, expected):
+    assert duration(minutes) == expected
+
+
+def test_a_duration_carries_no_digits():
+    assert not any(char.isdigit() for minutes in range(1, 1500) for char in duration(minutes))

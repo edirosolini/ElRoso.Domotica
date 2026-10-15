@@ -106,3 +106,57 @@ def test_without_buttons_the_notifier_gets_two_arguments():
     house.tell_everyone("hola")
 
     assert len(written) == 2
+
+
+# --- solo por el parlante --------------------------------------------------------
+
+
+def test_speak_only_says_it_and_writes_nothing():
+    from homeauto.voice import chime
+
+    house, speaker, written = build()
+
+    assert house.speak_only("Se cortó internet.", chime=chime.SOFT) is True
+
+    assert speaker.said == ["Se cortó internet."]
+    assert speaker.chimes == [chime.SOFT]
+    assert written == [], "no se escribe al chat"
+
+
+def test_speak_only_keeps_quiet_while_resting():
+    house, speaker, written = build(clock=lambda: NIGHT, quiet=QuietHours.parse("23:00", "07:00"))
+
+    assert house.speak_only("Se cortó internet.") is False
+
+    assert speaker.said == []
+    assert written == [], "en descanso tampoco se escribe"
+
+
+def test_speak_only_keeps_quiet_under_a_hush(tmp_path):
+    from datetime import timedelta
+
+    from homeauto.quiet import Hush, HushStore
+
+    hush = Hush(
+        hours=QuietHours.parse("23:00", "07:00"),
+        store=HushStore(tmp_path / "jobs.db"),
+        clock=lambda: NOON,
+    )
+    hush.start(timedelta(hours=1))
+    house, speaker, written = build(quiet=hush)
+
+    assert house.speak_only("Se cortó internet.") is False
+
+    assert speaker.said == [] and written == []
+
+
+def test_speak_only_survives_a_broken_speaker():
+    house, speaker, written = build()
+
+    def broken(text, chime=False, min_volume=None):
+        raise RuntimeError("apagado")
+
+    speaker.say = broken
+
+    assert house.speak_only("Se cortó internet.") is False
+    assert written == []

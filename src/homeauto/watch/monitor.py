@@ -51,8 +51,10 @@ class Monitor:
         polish: Callable[..., str] = as_is,
         remind: Callable[..., None] | None = None,
         tell_others: Callable[[int, str], None] | None = None,
+        online: Callable[[], bool] = lambda: True,
     ):
         self.checks = checks
+        self.online = online
         self.store = store
         self.announce = announce
         self.remind = remind
@@ -74,6 +76,10 @@ class Monitor:
         return {name: state for name, state in self.store.all().items() if name in watched}
 
     def run_once(self) -> list[str]:
+        # Sin internet en la ronda no se chequea ni se cuenta nada.
+        if not self.online():
+            log.info("no uplink: skipping the service checks")
+            return []
         now = self.clock()
         announced = []
 
