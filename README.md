@@ -114,7 +114,11 @@ qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
 `/decir en casa hace frío` dice la frase entera, no se come nada.
 
 **Alarma, recordatorio y timer suenan distinto.** La alarma es para despertarse: un despertador
-de ráfagas que suben de volumen, el parlante a 90 como mínimo, y «Posponer». El recordatorio (`/recordar`) repite siempre en los días marcados —una
+de ráfagas que suben de volumen, el parlante a 90 como mínimo, «🔕 Apagar» y «Posponer». Si
+nadie la apaga, vuelve a sonar un minuto después de terminar, con un despertador más largo, durante
+media hora; al chat escribe una de cada cinco veces y al final avisa «Dejé de sonar».
+«Apagar» funciona desde cualquier chat, corta lo que esté sonando y les avisa a los demás
+quién la apagó; posponer, `/cancelar` o borrarla también cortan la repetición. El recordatorio (`/recordar`) repite siempre en los días marcados —una
 medicación, salir al colegio— y el timer es de una sola vez; los dos suenan con un beep suave
 y traen «✅ Hecho» además de posponer. Tocar «Hecho» les avisa a los demás chats quién lo
 marcó, y ya no se puede posponer. Si nadie lo toca, el chat insiste a los 5, 10 y 15
@@ -421,7 +425,8 @@ http://192.168.68.10:8099/pantalla            # el kiosco, para dejar fijo en un
 se ve, las flechas, «Hoy» y las vistas Mes, Semana, Día y Lista. Cada evento es un bloque de
 color suave: las alarmas (⏰), los recordatorios (📌) y los timers (⏲️) tienen su color; cada
 calendario de Google, el suyo, con la leyenda arriba. Lo que ya sonó dice cómo terminó: ✅ y
-quién lo marcó, 🔔 los re-avisos, 💤 pospuesto, ✖️ cancelado, ⚠️ no sonó. Lo que viene se
+quién lo marcó, 🔔 los re-avisos o las repeticiones, 💤 pospuesto, ✖️ cancelado, 🔕 apagada y
+quién, ⚠️ no sonó. Lo que viene se
 calcula igual que cuando suena. Un toque sobre un evento muestra el detalle. Si un calendario
 no se pudo leer, lo dice arriba por su nombre. En una computadora el mes entra entero en la
 ventana y cada día muestra lo que cabe; en el teléfono, hasta cinco eventos por día. El resto

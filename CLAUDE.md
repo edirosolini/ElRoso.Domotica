@@ -94,7 +94,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con trece tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con catorce tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -112,6 +112,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `strangers.StrangerStore` | los chats fuera de la lista de los que ya se avisó al dueño |
 | `schedule.HistoryStore` | todo lo que sonó y cómo terminó, doce meses (`fired_history`) |
 | `people.PeopleStore` | el nombre visible de cada chat de la casa, para la pantalla |
+| `schedule.RingingStore` | las alarmas que siguen sonando, con sus repeticiones (`ringing`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -457,7 +458,9 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | --- | --- |
 | monitor y Seq, dichos o en descanso | `ALERT_CHAT_IDS` |
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
-| alarmas, recordatorios y timers | todos, con posponer; recordatorios y timers también con «Hecho» |
+| alarmas, recordatorios y timers | todos, con posponer; la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
+| repetición de una alarma sin apagar | todos, una de cada cinco veces y solo con «🔕 Apagar»; «Dejé de sonar» al tope |
+| alarma apagada | los demás chats: «🔕 <nombre> apagó la alarma» |
 | re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
 | agenda, clima, lluvia, API | todos |
 | alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
@@ -845,8 +848,9 @@ del wav de Piper. Hay tres:
 
 - 🔴 **El despertador tiene tres niveles**, `WAKE_LEVELS` (`wake1` a `wake3`): dos coma ocho,
   cuatro y cinco coma tres segundos, cada uno más fuerte. Son ráfagas de mil y mil quinientos
-  hertz con la amplitud subiendo ráfaga a ráfaga. **Hoy la alarma usa `wake1`**; los otros dos
-  existen y no los usa nadie todavía.
+  hertz con la amplitud subiendo ráfaga a ráfaga. La alarma arranca con `wake1`, la primera
+  repetición suena `wake2` y de ahí en adelante `wake3` (`Announcer._sound(job, rings)`). El
+  piso es 90 en todas. Ver **Alarma, recordatorio y timer**.
 - **Ningún tono pasa de `MAX_AMPLITUDE` (0.9)**: `frames()` recorta lo que lo supere. Cada
   tono lleva su amplitud en la tupla `(hertz, segundos, amplitud)`.
 
@@ -862,8 +866,8 @@ del wav de Piper. Hay tres:
 - 🔴 **El piso de la alarma es por frase, no del equipo.** `Speaker.say(min_volume=...)` lo
   reemplaza para ese anuncio; con `None` queda el del equipo. `Announcer._floor()` pide 90 solo
   para `kind=alarm`. Ver el gotcha del piso de volumen.
-- ⚠️ **Los timers agendados antes de la columna `kind` son alarmas**: suenan una última vez con
-  el despertador y a 90.
+- ⚠️ **Los timers agendados antes de la columna `kind` son alarmas**: suenan con el
+  despertador, a 90, y repiten hasta que alguien los apague o pase la media hora.
 - **Suena lo que interrumpe**: alarmas, recordatorios y timers (`Announcer`) y todo
   `announce(urgent=True)` —monitor y API—. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
   descanso no se habla, así que tampoco suena.
@@ -899,15 +903,16 @@ reunión. `quiet.Hush` la implementa.
 Tres tipos de programado, pedidos por el dueño el 2026-09-28: una medicación o salir al
 colegio sonaban con los tres beeps de despertador y decían "(alarma de todos los días)".
 
-| | Repite | Sonido | Botones | Sin «Hecho» |
+| | Repite | Sonido | Botones | Si nadie responde |
 | --- | --- | --- | --- | --- |
-| `/alarma` | una vez, diaria o por días | el despertador, a 90 | posponer | nada |
+| `/alarma` | una vez, diaria o por días | el despertador, a 90 | «🔕 Apagar» y posponer | vuelve a sonar cada minuto |
 | `/recordar` | **siempre**, en los días marcados | un beep suave | «✅ Hecho» y posponer | re-avisa |
 | `/timer` | nunca | un beep suave | «✅ Hecho» y posponer | re-avisa |
 
 - 🔴 **El tipo es la columna `kind` de `jobs`** (`alarm` / `reminder`). Entra por
   `_add_missing_columns` con default `alarm`: lo agendado antes de existir sigue siendo
-  alarma, incluidos los timers pendientes, que suenan con el despertador una última vez.
+  alarma, incluidos los timers pendientes, que suenan con el despertador y repiten como una
+  alarma.
 - 🔴 **Un recordatorio sin días no se agenda.** Una sola vez es un timer, y `/timer` ya
   acepta una hora (`mañana 10:00`). Sin barra, la pregunta que falta es `slots.DAYS`, sin la
   opción «Una sola vez».
@@ -938,9 +943,31 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   sonar. «Hecho» es la forma de cortarlo.
 - ⚠️ **Con `ALLOWED_CHAT_IDS` vacío, el re-aviso de un timer se queda sin destino tras un
   reinicio.** El chat sale del job, que ya no existe; sin lista, no hay a quién escribir.
-- 🔴 **`hecho` es solo un botón**, como `borrar`: está en `Commands.press()` y no en
-  `_dispatch()`, así el router nunca lo nombra y el test que ata las dos listas sigue en pie. El nombre de quien
+- 🔴 **`hecho` y `callar` son solo botones**, como `borrar`: están en `Commands.press()` y no en
+  `_dispatch()`, así el router nunca los nombra y el test que ata las dos listas sigue en pie. El nombre de quien
   tocó sale de `main._who()` y entra a `press(who=...)`.
+- 🔴 **Una alarma suena hasta que alguien la apague.** Vuelve a sonar un minuto después de que
+  termina el anuncio anterior (`RING_DELAY`), con la clave de timer `ring:<id>`, por lo mismo
+  que `nag:<id>`. Cada repetición sube el despertador (`wake1`, `wake2`, después `wake3`) y
+  suma uno a los re-avisos del historial.
+- 🔴 **Tope de media hora desde que sonó** (`RING_LIMIT`). Al llegar deja de sonar y escribe
+  una sola vez «⏰ Dejé de sonar: «…», nadie la apagó» a todos los chats.
+- **Al chat se escribe una repetición de cada cinco** (`RING_WRITE_EVERY`), como «⏰ Sigue
+  sonando» y solo con «🔕 Apagar»; las otras solo suenan. En descanso no se habla, así que
+  ese texto cada cinco es todo lo que sale.
+- 🔴 **«🔕 Apagar» manda `callar <id>`** y apaga desde cualquier chat, porque el aviso le llegó
+  a todos. Corta el audio en curso (`Announcer.stop()`), olvida en `FiredStore` solo los chats
+  cuyo último disparo fue esa alarma, cierra el historial como `off` con quién y avisa a los
+  demás «🔕 <nombre> apagó la alarma». El segundo toque contesta que ya estaba apagada. El
+  método es `Commands.alarm_off`: `silence` ya es `/silencio`.
+- **Posponer, `/cancelar` y `borrar` cortan la repetición.** ⚠️ Posponer no corta el audio
+  que esté sonando en ese momento; solo «Apagar» lo hace.
+- ⚠️ **Una alarma de una sola vez se borra de `jobs` al sonar**: `/cancelar` contesta «No
+  encontré» y lo que la corta es «Apagar». `RingingStore` guarda mensaje y equipos para
+  seguir sonando sin el job.
+- **La repetición sobrevive un reinicio**: `rings` y `next_ring` viven en `ringing`. Al
+  arrancar, una atrasada suena una vez y retoma el ritmo; una que ya pasó el tope no suena y
+  escribe «Dejé de sonar».
 - **Posponer conserva el tipo**: `FiredStore` guarda `kind`, y un recordatorio pospuesto
   vuelve a sonar como recordatorio.
 - ⚠️ **Se tocó el prompt del router** para sumar `recordar` y el ejemplo "recordame mañana a
@@ -982,6 +1009,7 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 - 🔴 **Cualquiera la pospone, una sola vez.** El aviso le llega a todos los chats, así que lo
   que sonó se guarda para todos, y posponer lo borra para todos: el botón del otro contesta
   que no hay nada que posponer. El job nuevo queda a nombre de quien tocó.
+- **Posponer una alarma corta su repetición**, pero no el audio en curso.
 - **Crea un job de una sola vez**, con el mismo mensaje y los mismos equipos. Una alarma que
   repite sigue su curso: posponer el lunes no mueve el martes.
 - 🔴 **Posponer cierra el «Hecho» del original.** `last_fired` guarda el `job_id` (por
@@ -1009,8 +1037,9 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 ## Historial de lo que sonó
 
 `schedule.HistoryStore` (`fired_history`) guarda una fila por cada vez que suena una alarma,
-un recordatorio o un timer: si se dijo, cuántos re-avisos, «Hecho» y quién, pospuesto o
-cancelado, con `closed_at`. `Reminders` es el único que escribe.
+un recordatorio o un timer: si se dijo, cuántos re-avisos —en una alarma, cuántas veces
+repitió—, «Hecho» y quién, apagada y quién (`off`, en `done_by`), pospuesto o cancelado, con
+`closed_at`. `Reminders` es el único que escribe.
 
 - 🔴 **La fila se graba antes de anunciar** y nace como no dicha; `mark_announced()` la da
   por dicha solo si el anuncio no levantó. Un parlante apagado deja la marca de que no sonó,
@@ -1019,9 +1048,10 @@ cancelado, con `closed_at`. `Reminders` es el único que escribe.
   `Reminders._write_history()`, que loguea la falla y sigue.
 - **Cada marca toca solo la última fila abierta del job** (`closed IS NULL`). Una alarma
   diaria tiene una fila por día; marcar la de hoy no reescribe la de ayer.
-- 🔴 **Cancelar solo cierra lo que esperaba «Hecho».** `/cancelar` de algo que nunca sonó no
+- 🔴 **Cancelar solo cierra lo que sigue pendiente**: lo que esperaba «Hecho» o una alarma que repite. `/cancelar` de algo que nunca sonó no
   escribe nada, y una alarma diaria cancelada no toca la fila de ayer: esa ya terminó como
-  terminó.
+  terminó. Una alarma cancelada o borrada mientras repite también se cierra como cancelada.
+  ⚠️ La que llegó al tope deja su fila abierta: solo «Apagar» la cierra.
 - **Doce meses** (`history.KEEP`), podados al insertar, como `awaiting.KEEP`. Sin job aparte.
 
 ## Pantalla de la casa
@@ -1072,7 +1102,8 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   alarma no suena. Es la misma regla que `down_line()`. `schedule/month.py` expande los jobs
   y traduce el historial; `Board` los pasa al formato de FullCalendar.
 - **Lo pasado sale del historial, lo futuro de los jobs**, cortados en el mismo `now`: el día
-  de hoy no muestra dos veces lo que ya sonó. Lo que sonó lleva cómo terminó en el título.
+  de hoy no muestra dos veces lo que ya sonó. Lo que sonó lleva cómo terminó en el título
+  (`board.marks()`): una alarma apagada dice «🔕 apagada <nombre>» y sus repeticiones, «🔔×N».
 - **Un rango es de como mucho sesenta y dos días** (`MAX_RANGE`); invertido o más largo es un
   400. Las fechas de FullCalendar llegan con offset y se llevan a hora local sin zona, como
   guarda la casa sus jobs.
@@ -1469,7 +1500,7 @@ argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cance
   ata las dos mitades.
 - **`/lista` nombra a `/cancelar` y `/compras` nombra a `/sacar`.** Son las salidas del menú
   que dejan a otro comando sin puerta: quien ve la lista ahí mismo lee cómo borrar de ella.
-- **`hecho` y `borrar` no están en `ALL_COMMANDS`**: son solo botones, en
+- **`hecho`, `borrar` y `callar` no están en `ALL_COMMANDS`**: son solo botones, en
   `Commands.press()`. Ni se escriben ni los nombra el router.
 
 ## Cableado
