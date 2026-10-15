@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from homeauto.voice.speaker import MIN_VOLUME, Speaker
+from homeauto.voice.speaker import ALARM_MIN_VOLUME, MIN_VOLUME, Speaker
 
 
 class FakeSynth:
@@ -155,3 +155,24 @@ def test_the_chime_is_asked_of_the_synth(speaker):
     spk.say("hola")
 
     assert synth.chimes == [True, False]
+
+
+def test_the_alarm_floor_is_ninety_and_the_rest_stays_at_sixty():
+    assert ALARM_MIN_VOLUME == 90
+    assert MIN_VOLUME == 60
+
+
+def test_a_floor_asked_for_one_phrase_reaches_the_caster(speaker):
+    spk, _, caster, _ = speaker
+
+    spk.say("arriba", chime="wake1", min_volume=ALARM_MIN_VOLUME)
+
+    assert caster.played[0][1] == 90
+
+
+def test_without_a_floor_for_the_phrase_it_uses_its_own(speaker):
+    spk, _, caster, _ = speaker
+
+    spk.say("hola")
+
+    assert caster.played[0][1] == MIN_VOLUME == 60

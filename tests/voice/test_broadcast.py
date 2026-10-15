@@ -53,6 +53,17 @@ def test_an_urgent_announcement_sounds_before_it_speaks():
     assert speaker.chimes == [True, False]
 
 
+def test_an_urgent_announcement_keeps_the_alarm_beeps_and_the_usual_floor():
+    from homeauto.voice import chime
+
+    house, speaker, _ = build()
+
+    house.announce("producción caída", urgent=True)
+
+    assert chime.sound(speaker.chimes[0]) == chime.ALARM
+    assert speaker.min_volumes == [None], "None es el piso propio del equipo, sesenta"
+
+
 # --- botones -----------------------------------------------------------------
 
 ACTIONS = (("Ver estado", "estado"),)

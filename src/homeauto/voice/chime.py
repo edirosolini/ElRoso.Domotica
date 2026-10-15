@@ -10,28 +10,55 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-# (hertz, segundos). Cero es silencio: el hueco entre beeps.
+AMPLITUDE = 0.35
+# Tope de amplitud de cualquier tono; `frames()` recorta lo que lo pase.
+MAX_AMPLITUDE = 0.9
+
+# (hertz, segundos, amplitud). Cero hertz es silencio: el hueco entre beeps.
 BEEPS = (
-    (880, 0.18),
-    (0, 0.12),
-    (880, 0.18),
-    (0, 0.12),
-    (1320, 0.26),
-    (0, 0.40),
+    (880, 0.18, AMPLITUDE),
+    (0, 0.12, 0),
+    (880, 0.18, AMPLITUDE),
+    (0, 0.12, 0),
+    (1320, 0.26, AMPLITUDE),
+    (0, 0.40, 0),
 )
-SECONDS = sum(length for _, length in BEEPS)
+SECONDS = sum(length for _, length, _ in BEEPS)
 
 # Un solo tono corto: llama la atención sin sonar a despertador.
 SOFT_BEEPS = (
-    (660, 0.22),
-    (0, 0.40),
+    (660, 0.22, AMPLITUDE),
+    (0, 0.40, 0),
 )
+
+
+def _wake(bursts: int, low: float, high: float) -> tuple[tuple[int, float, float], ...]:
+    """Ráfagas de dos tonos con la amplitud subiendo de `low` a `high`."""
+    beeps = []
+    for index in range(bursts):
+        amplitude = round(low + (high - low) * index / (bursts - 1), 3)
+        beeps += [
+            (1000, 0.14, amplitude),
+            (0, 0.06, 0),
+            (1500, 0.20, amplitude),
+            (0, 0.22, 0),
+        ]
+    beeps.append((0, 0.30, 0))
+    return tuple(beeps)
+
 
 ALARM = "alarm"
 SOFT = "soft"
-SOUNDS = {ALARM: BEEPS, SOFT: SOFT_BEEPS}
+# Los niveles del despertador, de menor a mayor.
+WAKE_LEVELS = ("wake1", "wake2", "wake3")
+WAKE = WAKE_LEVELS[0]
+WAKE_BEEPS = (
+    _wake(4, 0.45, 0.80),
+    _wake(6, 0.55, 0.88),
+    _wake(8, 0.65, MAX_AMPLITUDE),
+)
+SOUNDS = {ALARM: BEEPS, SOFT: SOFT_BEEPS, **dict(zip(WAKE_LEVELS, WAKE_BEEPS))}
 
-AMPLITUDE = 0.35
 # Un tono que arranca a amplitud plena hace click.
 FADE_SECONDS = 0.006
 SUPPORTED_WIDTH = 2
@@ -53,12 +80,12 @@ def frames(rate: int, width: int, channels: int, beeps=BEEPS) -> bytes:
     if width != SUPPORTED_WIDTH:
         raise ValueError(f"solo se soportan muestras de {SUPPORTED_WIDTH} bytes")
 
-    peak = int(AMPLITUDE * 32767)
     fade = max(1, int(FADE_SECONDS * rate))
     samples = array.array("h")
 
-    for hertz, length in beeps:
+    for hertz, length, amplitude in beeps:
         total = int(length * rate)
+        peak = int(min(amplitude, MAX_AMPLITUDE) * 32767)
         for index in range(total):
             if hertz == 0:
                 value = 0

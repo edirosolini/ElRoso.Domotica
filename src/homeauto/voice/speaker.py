@@ -12,6 +12,7 @@ from homeauto.voice.tts import duration_seconds
 
 # Piso de volumen para todo lo hablado. Después se le devuelve el suyo al equipo.
 MIN_VOLUME = 60
+ALARM_MIN_VOLUME = 90
 
 
 class Speaker:
@@ -27,17 +28,18 @@ class Speaker:
             self.media_server.start()
             self._serving = True
 
-    def say(self, text: str, chime: bool | str = False) -> Path:
+    def say(self, text: str, chime: bool | str = False, min_volume: int | None = None) -> Path:
         """Sintetiza, publica y reproduce. Devuelve el archivo de audio usado.
 
-        El piso de volumen se aplica acá, para todos los llamadores. `chime`
-        pega adelante un sonido, en el mismo clip y el mismo cast.
+        El piso de volumen se aplica acá, para todos los llamadores; `min_volume`
+        lo reemplaza para esta frase. `chime` pega adelante un sonido, en el mismo
+        clip y el mismo cast.
         """
         path = self.synth.say(text, chime=chime)
         self._ensure_serving()
         self.caster.play(
             self.media_server.url_for(path.name),
-            min_volume=self.min_volume,
+            min_volume=self.min_volume if min_volume is None else min_volume,
             expected_seconds=duration_seconds(path),
         )
         return path

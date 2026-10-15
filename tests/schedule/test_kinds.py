@@ -107,10 +107,10 @@ REMINDER_JOB = Job(
 )
 
 
-def test_an_alarm_rings_the_alarm_beeps():
+def test_an_alarm_rings_the_wake_beeps():
     speaker, _ = announce(ALARM_JOB)
 
-    assert speaker.chimes == [chime.ALARM]
+    assert speaker.chimes == [chime.WAKE]
 
 
 def test_a_reminder_rings_the_soft_beep():

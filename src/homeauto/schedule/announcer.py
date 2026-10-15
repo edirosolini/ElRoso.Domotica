@@ -17,6 +17,7 @@ from homeauto.timespec import format_weekdays
 from homeauto.voice import chime
 from homeauto.voice.caster import CastError
 from homeauto.voice.registry import UnknownDevice
+from homeauto.voice.speaker import ALARM_MIN_VOLUME
 from homeauto.voice.tts import TtsError
 
 log = logging.getLogger(__name__)
@@ -62,7 +63,9 @@ class Announcer:
             problems = []
             for alias in job.devices or [self.fallback]:
                 try:
-                    self.speakers.get(alias).say(message, chime=self._sound(job))
+                    self.speakers.get(alias).say(
+                        message, chime=self._sound(job), min_volume=self._floor(job)
+                    )
                 except DEVICE_ERRORS as exc:
                     problems.append(f"{alias}: {exc}")
                     log.warning("el job %s no sonó en %s: %s", job.id, alias, exc)
@@ -82,7 +85,12 @@ class Announcer:
 
     @staticmethod
     def _sound(job: Job) -> str:
-        return chime.SOFT if job.is_reminder else chime.ALARM
+        return chime.SOFT if job.is_reminder else chime.WAKE
+
+    @staticmethod
+    def _floor(job: Job) -> int | None:
+        """El piso de volumen del job; `None` deja el del equipo."""
+        return None if job.is_reminder else ALARM_MIN_VOLUME
 
     def _actions(self, job: Job) -> tuple[tuple[str, str], ...]:
         if not job.is_reminder:

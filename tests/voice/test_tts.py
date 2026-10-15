@@ -207,3 +207,27 @@ def test_the_alarm_keeps_the_cache_it_already_had(synth):
     voice = synth(FakePiper(seconds=3.0))
 
     assert voice.say("arriba", chime=True) == voice.say("arriba", chime=chime.ALARM)
+
+
+def test_each_wake_level_has_its_own_cache_key(synth):
+    from homeauto.voice import chime
+
+    voice = synth(FakePiper(seconds=3.0))
+    names = (None, chime.ALARM, chime.SOFT, *chime.WAKE_LEVELS)
+    keys = {voice._key("arriba", name) for name in names}
+
+    assert len(keys) == len(names)
+
+
+def test_a_wake_level_is_synthesized_apart_and_longer_than_the_alarm(synth):
+    from homeauto.voice import chime
+
+    piper = FakePiper(seconds=3.0)
+    voice = synth(piper)
+
+    alarm = voice.say("arriba", chime=chime.ALARM)
+    wake = voice.say("arriba", chime=chime.WAKE)
+
+    assert wake != alarm
+    assert duration_of(wake) > duration_of(alarm)
+    assert voice.say("arriba", chime=chime.WAKE) == wake
