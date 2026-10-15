@@ -463,6 +463,27 @@ descanso, con `/silencio` ni de vacaciones: ahí se pierde. Cuando vuelve, lo di
 todos los chats «🌐 Internet se cortó de HH:MM a HH:MM (N min)». Un corte de una sola ronda no
 dice nada. El estado sobrevive un reinicio.
 
+**El Proxmox.** Con `PVE_URL`, el monitor suma cuatro chequeos por la API del host:
+`proxmox` (que conteste), `el disco del proxmox`, `las máquinas del proxmox` y
+`los respaldos`. Se ven en `/estado`, traen «✅ Confirmar» y entran en la línea de caídos del
+resumen y del cierre. Ninguno es urgente.
+
+- **Disco**: los storages activos y la raíz del host. Avisa desde `PVE_DISK_ALERT` y vuelve
+  recién cinco puntos por debajo, también después de un reinicio.
+- **Máquinas**: las que arrancan con el host (`onboot=1`) y están paradas. Es el único de los
+  cuatro que re-avisa. Un CT parado a propósito con `onboot=1` avisa: se calla con
+  «Confirmar» o sacándole `onboot`.
+- **Respaldos**: el último `vzdump` terminado. `WARNINGS` no es caída.
+- Si la API no contesta, cae solo `proxmox`: los otros tres no cambian de estado esa vuelta.
+  Lo mismo si falla una sola consulta o si todavía no hay respaldos.
+- Dicho es genérico («el disco del proxmox está casi lleno»); la máquina, el storage y el
+  porcentaje van solo en el chat.
+
+`PVE_URL` y `PVE_TOKEN` van juntos: una sin la otra hace fallar el arranque, igual que una URL
+que no sea `https`, un token con otra forma o una `PVE_CA_FILE` que falte o no exista. El
+token va en el header y se valida el certificado contra la CA del Proxmox, nunca sin
+verificar. El token del CT es de solo lectura (rol `PVEAuditor`).
+
 Tres reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
 
 - Un fallo suelto no es una caída: hacen falta dos rondas seguidas para avisar.
@@ -625,6 +646,10 @@ SEQ_API_KEY_HOSTING=                # clave de solo lectura; falta la clave, no 
 SEQ_URL_NUBE=http://172.68.2.7      # una clave por VPS; el sufijo es el alias
 SEQ_API_KEY_NUBE=
 SEQ_COOLDOWN_MINUTES=15             # el enfriamiento es de cada instancia
+PVE_URL=https://192.168.68.60:8006  # API del Proxmox; sin URL, no se vigila
+PVE_TOKEN=                          # usuario@realm!id=secreto, de solo lectura
+PVE_CA_FILE=/etc/domotica/pve-ca.pem   # obligatoria con PVE_URL; tiene que existir
+PVE_DISK_ALERT=85                   # % de disco que avisa, de 1 a 99
 LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado
 LLM_MODEL=gemini-3.1-flash-lite
 ASK_MODEL=gemini-3.7-flash     # el que contesta /preguntar; NO hereda de LLM_MODEL
