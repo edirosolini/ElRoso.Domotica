@@ -707,8 +707,13 @@ class Commands:
             return self.free_text(chat_id, data[len(ANSWER_MARK):].strip())
 
         command, _, argument = data.strip().partition(" ")
-        # «hecho», «borrar» y «callar» solo existen como botón: el router nunca los nombra.
-        buttons = {"hecho": self.done, "borrar": self.discard, "callar": self.alarm_off}
+        # Estos solo existen como botón: el router nunca los nombra.
+        buttons = {
+            "hecho": self.done,
+            "borrar": self.discard,
+            "callar": self.alarm_off,
+            "confirmar": self.confirm,
+        }
         run = {**self._dispatch(), **buttons}.get(command)
         if run is None:
             log.warning("botón desconocido: %r", data)
@@ -750,6 +755,21 @@ class Commands:
         if message is None:
             return "Esa alarma ya estaba apagada."
         return f"🔕 Apagada: «{message}»"
+
+    def confirm(self, chat_id: int, text: str) -> str:
+        """Confirma la caída de un chequeo desde un chat de alertas y avisa a los otros."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+
+        name = text.strip()
+        if not name:
+            return "No sé cuál confirmar."
+        if self.monitor is None:
+            return f"No vigilo nada llamado {name}."
+        if chat_id not in self.config.alert_recipients:
+            return "Solo los chats de alertas pueden confirmar una caída."
+        return self.monitor.acknowledge(name, _WHO.get() or "Alguien", chat_id)
 
     def discard(self, chat_id: int, text: str) -> str:
         """Borra un aviso de cualquiera, desde el botón de la pantalla, y avisa a los demás."""

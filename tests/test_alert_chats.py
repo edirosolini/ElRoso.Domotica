@@ -132,6 +132,39 @@ def test_a_resting_announcement_gives_the_others_their_copy():
     assert "descanso" in copies[OTHER]
 
 
+def test_the_sound_can_be_asked_apart_from_the_urgency():
+    from homeauto.voice import chime
+
+    house, speaker, _ = build_house()
+
+    house.announce("vps sigue sin responder", urgent=False, chime=chime.ALARM, others=None)
+
+    assert speaker.chimes == [chime.ALARM]
+
+
+def test_without_a_sound_the_urgency_decides_it():
+    house, speaker, _ = build_house()
+
+    house.announce("vps no responde", urgent=True, others=None)
+    house.announce("vps volvió", others=None)
+
+    assert speaker.chimes == [True, False]
+
+
+def test_a_resting_reminder_is_neither_said_nor_beeped():
+    from homeauto.voice import chime
+
+    house, speaker, sent = build_house(
+        clock=lambda: NIGHT, quiet=QuietHours.parse("23:00", "07:00")
+    )
+
+    result = house.announce("vps sigue sin responder", chime=chime.ALARM, others=None)
+
+    assert result["spoken"] is False
+    assert speaker.chimes == []
+    assert [chat for chat, _ in sent] == [OWNER]
+
+
 def test_the_speaker_does_not_care_about_the_audience():
     house, speaker, _ = build_house()
 

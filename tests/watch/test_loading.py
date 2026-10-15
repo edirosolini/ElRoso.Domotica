@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from homeauto.watch.loading import ChecksError, load_checks
+from homeauto.watch.loading import MAX_NAME_BYTES, ChecksError, load_checks
 
 
 def write(tmp_path, payload):
@@ -70,6 +70,20 @@ def test_repeated_names_are_rejected(tmp_path):
 
     with pytest.raises(ChecksError, match="repetido"):
         load_checks(path)
+
+
+def test_a_name_too_long_for_the_confirm_button_fails_the_start(tmp_path):
+    """El botón «Confirmar» lleva el nombre, y Telegram corta en 64 bytes."""
+    path = write(tmp_path, [{"name": "ñ" * (MAX_NAME_BYTES // 2 + 1), "url": "https://a"}])
+
+    with pytest.raises(ChecksError, match="largo"):
+        load_checks(path)
+
+
+def test_a_name_at_the_limit_is_fine(tmp_path):
+    path = write(tmp_path, [{"name": "a" * MAX_NAME_BYTES, "url": "https://a"}])
+
+    assert load_checks(path)[0].name == "a" * MAX_NAME_BYTES
 
 
 def test_an_unknown_field_is_rejected_instead_of_ignored(tmp_path):

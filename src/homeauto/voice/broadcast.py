@@ -48,12 +48,14 @@ class HouseVoice:
         written: str | None = None,
         actions: tuple[tuple[str, str], ...] = (),
         others=SAME,
+        chime: bool | str | None = None,
     ) -> dict:
         """`written` es la copia del chat cuando lleva más que lo hablado.
 
         El aviso del monitor cita un estado HTTP y una traza: sirve leído, es
         ilegible dicho y está lleno de dígitos que Piper lee mal.
         `others` es la copia de los chats que no reciben alertas, como en `tell()`.
+        `chime` es el sonido previo; sin él, suena solo lo urgente.
         """
         targets = list(devices or self.default_devices)
 
@@ -66,11 +68,11 @@ class HouseVoice:
             self.tell(f"🔔 {written or text}{note}", others, actions)
             return {"spoken": False, "notified": True, "devices": targets, "problems": []}
 
+        sound = urgent if chime is None else chime
         problems = []
         for alias in targets:
             try:
-                # Solo lo urgente suena antes de hablar.
-                self.speakers.get(alias).say(text, chime=urgent)
+                self.speakers.get(alias).say(text, chime=sound)
             except Exception as exc:  # noqa: BLE001 - se reporta al llamador
                 log.warning("no pude hablar en %s: %s", alias, exc)
                 problems.append(f"{alias}: {exc}")
