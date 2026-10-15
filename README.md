@@ -18,6 +18,9 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /pastillas 7 enalapril 30       cada «Hecho» del recordatorio #7 descuenta una
 /pastillas enalapril +30        repone
 /pastillas enalapril aviso 5    avisa con 5 o menos (por defecto, 7)
+/turnos 7 Cin, Die              el #7 le toca a uno por semana
+/turnos 7 off                   lo corta
+/turnos                         lo que se turna y a quién le toca
 /alarma 7:30 arriba             para despertarse, una vez
 /alarma diaria 7:30 arriba      para despertarse, todos los días
 /alarma lun-vie 5:30 arriba     para despertarse, solo esos días
@@ -150,7 +153,7 @@ media hora; al chat escribe una de cada cinco veces y al final avisa «Dejé de 
 «Apagar» funciona desde cualquier chat, corta lo que esté sonando y les avisa a los demás
 quién la apagó; posponer, `/cancelar` o borrarla también cortan la repetición. El recordatorio (`/recordar`) repite siempre en los días marcados —una
 medicación, salir al colegio— y el timer es de una sola vez; los dos suenan con un beep suave
-y traen «✅ Hecho» además de posponer. Tocar «Hecho» les avisa a los demás chats quién lo
+y traen «✅ Hecho» además de posponer. «Hecho» vale desde cualquier chat y les avisa a los demás chats quién lo
 marcó, y ya no se puede posponer. Si nadie lo toca, el chat insiste a los 5, 10 y 15
 minutos con «🔔 Sigue pendiente», solo escrito y solo con «Hecho», también en horario de
 descanso; «Hecho», posponer o `/cancelar` lo cortan. Un recordatorio sin días no se agenda:
@@ -165,6 +168,15 @@ con `/pastillas enalapril aviso 5`) escribe una sola vez a todos «💊 Quedan 7
 comprar.» y lo suma a `/compras` si no estaba; no suena por el parlante. `/pastillas
 enalapril +30` repone y, si queda por encima del aviso, lo vuelve a armar. Solo se atan
 recordatorios que repiten, y un recordatorio pospuesto sigue contando del mismo remedio.
+
+**Tareas por turno.** `/turnos 7 Cin, Die` hace que el #7 le toque a uno distinto cada
+semana, de lunes a domingo, en ese orden y empezando por el primero esta semana: el aviso dice
+«Le toca a Cin: sacar la basura», y también lo pospuesto, el «Hecho» y la pantalla. Los
+nombres se separan por comas o por «y» y van solo con letras y espacios, porque se dicen en
+voz alta; un solo nombre también vale. Solo se turna lo que repite, y lo puede hacer
+cualquier chat. Volver a correr `/turnos` sobre el mismo número arranca la cuenta de nuevo
+esta semana; `/turnos 7 off` lo corta y `/lista` muestra los nombres. No se puede cambiar el
+turno a mano ni saltear una semana.
 
 Los timers, las alarmas y los recordatorios se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
@@ -213,6 +225,7 @@ callate una hora                          →  /silencio 1h
 nos vamos de vacaciones hasta el 25 de octubre  →  /vacaciones hasta 25/10
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
 compré 30 de enalapril                    →  /pastillas enalapril +30
+la basura la sacan Cin y Die una semana cada uno, es el 7  →  /turnos 7 Cin, Die
 llamá a todos a cenar                     →  /llamar en todos a cenar
 ```
 
