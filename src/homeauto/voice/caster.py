@@ -48,6 +48,13 @@ class _Discovery:
         self._browser = browser
         return casts
 
+    def host_of(self, device_uuid: uuidlib.UUID) -> str | None:
+        """Devuelve la IP que mDNS anuncia hoy para el UUID, o None si no la sabe."""
+        if self._browser is None:
+            return None
+        info = self._browser.devices.get(device_uuid)
+        return None if info is None else info.host
+
 
 discover_devices = _Discovery()
 
@@ -62,9 +69,11 @@ class Caster:
         discovery_timeout: int = DISCOVERY_TIMEOUT,
         settle: float = SETTLE_AFTER_QUIT,
         finish_timeout: float = FINISH_TIMEOUT,
+        locate: Callable[[uuidlib.UUID], str | None] = discover_devices.host_of,
     ):
         self.device_uuid = device_uuid
         self.discover = discover
+        self.locate = locate
         self.discovery_timeout = discovery_timeout
         self.settle = settle
         self.finish_timeout = finish_timeout
@@ -72,7 +81,9 @@ class Caster:
 
     def _resolve(self):
         if self._device is not None:
-            return self._device
+            if not self._moved(self._device):
+                return self._device
+            self.forget()
 
         found = self.discover(timeout=self.discovery_timeout)
         for candidate in found:
@@ -84,9 +95,39 @@ class Caster:
         seen = ", ".join(getattr(c.cast_info, "friendly_name", "?") for c in found) or "ninguno"
         raise CastError(f"No encontré el dispositivo {self.device_uuid}. Vi: {seen}")
 
+    def _moved(self, device) -> bool:
+        """Dice si el equipo cacheado está conectado a otra IP que la que anuncia mDNS."""
+        try:
+            announced = self.locate(self.device_uuid)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not locate %s: %s", self.device_uuid, exc)
+            return False
+        if announced is None:
+            return False
+
+        client = getattr(device, "socket_client", None)
+        connected = client.host if client is not None else device.cast_info.host
+        if connected == announced:
+            return False
+
+        log.warning(
+            "%s is connected to %s but announces %s: looking it up again",
+            self.device_uuid,
+            connected,
+            announced,
+        )
+        return True
+
     def forget(self) -> None:
         """Olvida el equipo cacheado para que la próxima llamada lo redescubra."""
-        self._device = None
+        device, self._device = self._device, None
+        if device is None:
+            return
+        try:
+            # timeout=0 no espera a que termine el hilo del socket.
+            device.disconnect(timeout=0)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("disconnect of %s failed: %s", self.device_uuid, exc)
 
     def _perform(self, action: Callable[[object], object]):
         """Hace algo en el equipo, buscándolo de nuevo si se movió.
