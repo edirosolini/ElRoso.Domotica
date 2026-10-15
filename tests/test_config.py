@@ -1,8 +1,10 @@
 import uuid
+from datetime import time
 
 import pytest
 
 from homeauto.config import Config, ConfigError
+from tests.conftest import make_config
 
 
 def write_env(tmp_path, body):
@@ -170,3 +172,43 @@ def test_the_asking_model_can_be_changed_on_its_own(tmp_path):
 
     assert cfg.llm_model == "uno"
     assert cfg.ask_model == "otro"
+
+
+# --- el resumen semanal ------------------------------------------------------
+
+
+def test_the_weekly_summary_goes_out_on_sunday_evening_by_default(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\n"))
+
+    assert cfg.weekly_at.days == (7,)
+    assert cfg.weekly_at.at == time(19, 0)
+
+
+def test_the_weekly_summary_can_be_turned_off(tmp_path):
+    path = write_env(tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nWEEKLY_AT=off\n")
+
+    assert Config.from_file(path).weekly_at is None
+
+
+def test_the_weekly_summary_takes_a_day_and_an_hour(tmp_path):
+    path = write_env(
+        tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nWEEKLY_AT=lun 9:00\n"
+    )
+    cfg = Config.from_file(path)
+
+    assert cfg.weekly_at.days == (1,)
+    assert cfg.weekly_at.at == time(9, 0)
+
+
+@pytest.mark.parametrize("raw", ["dom", "19:00", "xyz 19:00", "dom 25:00", "dom siete"])
+def test_a_broken_weekly_summary_stops_the_service(tmp_path, raw):
+    path = write_env(
+        tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\nWEEKLY_AT={raw}\n"
+    )
+
+    with pytest.raises(ConfigError, match="WEEKLY_AT"):
+        Config.from_file(path)
+
+
+def test_a_config_built_in_code_has_no_weekly_summary():
+    assert make_config().weekly_at is None

@@ -35,6 +35,7 @@ from homeauto.bot.commands import Commands, with_actions
 from homeauto.bible import VerseOfTheDay
 from homeauto.briefing import Briefing
 from homeauto.closing import Closing
+from homeauto.weekly import Weekly
 from homeauto.economy import EconomyClient
 from homeauto.news import NewsClient
 from homeauto.config import Config
@@ -319,6 +320,27 @@ def schedule_closing(app, config, closing, announce) -> None:
             announce(summary.spoken, summary.written, summary.public)
 
     _schedule_daily(app, config.closing_at, speak, name="closing", label="cierre del día")
+
+
+def schedule_weekly(app, config, weekly, tell) -> None:
+    """El balance de la semana, solo escrito y solo si hay algo que contar."""
+    if config.weekly_at is None:
+        return
+    at = config.weekly_at.at
+    moment = clock_time(at.hour, at.minute, tzinfo=local_timezone())
+    # PTB numera los días de 0 = domingo a 6 = sábado.
+    days = tuple(day % 7 for day in config.weekly_at.days)
+
+    def write() -> None:
+        text = weekly.text()
+        if text:
+            tell(text)
+
+    async def job(_context):
+        await asyncio.to_thread(write)
+
+    app.job_queue.run_daily(job, time=moment, days=days, name="weekly")
+    log.info("weekly summary at %s on %s", moment.strftime("%H:%M"), days)
 
 
 def build_post_init(notifier, reminders, api=None):
@@ -1008,6 +1030,8 @@ def main() -> None:
         ),
         lambda text, written=None, others=SAME: _announce(house, text, written, others),
     )
+
+    schedule_weekly(app, config, Weekly(history=history, clock=datetime.now), house.tell_everyone)
 
     rain = RainWatcher(
         weather=weather,
