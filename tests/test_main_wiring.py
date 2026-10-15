@@ -1276,3 +1276,19 @@ def test_the_screen_shows_the_holidays_of_the_one_database(wired, tmp_path, monk
 
     assert board.holidays.db_path == tmp_path / "jobs.db"
     assert [event["title"] for event in events] == ["🏖 Diversidad"]
+
+
+def test_the_pills_are_counted_in_the_one_database(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    commands = _spy_init(monkeypatch, main.Commands)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    stock = reminders["stock"]
+    assert stock is commands["stock"], "el comando y el «Hecho» cuentan el mismo stock"
+    assert stock.db_path == tmp_path / "jobs.db"
+    supply, _ = stock.ensure("enalapril", 8)
+    assert stock.take_dose(supply.id) == (stock.get(supply.id), True)
+    lists = reminders["lists"]
+    assert lists.db_path == tmp_path / "jobs.db"
+    assert lists.add("compras", ["enalapril"]) == ["enalapril"]

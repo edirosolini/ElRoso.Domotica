@@ -10,6 +10,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Callable, Iterable, Protocol
 
+from homeauto.lists import SHOPPING
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import CANCEL, HOLIDAY, SNOOZE, HistoryStore
@@ -19,6 +20,8 @@ from homeauto.schedule.store import ALARM, ONCE, Job, Store, next_run
 
 if TYPE_CHECKING:
     from homeauto.holidays import Holiday
+    from homeauto.lists import ListStore
+    from homeauto.schedule.stock import Stock, StockStore
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +60,8 @@ class Reminders:
         ringing: RingingStore | None = None,
         stop_audio: Callable[[list[str]], None] | None = None,
         holidays: Callable[[date], Holiday | None] | None = None,
+        stock: StockStore | None = None,
+        lists: ListStore | None = None,
     ):
         self.store = store
         self.timer = timer
@@ -69,6 +74,9 @@ class Reminders:
         self.stop_audio = stop_audio
         # El feriado de un día, leído de la caché local.
         self.holidays = holidays
+        # Las dosis que quedan de cada remedio y la lista donde va lo que hay que comprar.
+        self.stock = stock
+        self.lists = lists
         self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
@@ -111,9 +119,10 @@ class Reminders:
         kind: str = ALARM,
         monthday: int | None = None,
         skip_holidays: bool = False,
+        stock_id: int | None = None,
     ) -> Job:
         job = self.store.add(
-            chat_id, when, message, repeat, device, days, kind, monthday, skip_holidays
+            chat_id, when, message, repeat, device, days, kind, monthday, skip_holidays, stock_id
         )
         self._arm(job)
         return job
@@ -142,6 +151,13 @@ class Reminders:
 
     def list(self, chat_id: int) -> list[Job]:
         return self.store.pending(chat_id=chat_id)
+
+    def get(self, job_id: int) -> Job | None:
+        return self.store.get(job_id)
+
+    def attach_stock(self, job_id: int, stock_id: int) -> bool:
+        """Ata un job a un stock de remedio; False si el job ya no existe."""
+        return self.store.attach_stock(job_id, stock_id)
 
     def cancel(self, chat_id: int | None, job_id: int, any_owner: bool = False) -> bool:
         """Borra un job del chat, o de cualquiera con `any_owner`; False si no estaba."""
@@ -183,18 +199,24 @@ class Reminders:
             self._stop_ringing(last.job_id)
             self._close_wait(last.job_id)
             self._write_history(lambda history: history.mark_closed(last.job_id, SNOOZE, now))
-        return self.add(chat_id, now + delay, last.message, device=last.device, kind=last.kind)
+        return self.add(
+            chat_id, now + delay, last.message, device=last.device, kind=last.kind,
+            stock_id=last.stock_id,
+        )
 
     def done(self, chat_id: int, job_id: int, who: str) -> str | None:
         """Cierra un recordatorio que sonó y avisa al resto; None si ya estaba cerrado."""
         if self.awaiting is None:
             return None
+        wait = self.awaiting.get(job_id)
         message = self.awaiting.take(job_id)
         self.timer.unschedule(_nag_key(job_id))
         if message is None:
             return None
         now = self.clock()
         self._write_history(lambda history: history.mark_done(job_id, now, who))
+        if wait is not None and wait.stock_id is not None:
+            self._take_dose(chat_id, wait.stock_id)
         audience = self._audience(chat_id)
         for chat in audience:
             if self.fired is not None and (last := self.fired.last(chat)) and last.message == message:
@@ -301,6 +323,24 @@ class Reminders:
         except Exception:
             log.exception("could not write to the fired history")
 
+    def _take_dose(self, chat_id: int, stock_id: int) -> None:
+        """Descuenta una dosis; al cruzar el umbral avisa y lo suma a compras."""
+        if self.stock is None:
+            return
+        try:
+            taken = self.stock.take_dose(stock_id)
+            if taken is None:
+                return
+            supply, crossed = taken
+            if not crossed:
+                return
+            for chat in self._audience(chat_id):
+                self._write(chat, _running_out(supply))
+            if self.lists is not None:
+                self.lists.add(SHOPPING, [supply.name])
+        except Exception:
+            log.exception("could not take a dose from stock %s", stock_id)
+
     def _arm_nag(self, job_id: int, chat_id: int | None, when: datetime) -> None:
         self.timer.schedule(_nag_key(job_id), when, lambda: self._nag(job_id, chat_id))
 
@@ -350,11 +390,13 @@ class Reminders:
         if self.fired is not None:
             at = self.clock()
             for chat in self._audience(job.chat_id):
-                self.fired.remember(chat, job.message, job.device, at, job.kind, job.id)
+                self.fired.remember(
+                    chat, job.message, job.device, at, job.kind, job.id, job.stock_id
+                )
         if self.awaiting is not None and job.is_reminder:
             at = self.clock()
             next_nag = at + NAG_DELAY if self._nags() else None
-            self.awaiting.remember(job.id, job.message, at, next_nag)
+            self.awaiting.remember(job.id, job.message, at, next_nag, job.stock_id)
             if next_nag is not None:
                 self._arm_nag(job.id, job.chat_id, next_nag)
         fired_at = self.clock()
@@ -408,6 +450,13 @@ class Reminders:
         log.info("job %s skipped: holiday %s", job.id, holiday.day)
         for chat in self._audience(job.chat_id):
             self._write(chat, f"🏖 Feriado ({holiday.name}): hoy no suena «{job.message}»")
+
+
+def _running_out(supply: Stock) -> str:
+    """El aviso de que se acaba un remedio."""
+    if supply.count <= 0:
+        return f"💊 No quedan de {supply.name}, comprar."
+    return f"💊 Quedan {supply.count} de {supply.name}, comprar."
 
 
 def _ring_key(job_id: int) -> str:

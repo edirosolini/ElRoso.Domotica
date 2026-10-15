@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     days     TEXT,
     kind     TEXT    NOT NULL DEFAULT 'alarm',
     monthday INTEGER,
-    skip_holidays INTEGER NOT NULL DEFAULT 0
+    skip_holidays INTEGER NOT NULL DEFAULT 0,
+    stock_id INTEGER
 );
 CREATE INDEX IF NOT EXISTS jobs_by_time ON jobs (fires_at);
 """
@@ -54,6 +55,7 @@ class Job:
     kind: str = ALARM
     monthday: int | None = None
     skip_holidays: bool = False
+    stock_id: int | None = None
 
     @property
     def is_reminder(self) -> bool:
@@ -141,6 +143,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         kind=row["kind"],
         monthday=row["monthday"],
         skip_holidays=bool(row["skip_holidays"]),
+        stock_id=row["stock_id"],
     )
 
 
@@ -166,6 +169,8 @@ class Store:
             conn.execute("ALTER TABLE jobs ADD COLUMN monthday INTEGER")
         if "skip_holidays" not in existing:
             conn.execute("ALTER TABLE jobs ADD COLUMN skip_holidays INTEGER NOT NULL DEFAULT 0")
+        if "stock_id" not in existing:
+            conn.execute("ALTER TABLE jobs ADD COLUMN stock_id INTEGER")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -183,15 +188,16 @@ class Store:
         kind: str = ALARM,
         monthday: int | None = None,
         skip_holidays: bool = False,
+        stock_id: int | None = None,
     ) -> Job:
         stored_days = _validate(repeat, kind, days, monthday, skip_holidays)
         monthday = monthday if repeat == MONTHLY else None
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days, kind, monthday,"
-                " skip_holidays) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " skip_holidays, stock_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (chat_id, when.isoformat(), message, repeat, device, stored_days, kind, monthday,
-                 int(skip_holidays)),
+                 int(skip_holidays), stock_id),
             )
             return Job(
                 id=cursor.lastrowid,
@@ -204,6 +210,7 @@ class Store:
                 kind=kind,
                 monthday=monthday,
                 skip_holidays=skip_holidays,
+                stock_id=stock_id,
             )
 
     def pending(self, chat_id: int | None = None) -> list[Job]:
@@ -248,6 +255,13 @@ class Store:
                  int(skip_holidays), job_id),
             ).rowcount
         return self.get(job_id) if changed else None
+
+    def attach_stock(self, job_id: int, stock_id: int) -> bool:
+        """Ata el job a un stock de remedio; False si el job ya no existe."""
+        with self._connect() as conn:
+            return conn.execute(
+                "UPDATE jobs SET stock_id = ? WHERE id = ?", (stock_id, job_id)
+            ).rowcount > 0
 
     def reschedule(self, job_id: int, when: datetime) -> None:
         with self._connect() as conn:

@@ -25,6 +25,7 @@ OUT_OF_MENU = (
     "pendientes",
     "sacar",
     "posponer",
+    "pastillas",
 )
 
 VALID = re.compile(r"^[a-z0-9_]{1,32}$")
