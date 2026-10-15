@@ -1520,11 +1520,17 @@ abajo en ese orden a propósito.
   por ningún parlante. Ahora un fallo manda a redescubrir y reintentar una vez
   (`Caster._perform`). ⚠️ Un reintento puede repetir un anuncio que sí sonó: es el mismo
   canje que hacen los watchers, un aviso dicho dos veces sale más barato que uno perdido.
-- ⚠️ **DHCP recicla direcciones, así que la IP vieja puede ser otro equipo.** Si el televisor
-  toma la que tenía el parlante, el anuncio sale por el televisor **sin ningún error**: la
-  conexión funciona, solo que contra el equipo equivocado. El redescubrimiento no lo cubre
-  porque no hay falla que lo dispare; lo que lo cubre es que el equipo tenga IP fija en el
-  router, o reiniciar el servicio.
+- 🔴 **DHCP recicla direcciones, así que la IP vieja puede ser otro equipo.** El 2026-10-15
+  el Nest pasó de `.22` a `.21` y la TV de la recámara tomó la `.22`; a las 04:49 pychromecast
+  reconectó por heartbeat a la `.22` y los anuncios salieron por la TV **sin ningún error**:
+  la conexión funcionaba, contra el equipo equivocado. Sin falla, `_perform` no redescubre.
+  Por eso, **antes de cada acción**, `Caster._moved()` compara la IP del socket del equipo
+  cacheado con la que el browser mDNS vivo anuncia para ese UUID (`_Discovery.host_of`). Si
+  difieren, warning con las dos, `forget()` —que ahora desconecta el viejo con
+  `disconnect(timeout=0)`— y se vuelve a resolver.
+- ⚠️ **Eso no lo cubre todo.** Entre la reconexión por heartbeat y la próxima acción el
+  equipo cacheado sigue apuntando al otro, y si mDNS no ve el UUID se sigue con el cacheado:
+  sin anuncio no hay con qué comparar. La IP fija en el router sigue siendo lo recomendable.
 - **Los equipos con pantalla solo aparecen en el descubrimiento si están encendidos.** Un
   Google TV apagado no existe para mDNS. No es un error: es que no está.
 - 🔴 **La app que está corriendo es dueña de la sesión de medios.** Con YouTube abierto en
