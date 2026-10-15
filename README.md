@@ -13,9 +13,11 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /timer mañana 10:00 médico      avisa una vez, a esa hora
 /recordar diaria 8:00 pastilla  recordatorio todos los días
 /recordar lun-vie 7:30 colegio  recordatorio solo esos días
+/recordar mensual 10 9:00 luz   recordatorio el 10 de cada mes
 /alarma 7:30 arriba             para despertarse, una vez
 /alarma diaria 7:30 arriba      para despertarse, todos los días
 /alarma lun-vie 5:30 arriba     para despertarse, solo esos días
+/alarma mensual 10 9:00 luz     el 10 de cada mes
 /lista                          lo que está programado
 /cancelar 3                     cancela por número
 /posponer                       repite en 10 minutos la alarma que acaba de sonar
@@ -147,6 +149,12 @@ rangos (`lun-vie`, `vie-lun` cruza el fin de semana), listas (`mar,jue`), un dí
 (`miércoles`). Los días eligen qué ocurrencia de la hora dispara, así que ahí la hora es
 obligatoria: `/alarma lun-vie 10m` no tiene sentido y se rechaza.
 
+Para una vez por mes, `mensual` y el día del mes antes de la hora:
+`/recordar mensual 10 9:00 pagar la luz`. La hora también es obligatoria. Si el mes no tiene
+ese día, suena el último día del mes y al siguiente vuelve al pedido: un 31 suena el 31 de
+enero, el 28 de febrero y el 31 de marzo; al crearlo, el bot lo avisa. Los timers no repiten,
+tampoco por mes.
+
 ## Sin la barra (opcional)
 
 Con `LLM_API_KEY` cargada, un mensaje suelto también se entiende. No hace falta acordarse de
@@ -158,6 +166,7 @@ decile a todos que la comida está lista   →  /decir en todos que la comida es
 poneme un timer de 10 minutos para la pizza  →  /timer 10m sacar la pizza
 despertame a las 7 y media                →  /alarma 7:30 despertame
 recordame la pastilla todos los días a las 8  →  /recordar diaria 8:00 la pastilla
+recordame el 10 de cada mes a las nueve pagar la luz  →  /recordar mensual 10 9:00 pagar la luz
 bajá el volumen a 40                      →  /volumen 40
 callate una hora                          →  /silencio 1h
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
@@ -478,7 +487,8 @@ recargar; lo nuevo de Google puede tardar hasta cinco minutos más.
 **Crear, editar y borrar desde la agenda.** Tocando un día, o con el botón «+ Nuevo aviso» de
 abajo a la derecha, se abre un panel: tipo (alarma, recordatorio o timer), mensaje, fecha y
 hora, repetición, equipo y a nombre de quién. Valen las mismas reglas que en Telegram: un
-timer suena una vez, un recordatorio repite, «Algunos días» pide los días. Tocando un aviso de
+timer suena una vez, un recordatorio repite, «Algunos días» pide los días y «Todos los meses»
+repite el día del mes de la fecha elegida. Tocando un aviso de
 la casa que todavía no sonó aparecen «Editar» y «Borrar»; si repite, se edita o se borra la
 serie entera, y el autor no cambia; borrar pide confirmación. Lo de Google Calendar y lo que
 ya sonó son solo para mirar.
