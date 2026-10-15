@@ -55,8 +55,11 @@ CASES = (
     ("traducí hola al inglés", "traducir", "hola"),
     ("compré 30 de enalapril", "pastillas", "enalapril +30"),
     ("nos vamos de vacaciones hasta el 25 de octubre", "vacaciones", "hasta 25/10"),
-    ("recordame comprar los pasajes de las vacaciones", "recordar", "pasajes"),
+    # Vale recordar o agregar; lo que no puede es ir a vacaciones.
+    ("recordame comprar los pasajes de las vacaciones", ("recordar", "agregar"), "pasajes"),
     ("la basura la sacan Cin y Die una semana cada uno, es el 7", "turnos", "7 Cin, Die"),
+    ("poné la pantalla en la tele de la recámara", "pantalla", "en recamara"),
+    ("mostrame la agenda", "agenda", ""),
 )
 
 
@@ -78,7 +81,7 @@ def main() -> int:
             got, argument = f"ERROR {type(exc).__name__}", str(exc)[:60]
         elapsed = time.time() - started
 
-        ok = got == expected
+        ok = got in (expected if isinstance(expected, tuple) else (expected,))
         good += ok
         mark = "ok  " if ok else "FALLA"
         if fragment:

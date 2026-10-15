@@ -334,3 +334,40 @@ def test_no_error_shows_the_proxmox_secret(tmp_path):
         with pytest.raises(ConfigError) as caught:
             Config.from_file(pve_env(tmp_path, extra))
         assert PVE_SECRET not in str(caught.value)
+
+
+# --- la pantalla en la tele ---
+
+
+def screen_env(tmp_path, extra=""):
+    return write_env(tmp_path, f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\n{extra}")
+
+
+def test_the_screen_goes_to_the_dining_room_by_default(tmp_path):
+    cfg = Config.from_file(screen_env(tmp_path))
+
+    assert cfg.screen_device == "comedor"
+    assert cfg.screen_devices == ("comedor", "recamara", "habitacion")
+
+
+def test_the_screen_devices_are_read_from_the_env(tmp_path):
+    cfg = Config.from_file(
+        screen_env(tmp_path, "SCREEN_DEVICE=Recamara\nSCREEN_DEVICES=recamara, living\n")
+    )
+
+    assert cfg.screen_device == "recamara"
+    assert cfg.screen_devices == ("recamara", "living")
+
+
+def test_a_screen_alias_with_a_bad_shape_stops_the_service(tmp_path):
+    with pytest.raises(ConfigError, match="SCREEN_DEVICES"):
+        Config.from_file(screen_env(tmp_path, "SCREEN_DEVICES=comedor, la tele\n"))
+    with pytest.raises(ConfigError, match="SCREEN_DEVICE"):
+        Config.from_file(screen_env(tmp_path, "SCREEN_DEVICE=la tele\n"))
+
+
+def test_a_config_built_in_code_has_the_screen_defaults():
+    cfg = make_config()
+
+    assert cfg.screen_device == "comedor"
+    assert "parlante" not in cfg.screen_devices

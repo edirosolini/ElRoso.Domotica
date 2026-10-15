@@ -96,7 +96,7 @@ class ThreadSpyCommands:
         return "ok"
 
     start = say = call = volume = stop = where = timer = alarm = remind = list = cancel = _record
-    devices = use = turn_off = weather = agenda_command = _record
+    devices = use = turn_off = screen = weather = agenda_command = _record
     status = silence = speak = ask = calculate = free_text = _record
     add_item = shopping = todo = remove_item = translate = postpone = pills = vacation = turns = _record
 
@@ -167,7 +167,7 @@ class ExplodingCommands:
         raise RuntimeError("Address already in use")
 
     start = say = call = volume = stop = where = timer = alarm = remind = list = cancel = _boom
-    devices = use = turn_off = weather = agenda_command = _boom
+    devices = use = turn_off = screen = weather = agenda_command = _boom
     status = silence = speak = ask = calculate = free_text = heard = _boom
     add_item = shopping = todo = remove_item = translate = postpone = pills = vacation = turns = _boom
 

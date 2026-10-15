@@ -14,6 +14,8 @@ AUDIO_MIME = "audio/wav"
 
 # El receptor por defecto de Google: la app donde corre nuestro audio.
 MEDIA_RECEIVER_APP_ID = "CC1AD845"
+# DashCast: muestra una página web en un equipo con pantalla.
+APP_DASHCAST = "84912283"
 
 PLAYBACK_TIMEOUT = 20
 # Tope para esperar un clip cuya duración no se pudo leer.
@@ -59,6 +61,13 @@ class _Discovery:
 discover_devices = _Discovery()
 
 
+def _dashcast_controller():
+    """El controlador de DashCast de pychromecast; se importa tarde como el descubrimiento."""
+    from pychromecast.controllers.dashcast import DashCastController
+
+    return DashCastController()
+
+
 class Caster:
     """Reproduce audio en un equipo cast, resuelto por UUID."""
 
@@ -70,8 +79,13 @@ class Caster:
         settle: float = SETTLE_AFTER_QUIT,
         finish_timeout: float = FINISH_TIMEOUT,
         locate: Callable[[uuidlib.UUID], str | None] = discover_devices.host_of,
+        dashcast: Callable[[], object] = _dashcast_controller,
+        screen: Callable[[], str | None] | None = None,
     ):
         self.device_uuid = device_uuid
+        self.dashcast = dashcast
+        # La página a volver a mostrar después de un anuncio, o None para dejarla cerrada.
+        self.screen = screen
         self.discover = discover
         self.locate = locate
         self.discovery_timeout = discovery_timeout
@@ -253,6 +267,7 @@ class Caster:
         min_volume: int | None,
         expected_seconds: float | None,
     ) -> None:
+        was_screen = getattr(device, "app_id", None) == APP_DASHCAST
         self._take_over(device)
         previous = self._raise_volume(device, min_volume)
 
@@ -261,11 +276,48 @@ class Caster:
             controller.play_media(url, AUDIO_MIME)
             controller.block_until_active(timeout=self.discovery_timeout)
             self._wait_until_playing(controller, url, timeout)
-            if previous is not None:
+            if previous is not None or was_screen:
                 self._wait_until_finished(controller, url, self._finish_deadline(expected_seconds))
         finally:
             if previous is not None:
                 device.set_volume(previous)
+        if was_screen:
+            self._restore(device)
+
+    def _show_on(self, device, url: str) -> None:
+        # Sin force, DashCast la abre en un iframe y la CSP de la página lo bloquea.
+        controller = self.dashcast()
+        device.register_handler(controller)
+        controller.load_url(url, force=True)
+
+    def _restore(self, device) -> None:
+        """Vuelve a mostrar la página que corresponda; una falla no tumba el anuncio."""
+        if self.screen is None:
+            return
+        try:
+            page = self.screen()
+            if page:
+                self._show_on(device, page)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("could not bring the screen back on %s: %s", self.device_uuid, exc)
+
+    def show(self, url: str) -> None:
+        """Muestra la página en el equipo con DashCast."""
+        self._perform(lambda device: self._show_on(device, url))
+
+    def showing(self) -> bool:
+        """Si el equipo tiene DashCast abierto."""
+        return self._perform(lambda device: getattr(device, "app_id", None) == APP_DASHCAST)
+
+    def hide(self) -> bool:
+        """Cierra DashCast si sigue abierto; False si no estaba o había otra app."""
+        def close(device) -> bool:
+            if getattr(device, "app_id", None) != APP_DASHCAST:
+                return False
+            device.quit_app()
+            return True
+
+        return self._perform(close)
 
     def set_volume(self, percent: int) -> None:
         if not 0 <= percent <= 100:

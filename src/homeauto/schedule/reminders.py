@@ -66,6 +66,7 @@ class Reminders:
         stock: StockStore | None = None,
         lists: ListStore | None = None,
         quiet=None,
+        screen=None,
     ):
         self.store = store
         self.timer = timer
@@ -83,6 +84,8 @@ class Reminders:
         self.lists = lists
         # En vacaciones una alarma no se repite.
         self.quiet = quiet
+        # Prende la vista de alarma en las teles y la cierra después.
+        self.screen = screen
         self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
@@ -93,6 +96,9 @@ class Reminders:
     def start(self, now: datetime | None = None) -> None:
         """Rearma todo tras un reinicio, disparando lo que se haya perdido."""
         now = now or datetime.now()
+        if self.screen is not None:
+            still = [ringing.job_id for ringing in self.ringing.all()] if self.ringing else []
+            self._on_screen(lambda screen: screen.start(now, still))
         if self.ringing is not None:
             for ringing in self.ringing.all():
                 if ringing.next_ring is None or ringing.next_ring <= now:
@@ -283,7 +289,19 @@ class Reminders:
         self.timer.unschedule(_ring_key(job_id))
         if self.ringing is None:
             return None
-        return self.ringing.take(job_id)
+        ringing = self.ringing.take(job_id)
+        if ringing is not None:
+            self._on_screen(lambda screen: screen.rang(job_id))
+        return ringing
+
+    def _on_screen(self, act: Callable[[object], object]) -> None:
+        """Hace algo con las teles sin que una falla frene la alarma."""
+        if self.screen is None:
+            return
+        try:
+            act(self.screen)
+        except Exception:
+            log.exception("could not handle the screens")
 
     def _arm_ring(self, job_id: int, when: datetime) -> None:
         self.timer.schedule(_ring_key(job_id), when, lambda: self._ring(job_id))
@@ -429,6 +447,7 @@ class Reminders:
         )
         if rings:
             self.ringing.remember(job.id, job.chat_id, job.message, job.device, fired_at)
+            self._on_screen(lambda screen: screen.ring(job))
         self._write_history(
             lambda history: history.record(
                 job.id, job.chat_id, job.kind, job.repeat, job.message, fired_at
@@ -443,6 +462,7 @@ class Reminders:
         else:
             self._write_history(lambda history: history.mark_announced(job.id))
         if rings:
+            self._on_screen(lambda screen: screen.light(job.id))
             self._next_ring(job.id, fired_at)
         self._move_on(job)
 

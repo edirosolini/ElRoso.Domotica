@@ -25,7 +25,7 @@ ROUTABLE = (
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
     "agregar", "compras", "pendientes", "sacar", "traducir", "posponer", "pastillas",
-    "vacaciones", "turnos",
+    "vacaciones", "turnos", "pantalla",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -62,6 +62,9 @@ Comandos y qué lleva cada uno:
 - volumen: un número de 0 a 100
 - parar: sin argumento, corta lo que suena
 - apagar: sin argumento, deja el equipo en reposo
+- pantalla: muestra la pantalla de la casa en una tele; con la tele adelante si se nombra,
+  así: "en recamara"; "apagar" para sacarla. Solo cuando se pide la pantalla: ver la
+  agenda es "agenda"
 - clima: sin argumento, el pronóstico
 - agenda: sin argumento, o "mañana"
 - estado: sin argumento, cómo están los servicios vigilados
@@ -157,6 +160,14 @@ ARGUMENTO: hasta 25/10
 Mensaje: la basura la sacan Cin y Die una semana cada uno, es el 7
 COMANDO: turnos
 ARGUMENTO: 7 Cin, Die
+
+Mensaje: poné la pantalla en la tele de la recámara
+COMANDO: pantalla
+ARGUMENTO: en recamara
+
+Mensaje: mostrame la agenda
+COMANDO: agenda
+ARGUMENTO:
 
 Contestá solo con dos líneas:
 COMANDO: <nombre o ninguno>
