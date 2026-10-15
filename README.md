@@ -14,6 +14,10 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /recordar diaria 8:00 pastilla  recordatorio todos los días
 /recordar lun-vie 7:30 colegio  recordatorio solo esos días
 /recordar mensual 10 9:00 luz   recordatorio el 10 de cada mes
+/pastillas                      cuántas quedan de cada remedio
+/pastillas 7 enalapril 30       cada «Hecho» del recordatorio #7 descuenta una
+/pastillas enalapril +30        repone
+/pastillas enalapril aviso 5    avisa con 5 o menos (por defecto, 7)
 /alarma 7:30 arriba             para despertarse, una vez
 /alarma diaria 7:30 arriba      para despertarse, todos los días
 /alarma lun-vie 5:30 arriba     para despertarse, solo esos días
@@ -138,6 +142,16 @@ minutos con «🔔 Sigue pendiente», solo escrito y solo con «Hecho», tambié
 descanso; «Hecho», posponer o `/cancelar` lo cortan. Un recordatorio sin días no se agenda:
 para algo de una sola vez está `/timer`.
 
+**Pastillas que se acaban.** `/pastillas 7 enalapril 30` ata el recordatorio #7 a un remedio
+con 30 dosis, y cada «Hecho» de ese recordatorio descuenta una; un doble toque no descuenta
+dos veces y nunca baja de cero. Dos tomas pueden contar del mismo remedio: se atan al mismo
+nombre, sin importar mayúsculas. Sin cantidad, ata si el remedio ya existe y si no pregunta
+cuántas hay; si ya existe y escribís una cantidad, la fija en vez de sumarla. Con 7 o menos (se cambia
+con `/pastillas enalapril aviso 5`) escribe una sola vez a todos «💊 Quedan 7 de enalapril,
+comprar.» y lo suma a `/compras` si no estaba; no suena por el parlante. `/pastillas
+enalapril +30` repone y, si queda por encima del aviso, lo vuelve a armar. Solo se atan
+recordatorios que repiten, y un recordatorio pospuesto sigue contando del mismo remedio.
+
 Los timers, las alarmas y los recordatorios se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 
@@ -183,6 +197,7 @@ recordame los días hábiles a las siete salida al colegio  →  /recordar hábi
 bajá el volumen a 40                      →  /volumen 40
 callate una hora                          →  /silencio 1h
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
+compré 30 de enalapril                    →  /pastillas enalapril +30
 llamá a todos a cenar                     →  /llamar en todos a cenar
 ```
 

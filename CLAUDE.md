@@ -98,7 +98,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con quince tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con dieciséis tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -118,6 +118,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `people.PeopleStore` | el nombre visible de cada chat de la casa, para la pantalla |
 | `schedule.RingingStore` | las alarmas que siguen sonando, con sus repeticiones (`ringing`) |
 | `holidays.HolidayStore` | los feriados del año, y desde noviembre los del siguiente (`holidays`) |
+| `schedule.StockStore` | cuántas dosis quedan de cada remedio y cuándo avisar (`pill_stock`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -177,7 +178,7 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son treinta y seis llamadas al
+en el historial del shell, igual que el token de `domotica-say`. Son treinta y siete llamadas al
 modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
@@ -578,6 +579,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | repetición de una alarma sin apagar | todos, una de cada cinco veces y solo con «🔕 Apagar»; «Dejé de sonar» al tope |
 | alarma apagada | los demás chats: «🔕 <nombre> apagó la alarma» |
 | re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
+| remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
 | algo programado que un feriado saltea | todos, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
 | corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
 | agenda, clima, lluvia, API | todos |
@@ -761,7 +763,7 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
   la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
 - ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
   comportamiento medido. Un ejemplo nuevo puede correrle la atención al modelo en los otros
-  comandos, así que se vuelve a medir: la última corrida dio treinta y seis de treinta y seis.
+  comandos, así que se vuelve a medir: la última corrida dio treinta y siete de treinta y siete.
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
@@ -1043,6 +1045,8 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   que alguien lo marca, así un timer ya borrado de `jobs` igual se puede cerrar.
 - **«Hecho» se marca una sola vez** y avisa a los demás chats «✅ <nombre> marcó hecho». El
   segundo toque contesta que ya estaba. También borra lo que sonó, así ya no se pospone.
+- **En un recordatorio atado a un remedio, «Hecho» descuenta una dosis.** Ver **Pastillas que
+  se acaban**.
 - **Lo que espera un «Hecho» vence al día** (`awaiting.KEEP`): se poda cada vez que suena otro.
 - 🔴 **Sin «Hecho», se vuelve a avisar** a los cinco, diez y quince minutos (`NAG_DELAY`,
   `NAG_LIMIT`): «🔔 Sigue pendiente: «…»». Un recordatorio que sonó una vez y nadie tocó
@@ -1194,6 +1198,8 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 - 🔴 **Posponer cierra el «Hecho» del original.** `last_fired` guarda el `job_id` (por
   `_add_missing_columns`) y posponer saca ese job de la espera: si no, el original seguiría
   re-avisando mientras el pospuesto espera su turno.
+- 🔴 **Posponer copia el `stock_id`.** `last_fired` lo guarda junto al `job_id`, así el «Hecho»
+  del pospuesto descuenta del mismo remedio aunque el job original ya no exista.
 - **Solo vale media hora** después de sonar (`SNOOZE_WINDOW`). Pasado eso contesta que no hay
   nada que posponer, en vez de agendar algo que nadie espera. Sin duración son diez minutos.
 - 🔴 **Lo que sonó se guarda antes de anunciarlo.** El botón llega con el aviso y el anuncio
@@ -1211,7 +1217,7 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
   de silenciar.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
-  treinta y uno de treinta y uno (hoy treinta y seis). Ver **Texto libre**.
+  treinta y uno de treinta y uno (la última medición, treinta y siete). Ver **Texto libre**.
 
 ## Historial de lo que sonó
 
@@ -1232,6 +1238,44 @@ salteado por feriado (`holiday`), con `closed_at`. `Reminders` es el único que 
   terminó. Una alarma cancelada o borrada mientras repite también se cierra como cancelada.
   ⚠️ La que llegó al tope deja su fila abierta: solo «Apagar» la cierra.
 - **Doce meses** (`history.KEEP`), podados al insertar, como `awaiting.KEEP`. Sin job aparte.
+
+## Pastillas que se acaban
+
+`schedule/stock.py` cuenta cuántas dosis quedan de cada remedio. `StockStore` es la tabla
+`pill_stock`: `name`, `count`, `threshold` y `alerted`.
+
+- **Un recordatorio se ata a un remedio por número de job**: `/pastillas 7 enalapril 30`.
+  `stock_id` vive en `jobs`, `last_fired` y `awaiting_done`, y entra por
+  `_add_missing_columns`: lo que ya existía queda sin remedio.
+- 🔴 **Solo se ata a un recordatorio que repite.** La dosis se descuenta con «Hecho», que una
+  alarma no tiene, y un timer o un recordatorio pospuesto suenan una sola vez.
+- **El nombre es único sin importar mayúsculas** y se guarda en minúsculas con los espacios
+  colapsados: «Enalapril» y «enalapril» son el mismo remedio. Así **dos tomas pueden compartir
+  el stock**: la de la mañana y la de la noche se atan al mismo nombre.
+- ⚠️ **Atar a un remedio que ya existe con una cantidad la fija**: `/pastillas 8 enalapril 30`
+  deja treinta, no suma, y recalcula `alerted` como al reponer. Para sumar está
+  `/pastillas enalapril +30`.
+- **Sin cantidad, ata si el remedio existe**; si no, pregunta cuántas hay. No pasa por
+  `slots`: es la respuesta del comando.
+- 🔴 **Se descuenta solo si `take()` devolvió el mensaje**, o sea con el primer «Hecho». Un
+  doble toque no descuenta dos veces. **Nunca baja de cero.**
+- 🔴 **Una falla del stock no le cuesta el «Hecho».** `Reminders._take_dose()` loguea y sigue,
+  como el historial.
+- 🔴 **Avisa una sola vez**, cuando lo que queda llega al umbral (`count <= threshold`):
+  «💊 Quedan N de X, comprar.», o «💊 No quedan de X, comprar.». Solo por chat y a todos; no
+  suena ni pasa por el pulidor. Además suma el remedio a `/compras`, y `ListStore.add` no lo
+  duplica si ya estaba.
+- **El umbral por defecto es `STOCK_ALERT`, siete**, y se cambia por remedio con
+  `/pastillas enalapril aviso 5`.
+- **`alerted` se apaga al reponer o fijar la cantidad por encima del umbral**, o al cambiar el
+  umbral a uno por debajo de lo que queda. ⚠️ Subir el umbral hasta lo que queda o más no avisa
+  a todos en el acto: la respuesta lo dice («Ojo: ya quedan N, por debajo del aviso.») y el
+  aviso sale con el próximo «Hecho».
+- **Reponer no crea un remedio.** `/pastillas X +30` de uno que no se cuenta contesta cómo
+  empezar.
+- **Cualquier chat permitido ata cualquier job**, a diferencia de `/cancelar`: un remedio es de
+  la casa, no de quien creó el recordatorio.
+- **`/pastillas` no está en el menú**, sí en `HELP`. Ver **Comandos y alias**.
 
 ## Pantalla de la casa
 
@@ -1489,12 +1533,14 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
-- 🔴 **Medido el 2026-10-15 contra el endpoint real: treinta y seis de treinta y seis
-  comandos y veintiséis de veintiséis payloads**, con `gemini-3.1-flash-lite`. Es la
-  corrida de después de sumar `hábiles` a `recordar`; la anterior, con la forma mensual,
-  había dado treinta y cinco de treinta y cinco. `deploy/measure_router.py` es esa
-  corrida: vive en el repo porque la regla de volver a medir no sirve si medir es un trabajo.
-  Corre **adentro del CT**, que es donde está la clave.
+- 🔴 **Medido el 2026-10-15 contra el endpoint real: treinta y siete de treinta y siete
+  comandos y veintisiete de veintisiete payloads**, con `gemini-3.1-flash-lite`. Es la
+  corrida de después de sumar `pastillas`, con el ejemplo «compré 30 de enalapril»; la
+  anterior, con `hábiles`, había dado treinta y seis de treinta y seis.
+  `deploy/measure_router.py` es esa corrida: vive en el repo porque la regla de volver a medir
+  no sirve si medir es un trabajo. Corre **adentro del CT**, que es donde está la clave.
+- ⚠️ **La medición usa el `LLM_MODEL` del env del CT.** Con un modelo que la API no acepta, las
+  treinta y siete llamadas dan `400` y el resultado es cero: es el modelo, no el prompt.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
   `traducir → "hola al inglés"`, con el idioma **atrás**, y `split_language()` solo lo leía
   adelante: "traducí hola al francés" iba a traducir el texto *"hola al francés"* al inglés.
@@ -1510,7 +1556,7 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; hoy son treinta y seis de treinta y seis con los comandos que se sumaron después. Si se toca el
+  limpios; hoy son treinta y siete de treinta y siete con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -1642,7 +1688,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (treinta y seis de treinta y seis) y un segundo prompt es un segundo
+  prompt del router **está medido** (treinta y siete de treinta y siete) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
@@ -1675,16 +1721,16 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 36 nombres: 26 comandos y 10 **alias** (`help`, `tiempo`,
+`ALL_COMMANDS` tiene 37 nombres: 27 comandos y 10 **alias** (`help`, `tiempo`,
 `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
 funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
 
-🔴 **El menú de Telegram tiene 10, no los 26.** `recordar` entró como el décimo, y es el
+🔴 **El menú de Telegram tiene 10, no los 27.** `recordar` entró como el décimo, y es el
 tope que fija el test. Con los 18, la lista que sale al escribir `/`
 era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
 argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
 `parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
-`sacar`, `traducir`, `posponer`— **siguen andando escritos** y se alcanzan sin barra por el router.
+`sacar`, `traducir`, `posponer`, `pastillas`— **siguen andando escritos** y se alcanzan sin barra por el router.
 
 - **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
   va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
