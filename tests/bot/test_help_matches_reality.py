@@ -33,3 +33,9 @@ def test_help_names_the_vacations_and_how_to_cut_them():
     line = next(line for line in HELP.splitlines() if "/vacaciones hasta 25/10" in line)
 
     assert "/vacaciones off" in line
+
+
+def test_help_names_the_turns_and_how_to_cut_them():
+    line = next(line for line in HELP.splitlines() if "/turnos 7 Cin, Die" in line)
+
+    assert "/turnos 7 off" in line

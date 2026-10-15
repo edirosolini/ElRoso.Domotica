@@ -275,3 +275,33 @@ def test_the_router_measurement_covers_the_vacations_and_their_lookalike():
         message == "recordame comprar los pasajes de las vacaciones" and command == "recordar"
         for message, command, _ in CASES
     )
+
+
+def test_the_turns_are_routable():
+    assert "turnos" in ROUTABLE
+
+
+def test_the_prompt_names_the_turns():
+    from homeauto.route import PROMPT
+
+    assert (
+        "Mensaje: la basura la sacan Cin y Die una semana cada uno, es el 7\n"
+        "COMANDO: turnos\n"
+        "ARGUMENTO: 7 Cin, Die"
+    ) in PROMPT
+
+
+def test_a_rota_is_routed_to_the_turns():
+    router = Router(model_saying("COMANDO: turnos\nARGUMENTO: 7 Cin, Die"))
+
+    decision = router.route("la basura la sacan Cin y Die una semana cada uno, es el 7")
+
+    assert (decision.command, decision.argument) == ("turnos", "7 Cin, Die")
+
+
+def test_the_router_measurement_covers_the_turns():
+    from deploy.measure_router import CASES
+
+    assert (
+        "la basura la sacan Cin y Die una semana cada uno, es el 7", "turnos", "7 Cin, Die"
+    ) in CASES

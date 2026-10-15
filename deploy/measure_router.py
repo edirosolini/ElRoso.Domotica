@@ -56,6 +56,7 @@ CASES = (
     ("compré 30 de enalapril", "pastillas", "enalapril +30"),
     ("nos vamos de vacaciones hasta el 25 de octubre", "vacaciones", "hasta 25/10"),
     ("recordame comprar los pasajes de las vacaciones", "recordar", "pasajes"),
+    ("la basura la sacan Cin y Die una semana cada uno, es el 7", "turnos", "7 Cin, Die"),
 )
 
 

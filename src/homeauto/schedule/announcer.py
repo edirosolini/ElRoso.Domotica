@@ -13,6 +13,7 @@ from typing import Callable, Iterable
 
 from homeauto.polish import as_is
 from homeauto.quiet import away_of, reason_of
+from homeauto.schedule.rota import turn_in
 from homeauto.schedule.spec import ringing_label
 from homeauto.schedule.store import Job
 from homeauto.voice import chime
@@ -60,7 +61,8 @@ class Announcer:
         """Dice el job y lo escribe; `rings` es la repetición y `write` si va al chat."""
         problem = None
         resting = self.quiet is not None and self.quiet.is_quiet(self.clock())
-        message = self.polish(job.message)
+        turn = turn_in(job.message)
+        message = self.polish(job.message, must_keep=(turn,) if turn else ())
 
         if resting:
             log.info("job %s cae en horario de descanso: solo va al chat", job.id)

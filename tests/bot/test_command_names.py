@@ -22,3 +22,7 @@ def test_the_pills_command_is_registered():
 
 def test_the_vacations_command_is_registered():
     assert "vacaciones" in ALL_COMMANDS
+
+
+def test_the_turns_command_is_registered():
+    assert "turnos" in ALL_COMMANDS

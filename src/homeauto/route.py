@@ -25,7 +25,7 @@ ROUTABLE = (
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
     "agregar", "compras", "pendientes", "sacar", "traducir", "posponer", "pastillas",
-    "vacaciones",
+    "vacaciones", "turnos",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -80,6 +80,8 @@ Comandos y qué lleva cada uno:
   la cantidad con "+", así: "enalapril +30"
 - vacaciones: hasta cuándo la casa no habla, con la fecha de vuelta, así: "hasta 25/10"
   o "hasta 25/10 18:00"; "off" para cortarlas; sin argumento, cómo están
+- turnos: el número de lo programado y los nombres que se turnan una semana cada uno,
+  así: "7 Cin, Die"; "7 off" para cortarlo; sin argumento, los turnos
 
 Reglas:
 - Si el mensaje es una pregunta, o no encaja claramente en ningún comando, contestá
@@ -151,6 +153,10 @@ ARGUMENTO: enalapril +30
 Mensaje: nos vamos de vacaciones hasta el 25 de octubre
 COMANDO: vacaciones
 ARGUMENTO: hasta 25/10
+
+Mensaje: la basura la sacan Cin y Die una semana cada uno, es el 7
+COMANDO: turnos
+ARGUMENTO: 7 Cin, Die
 
 Contestá solo con dos líneas:
 COMANDO: <nombre o ninguno>

@@ -7,6 +7,7 @@ prueba sin esperar tiempo real.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Callable, Iterable, Protocol
 
@@ -16,6 +17,7 @@ from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import CANCEL, HOLIDAY, SNOOZE, HistoryStore
 from homeauto.schedule.ringing import Ringing, RingingStore
+from homeauto.schedule.rota import turn_for, with_turn
 from homeauto.schedule.spec import skips
 from homeauto.schedule.store import ALARM, ONCE, Job, Store, next_run
 
@@ -153,7 +155,8 @@ class Reminders:
         self._arm(job)
         return job
 
-    def list(self, chat_id: int) -> list[Job]:
+    def list(self, chat_id: int | None) -> list[Job]:
+        """Lo programado del chat, o de todos con None."""
         return self.store.pending(chat_id=chat_id)
 
     def get(self, job_id: int) -> Job | None:
@@ -162,6 +165,10 @@ class Reminders:
     def attach_stock(self, job_id: int, stock_id: int) -> bool:
         """Ata un job a un stock de remedio; False si el job ya no existe."""
         return self.store.attach_stock(job_id, stock_id)
+
+    def set_rota(self, job_id: int, names: list[str] | None, start: date | None) -> bool:
+        """Fija o quita los nombres que se turnan; False si el job ya no existe."""
+        return self.store.set_rota(job_id, names, start)
 
     def cancel(self, chat_id: int | None, job_id: int, any_owner: bool = False) -> bool:
         """Borra un job del chat, o de cualquiera con `any_owner`; False si no estaba."""
@@ -391,6 +398,9 @@ class Reminders:
         job = self.store.get(job_id)
         if job is None:  # cancelled between the arming and the firing
             return
+        turn = turn_for(job, job.when)
+        if turn is not None:
+            job = replace(job, message=with_turn(job.message, turn))
 
         holiday = self._holiday(job)
         if holiday is not None:

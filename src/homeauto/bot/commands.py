@@ -37,6 +37,7 @@ from homeauto.schedule.spec import (
     short_month_note,
     weekdays_label,
 )
+from homeauto.schedule.rota import turn_for, week_start
 from homeauto.schedule.store import ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY
 from homeauto.quiet import Hush, away_label, away_of, reason_of
 from homeauto.timespec import (
@@ -80,6 +81,15 @@ _PILL_BIND = re.compile(r"^#?(\d+)\s+(.+?)(?:\s+(\d+))?$")
 PILLS_USAGE = (
     "Así: /pastillas 7 enalapril 30 cuenta las del recordatorio #7"
     " · /pastillas enalapril +30 repone · /pastillas enalapril aviso 5 cambia el aviso"
+)
+
+# /turnos con argumento: el número del job y los nombres, u «off».
+_TURNS = re.compile(r"^#?(\d+)\s+(.+)$")
+# Un nombre que se dice en voz alta: letras y espacios, sin dígitos ni guiones.
+_SAYABLE_NAME = re.compile(r"^[^\W\d_]+(?:\s+[^\W\d_]+)*$")
+TURNS_OFF = "off"
+TURNS_USAGE = (
+    "Así: /turnos 7 Cin, Die turna el #7 por semana entre Cin y Die · /turnos 7 off lo corta"
 )
 
 
@@ -151,6 +161,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /pastillas — cuántas quedan de cada remedio
 /pastillas 7 enalapril 30 — cada «Hecho» del recordatorio #7 descuenta una
 /pastillas enalapril +30 — repone · /pastillas enalapril aviso 5 — avisa con 5 o menos
+/turnos 7 Cin, Die — el #7 le toca a uno por semana · /turnos 7 off lo corta · /turnos los lista
 /alarma 7:30 arriba — para despertarse; suena fuerte
 /alarma diaria 7:30 arriba — todos los días · /alarma lun-vie 5:30 arriba
 /alarma hábiles 6:30 arriba — no suena en feriados
@@ -770,6 +781,60 @@ class Commands:
             return f"💊 El #{job_id} cuenta {supply.name}: fijé la cantidad en {supply.count}."
         return f"💊 El #{job_id} cuenta {supply.name}, que ya tenía: quedan {supply.count}."
 
+    # --- turnos ------------------------------------------------------------
+
+    def turns(self, chat_id: int, text: str = "") -> str:
+        """Lista las rotaciones, ata una a un job que repite o la quita."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.reminders is None:
+            return "No tengo alarmas configuradas."
+
+        text = " ".join(text.split())
+        if not text:
+            return self._turn_list()
+        match = _TURNS.fullmatch(text)
+        if match is None:
+            return TURNS_USAGE
+        job_id, names = int(match.group(1)), match.group(2)
+        job = self.reminders.get(job_id)
+        if job is None:
+            return f"No encontré el #{job_id}. Fijate con /lista"
+        if names.lower() == TURNS_OFF:
+            self.reminders.set_rota(job_id, None, None)
+            return f"🔁 El #{job_id} ya no se turna: «{job.message}»"
+        if job.repeat == ONCE:
+            return f"El #{job_id} suena una sola vez: solo se turna algo que repite."
+
+        people = split_items(names)
+        unsayable = [name for name in people if not _SAYABLE_NAME.fullmatch(name)]
+        if unsayable:
+            return (
+                f"«{unsayable[0]}» no se puede decir en voz alta:"
+                " un nombre va sin números ni guiones."
+            )
+        if not people:
+            return TURNS_USAGE
+        self.reminders.set_rota(job_id, people, week_start(self.clock().date()))
+        job = self.reminders.get(job_id)
+        return (
+            f"🔁 El #{job_id} se turna por semana entre {', '.join(job.turns)}: «{job.message}»\n"
+            f"Le toca a {turn_for(job, job.when)} el {format_when(job.when, self.clock())}."
+        )
+
+    def _turn_list(self) -> str:
+        rotas = [job for job in self.reminders.list(None) if job.turns]
+        if not rotas:
+            return f"No hay nada que se turne.\n{TURNS_USAGE}"
+        lines = ["Turnos"]
+        lines += [
+            f"🔁 #{job.id} · {job.message} — {', '.join(job.turns)}"
+            f" · Le toca a {turn_for(job, job.when)} el {format_when(job.when, self.clock())}"
+            for job in rotas
+        ]
+        return "\n".join(lines)
+
     def _dispatch(self) -> dict:
         """Todos los comandos alcanzables sin barra, por nombre.
 
@@ -804,6 +869,7 @@ class Commands:
             "posponer": self.postpone,
             "pastillas": self.pills,
             "vacaciones": self.vacation,
+            "turnos": self.turns,
         }
 
     def press(self, chat_id: int, data: str, who: str = "") -> str:
@@ -1398,7 +1464,10 @@ class Commands:
     @staticmethod
     def _repetition(job) -> str:
         label = repetition_label(job)
-        return f" · {label}" if label else ""
+        text = f" · {label}" if label else ""
+        if job.turns:
+            text += f" · turnos {', '.join(job.turns)}"
+        return text
 
     def cancel(self, chat_id: int, text: str) -> str:
         denial = self._denial(chat_id)
