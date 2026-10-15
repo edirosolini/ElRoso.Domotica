@@ -41,7 +41,7 @@ Domotica/
 │   ├── schedule/        # timers, alarmas, preferencias por chat
 │   ├── agenda/          # Google Calendar: lectura, avisos, resumen
 │   ├── voice/           # equipos cast: tts, cast, registro, difusión
-│   ├── watch/           # vigilancia de servicios externos y de Seq
+│   ├── watch/           # vigilancia de servicios, de Seq, de internet y del Proxmox
 │   ├── web/             # pantalla de la casa: agenda, kiosco y sus feeds JSON
 │   └── main.py          # cableado y ciclo de vida del proceso
 ├── deploy/              # unit de systemd, despliegue, CLI y la medición del router
@@ -133,6 +133,8 @@ un despliegue nuevo no necesita migración.
 - **argentinadatos** para los feriados, igual que para la inflación: sin cuenta, sin API key.
 - Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal), YouVersion,
   argentinadatos y **Seq** (este último por el túnel WireGuard, no por internet).
+- La **API del Proxmox** de casa, por la LAN, con un token de solo lectura. Ver
+  **Salud del Proxmox**.
 - **pychromecast** — control del parlante.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
@@ -221,6 +223,10 @@ Son los cuatro valores que deciden **si algo se escucha o solo se escribe**, y p
 elegir una hora. El cierre del día nació con el default en 22:00, que acá es exactamente el
 minuto en que arranca el descanso: habría salido mudo todas las noches, avisando en el chat
 que no lo dijo. Con cualquier hora nueva, mirar primero dónde cae `QUIET_FROM`.
+
+**El Proxmox se lee con el token `domotica@pve!monitor`**, rol `PVEAuditor` y `privsep`,
+creado por el dueño. La CA del PVE está en `/etc/domotica/pve-ca.pem` (`PVE_CA_FILE`). Ver
+**Salud del Proxmox** y el certificado en **Gotchas**.
 
 ## Sobre el Asistente de Google
 
@@ -545,6 +551,54 @@ tiene una ruta estática al CT 202, que hace MASQUERADE sobre `wg0`. El túnel d
   perdido en el descanso.
 - **Una caída del VPS ya declarada no re-avisa durante el corte.** El re-aviso que venció
   mientras tanto sale en la primera ronda con conexión.
+
+### Salud del Proxmox
+
+`watch/proxmox.py` mira el host por su API: que conteste, el disco, las máquinas y los
+respaldos. Sin `PVE_URL` no se vigila nada de esto.
+
+- 🔴 **Son cuatro chequeos del mismo `Monitor`, no un watcher aparte**: `proxmox`,
+  `el disco del proxmox`, `las máquinas del proxmox` y `los respaldos`, armados por
+  `proxmox_checks()`. Así heredan «✅ Confirmar», `/estado` y la línea de caídos del resumen
+  y del cierre sin escribir nada de eso de nuevo. El `Monitor` existe aunque `checks.json`
+  esté vacío, si hay Proxmox.
+- **Ninguno es urgente y ninguno reintenta dentro de la vuelta** (`attempts=1`). La caída se
+  declara igual con dos vueltas seguidas, como cualquier chequeo.
+- **`Check` trae su propia sonda y sus frases.** `probe` reemplaza al HTTP y al TCP, y
+  `down`/`up`/`still` son lo que se dice después del nombre al caer, al volver y al re-avisar:
+  «el disco del proxmox está casi lleno», «los respaldos volvieron a salir bien». Las usan el
+  aviso, la recuperación, el re-aviso hablado, el escrito y `down_line()`. Los chequeos de
+  siempre no cambian de texto. ⚠️ `probe` y las frases **no se cargan desde `checks.json`**.
+- 🔴 **Una sonda sin dato no mueve el estado.** Levanta `ProbeSkipped` y el `Monitor` la
+  saltea esa vuelta: ni caída ni recuperación. Si la API no contesta, cae solo `proxmox` y los
+  otros tres se saltean, en vez de sumar tres caídas falsas. Lo mismo si falla una sola ruta
+  o si no hay ningún `vzdump` terminado.
+- **Un solo pase por vuelta.** `ProxmoxClient` lee todo de una y lo cachea veinticinco
+  segundos (`CACHE_SECONDS`), menos que el intervalo del monitor: los cuatro chequeos leen el
+  mismo pase. Toma los nodos `online` de `/nodes`.
+- 🔴 **El token va en el header `PVEAPIToken`**, nunca en la URL, y se borra de cualquier
+  error antes de que llegue al detalle o al log. `verify` va contra la CA del PVE y nunca es
+  `False`.
+- **Disco**: los storages activos y habilitados más el `rootfs` del host. Avisa desde
+  `PVE_DISK_ALERT` (ochenta y cinco por defecto) y vuelve recién por debajo de la alerta menos
+  cinco (`DISK_HYSTERESIS`): un disco que oscila en el borde no avisa en cada vuelta.
+  🔴 **La histéresis sobrevive un reinicio**: el `Monitor` le pasa a la sonda el estado
+  guardado (`restore`) antes de la primera vuelta, y un disco que estaba lleno sigue lleno
+  hasta bajar del umbral bajo.
+- **Máquinas**: las que tienen `onboot=1`, no son plantilla y están paradas. **Son las únicas
+  que re-avisan**: los otros tres llevan `remind=False`.
+- ⚠️ **Un CT parado a propósito con `onboot=1` avisa.** Se calla con «Confirmar» o
+  sacándole `onboot`.
+- **Respaldos**: el último `vzdump` terminado. `WARNINGS` no es caída y queda solo en el
+  detalle escrito.
+- 🔴 **Lo hablado es genérico y sin dígitos.** El vmid, el nombre de la máquina y el
+  porcentaje van solo en `detail`, que es la copia del chat.
+- **Una mitad sin la otra hace fallar el arranque**, como con Seq: `PVE_URL` sin
+  `PVE_TOKEN` o al revés. `PVE_URL` tiene que ser `https`, `PVE_TOKEN` tener la forma
+  `usuario@realm!id=secreto`, `PVE_CA_FILE` es obligatoria y el archivo tiene que existir, y
+  `PVE_DISK_ALERT` va de uno a noventa y nueve. `pve_token` va con `repr=False`.
+- ⚠️ **Sin internet, el Proxmox tampoco se chequea**, aunque esté en la LAN: es el mismo salto
+  del `Monitor` de **Caída de internet**.
 
 ## Quién puede usar el bot
 
@@ -1921,6 +1975,9 @@ abajo en ese orden a propósito.
   entre equipos es el Caster; duplicar lo demás sería sintetizar dos veces la misma frase.
   Los Speaker se construyen recién al usarse: al arrancar, casi todos los equipos están
   apagados.
+- 🔴 **El certificado del PVE tiene que nombrar la IP por la que se lo llama.** Tenía la
+  `.6` vieja en el SAN y validar contra `192.168.68.60` fallaba. Se regeneró el 2026-10-15
+  con `pvecm updatecerts --force`. Si cambia la IP del host, volver a generarlo.
 - 🔴 **IPv6 roto en los contenedores.** Solo tienen link-local `fe80::`, sin IPv6 global.
   Como el DNS devuelve el AAAA y glibc prefiere IPv6, cualquier cliente HTTP se cuelga
   20 s contra hosts doble stack (`api.telegram.org`). Se arregla con
