@@ -834,9 +834,21 @@ escribe, y cierra el resumen.
 
 ## Sonido de alarma
 
-Una alarma y un aviso **urgente** suenan antes de hablar: `voice/chime.py` arma tres beeps y
-los pega adelante del wav de Piper. Un recordatorio o un timer llevan un solo beep suave
-(`chime.SOFT`). Ver **Alarma, recordatorio y timer**.
+Lo que interrumpe suena antes de hablar: `voice/chime.py` arma el sonido y lo pega adelante
+del wav de Piper. Hay tres:
+
+| | Sonido | Piso de volumen |
+| --- | --- | --- |
+| alarma (`kind=alarm`) | el despertador, `chime.WAKE` | 90 (`speaker.ALARM_MIN_VOLUME`) |
+| recordatorio y timer | un beep suave, `chime.SOFT` | 60 |
+| aviso urgente de `HouseVoice` | tres beeps, `chime.ALARM` | 60 |
+
+- 🔴 **El despertador tiene tres niveles**, `WAKE_LEVELS` (`wake1` a `wake3`): dos coma ocho,
+  cuatro y cinco coma tres segundos, cada uno más fuerte. Son ráfagas de mil y mil quinientos
+  hertz con la amplitud subiendo ráfaga a ráfaga. **Hoy la alarma usa `wake1`**; los otros dos
+  existen y no los usa nadie todavía.
+- **Ningún tono pasa de `MAX_AMPLITUDE` (0.9)**: `frames()` recorta lo que lo supere. Cada
+  tono lleva su amplitud en la tupla `(hertz, segundos, amplitud)`.
 
 - 🔴 **Va en el mismo wav, no en un segundo cast.** Dos clips son dos conexiones, dos esperas
   y dos confirmaciones de que sonó, con la app ajena pudiendo meterse en el medio.
@@ -844,8 +856,14 @@ los pega adelante del wav de Piper. Un recordatorio o un timer llevan un solo be
   voz: nada que copiar al CT y nada que resamplear, que ahí no hay ffmpeg.
 - 🔴 **El chime va en la clave del cache**, como la voz y el ritmo. Sin eso, la primera alarma
   que dice una frase deja esa frase con beeps para siempre, también desde `/decir`.
-- ⚠️ **La alarma conserva la clave de antes** (`chime`) y el beep suave usa `chime:soft`: el
-  audio con beeps ya sintetizado en el CT sigue sirviendo. `chime=True` sigue siendo la alarma.
+- ⚠️ **La clave `chime` queda solo para los tres beeps del urgente**: el despertador usa
+  `chime:wake1` y siguientes, y el beep suave `chime:soft`. `chime=True` sigue siendo los tres
+  beeps.
+- 🔴 **El piso de la alarma es por frase, no del equipo.** `Speaker.say(min_volume=...)` lo
+  reemplaza para ese anuncio; con `None` queda el del equipo. `Announcer._floor()` pide 90 solo
+  para `kind=alarm`. Ver el gotcha del piso de volumen.
+- ⚠️ **Los timers agendados antes de la columna `kind` son alarmas**: suenan una última vez con
+  el despertador y a 90.
 - **Suena lo que interrumpe**: alarmas, recordatorios y timers (`Announcer`) y todo
   `announce(urgent=True)` —monitor y API—. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
   descanso no se habla, así que tampoco suena.
@@ -883,13 +901,13 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 
 | | Repite | Sonido | Botones | Sin «Hecho» |
 | --- | --- | --- | --- | --- |
-| `/alarma` | una vez, diaria o por días | tres beeps | posponer | nada |
+| `/alarma` | una vez, diaria o por días | el despertador, a 90 | posponer | nada |
 | `/recordar` | **siempre**, en los días marcados | un beep suave | «✅ Hecho» y posponer | re-avisa |
 | `/timer` | nunca | un beep suave | «✅ Hecho» y posponer | re-avisa |
 
 - 🔴 **El tipo es la columna `kind` de `jobs`** (`alarm` / `reminder`). Entra por
   `_add_missing_columns` con default `alarm`: lo agendado antes de existir sigue siendo
-  alarma, incluidos los timers pendientes, que suenan con beeps una última vez.
+  alarma, incluidos los timers pendientes, que suenan con el despertador una última vez.
 - 🔴 **Un recordatorio sin días no se agenda.** Una sola vez es un timer, y `/timer` ya
   acepta una hora (`mañana 10:00`). Sin barra, la pregunta que falta es `slots.DAYS`, sin la
   opción «Una sola vez».
@@ -1560,6 +1578,9 @@ abajo en ese orden a propósito.
   `Speaker`, **no** en quien pide la frase: hay cinco llamadores de `say()` —comandos, API,
   `Announcer`, `HouseVoice`, difusión— y todos quieren lo mismo. Se restaura en un `finally`,
   así que un audio que falla tampoco deja los parlantes a todo volumen.
+- **La alarma es la única que sube más**: `speaker.ALARM_MIN_VOLUME` (90), pasado por
+  `say(min_volume=...)`. Lo decide quien sabe qué está sonando —`Announcer`, por el `kind`—,
+  pero lo sigue aplicando y restaurando `Speaker`. Ver **Sonido de alarma**.
 - 🔴 **Esperar el final es otro trabajo que esperar el arranque.** Devolver el volumen a mitad
   de frase es justo lo que el piso venía a evitar, y el resumen de la mañana dura mucho más
   que los veinte segundos de `PLAYBACK_TIMEOUT`. La cota real es la **duración del wav**

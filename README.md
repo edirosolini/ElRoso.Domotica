@@ -41,8 +41,9 @@ con `QUIET_FROM` y `QUIET_TO`; poniendo las dos iguales se desactiva.
 **Volumen mínimo.** Todo lo que la casa dice —un `/decir`, una alarma, el clima, el resumen,
 un aviso del monitor— **sube el volumen a 60 si está más bajo**, y lo devuelve a como estaba
 en cuanto termina de hablar. Una casa en volumen bajo convierte cualquier anuncio en nada.
-Si el equipo ya está en 60 o más, no se toca. El `/volumen` que pongas sigue siendo el de la
-música: esto solo aplica mientras habla el bot.
+Si el equipo ya está en 60 o más, no se toca. Una alarma usa un piso de **90**: es para
+despertar. El `/volumen` que pongas sigue siendo el de la música: esto solo aplica mientras
+habla el bot.
 
 **Silencio a pedido.** Para una siesta o una reunión, `/silencio 2h` calla los parlantes por
 ese rato (acepta los mismos formatos que un timer: `30m`, `1h30m`). `/silencio` sin nada dice
@@ -112,8 +113,8 @@ qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
 `en` solo se interpreta como destino si la palabra siguiente es un equipo conocido:
 `/decir en casa hace frío` dice la frase entera, no se come nada.
 
-**Alarma, recordatorio y timer suenan distinto.** La alarma es para despertarse: tres beeps
-y «Posponer». El recordatorio (`/recordar`) repite siempre en los días marcados —una
+**Alarma, recordatorio y timer suenan distinto.** La alarma es para despertarse: un despertador
+de ráfagas que suben de volumen, el parlante a 90 como mínimo, y «Posponer». El recordatorio (`/recordar`) repite siempre en los días marcados —una
 medicación, salir al colegio— y el timer es de una sola vez; los dos suenan con un beep suave
 y traen «✅ Hecho» además de posponer. Tocar «Hecho» les avisa a los demás chats quién lo
 marcó, y ya no se puede posponer. Si nadie lo toca, el chat insiste a los 5, 10 y 15
