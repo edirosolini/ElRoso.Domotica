@@ -156,6 +156,24 @@ def clock(hour: int, minute: int = 0) -> str:
     return f"{article} {number(shown, FEMININE)}{_minutes(minute)} {_part_of_day(hour, minute)}"
 
 
+MINUTES_PER_DAY = 24 * 60
+
+
+def duration(minutes: int) -> str:
+    """Un lapso en horas y minutos: "una hora y diez minutos"; pasado un día, "más de un día"."""
+    if minutes < 1:
+        raise ValueError(f"no es un lapso para decir en voz alta: {minutes}")
+    if minutes > MINUTES_PER_DAY:
+        return "más de un día"
+    hours, rest = divmod(minutes, 60)
+    parts = []
+    if hours:
+        parts.append(f"{number(hours, FEMININE)} {'hora' if hours == 1 else 'horas'}")
+    if rest:
+        parts.append(f"{number(rest)} {'minuto' if rest == 1 else 'minutos'}")
+    return " y ".join(parts)
+
+
 # Cada palabra que este módulo emite y que lleva un dato, no un estilo. Un
 # reescritor puede moverlas, nunca agregar, sacar ni cambiar una. "un" y "una"
 # quedan afuera a propósito: también son el artículo indefinido.

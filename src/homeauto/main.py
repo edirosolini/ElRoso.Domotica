@@ -76,6 +76,7 @@ from homeauto.watch.monitor import Monitor
 from homeauto.watch.seq import SeqClient
 from homeauto.watch.seq_watcher import SeqWatcher
 from homeauto.watch.status import StatusStore
+from homeauto.watch.uplink import Uplink
 from homeauto.weather import RainWatcher, WeatherClient, WeatherWatcher
 from homeauto.web.app import WebApp
 from homeauto.web.board import Board
@@ -856,6 +857,12 @@ def main() -> None:
         alert_chat_ids=config.alert_recipients,
     )
 
+    uplink = Uplink(
+        marks=Marks(db_path),
+        speak=lambda text: house.speak_only(text, chime=chime.SOFT),
+        tell=house.tell_everyone,
+    )
+
     monitor = None
     try:
         checks = load_checks(config.checks_file)
@@ -876,6 +883,7 @@ def main() -> None:
             tell_others=lambda chat_id, text: _tell_alert_chats(
                 notifier, config.alert_recipients, chat_id, text
             ),
+            online=lambda: uplink.online,
         )
         log.info("vigilando %s servicios: %s", len(checks), ", ".join(c.name for c in checks))
     else:
@@ -891,6 +899,7 @@ def main() -> None:
             polish=polish,
             cooldown_minutes=config.seq_cooldown,
             alias=instance.alias,
+            online=lambda: uplink.online,
         )
         for instance in config.seq_instances
     ]
@@ -1060,13 +1069,18 @@ def main() -> None:
 
     app.job_queue.run_repeating(check_sky, interval=RAIN_INTERVAL, first=120, name="sky-watch")
 
-    if monitor is not None:
-        async def check_services(_context):
-            await asyncio.to_thread(monitor.run_once)
+    # Una sola ronda: primero internet, después los servicios, que la consultan.
+    def watch_round():
+        uplink.run_once()
+        if monitor is not None:
+            monitor.run_once()
 
-        app.job_queue.run_repeating(
-            check_services, interval=config.check_interval, first=20, name="service-watch"
-        )
+    async def check_services(_context):
+        await asyncio.to_thread(watch_round)
+
+    app.job_queue.run_repeating(
+        check_services, interval=config.check_interval, first=20, name="service-watch"
+    )
 
     for index, watcher in enumerate(seq_watchers):
         # Por argumento por defecto: cerrar sobre la variable del for dejaría

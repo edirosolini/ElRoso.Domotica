@@ -24,6 +24,7 @@ class FakeJobQueue:
 
     def run_repeating(self, callback, interval, first=None, name=None):
         self.repeating.append(name)
+        self.callbacks[name] = callback
 
     def run_daily(self, callback, time, days=(0, 1, 2, 3, 4, 5, 6), name=None):
         self.daily.append(name)
@@ -1112,3 +1113,87 @@ def test_an_empty_week_writes_nothing(wired, tmp_path, monkeypatch):
     main.asyncio.run(wired.job_queue.callbacks["weekly"](None))
 
     assert _FakeNotifier.sent == []
+
+
+# --- internet ------------------------------------------------------------------
+
+
+def _spy_uplinks(monkeypatch):
+    """Registra cada Uplink que arma main() y le cambia la red por un doble."""
+    built = []
+    original = main.Uplink.__init__
+
+    def spy(self, *args, **kwargs):
+        kwargs["connect"] = lambda host, port, timeout: 0.01
+        original(self, *args, **kwargs)
+        built.append(self)
+
+    monkeypatch.setattr(main.Uplink, "__init__", spy)
+    return built
+
+
+async def test_the_uplink_is_watched_even_without_checks(wired, tmp_path, monkeypatch):
+    built = _spy_uplinks(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert len(built) == 1
+    assert "service-watch" in wired.job_queue.repeating
+    await wired.job_queue.callbacks["service-watch"](None)
+    assert built[0].online is True
+
+
+async def test_the_uplink_runs_before_the_monitor(wired, tmp_path, monkeypatch):
+    order = []
+    monkeypatch.setattr(main.Uplink, "run_once", lambda self: order.append("uplink") or True)
+    monkeypatch.setattr(main.Monitor, "run_once", lambda self: order.append("monitor") or [])
+    checks = tmp_path / "checks.json"
+    checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
+
+    run_main(monkeypatch, config_file(tmp_path, f"CHECKS_FILE={checks}\n"))
+    await wired.job_queue.callbacks["service-watch"](None)
+
+    assert order == ["uplink", "monitor"]
+
+
+def test_the_monitor_and_seq_ask_the_uplink(wired, tmp_path, monkeypatch):
+    uplinks = _spy_uplinks(monkeypatch)
+    monitors, seqs = [], []
+    for cls, sink in ((main.Monitor, monitors), (main.SeqWatcher, seqs)):
+        original = cls.__init__
+
+        def spy(self, *args, __original=original, __sink=sink, **kwargs):
+            __original(self, *args, **kwargs)
+            __sink.append(self)
+
+        monkeypatch.setattr(cls, "__init__", spy)
+    checks = tmp_path / "checks.json"
+    checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
+    path = config_file(
+        tmp_path,
+        f"CHECKS_FILE={checks}\nSEQ_URL=http://172.68.0.7\nSEQ_API_KEY=una-clave\n",
+    )
+
+    run_main(monkeypatch, path)
+    uplinks[0].online = False
+
+    assert monitors[0].online() is False
+    assert seqs[0].online() is False
+
+
+def test_the_wired_uplink_speaks_softly_and_tells_everyone(wired, tmp_path, monkeypatch):
+    from homeauto.voice import chime
+
+    uplinks = _spy_uplinks(monkeypatch)
+    spoken, told = [], []
+    monkeypatch.setattr(
+        main.HouseVoice, "speak_only", lambda self, text, chime=False: spoken.append((text, chime))
+    )
+    monkeypatch.setattr(main.HouseVoice, "tell_everyone", lambda self, text, actions=(): told.append(text))
+
+    run_main(monkeypatch, config_file(tmp_path))
+    uplinks[0].speak("Se cortó internet.")
+    uplinks[0].tell("🌐 Internet se cortó")
+
+    assert spoken == [("Se cortó internet.", chime.SOFT)]
+    assert told == ["🌐 Internet se cortó"]

@@ -43,3 +43,8 @@ class Marks:
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, moment.isoformat()),
             )
+
+    def clear(self, key: str) -> None:
+        """Borra la marca `key`, si existe."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM marks WHERE key = ?", (key,))

@@ -29,8 +29,10 @@ class SeqWatcher:
         lookback_minutes: int = FIRST_LOOKBACK_MINUTES,
         polish: Callable[..., str] = as_is,
         alias: str = "",
+        online: Callable[[], bool] = lambda: True,
     ):
         self.client = client
+        self.online = online
         self.marks = marks
         self.announce = announce
         self.clock = clock
@@ -60,6 +62,9 @@ class SeqWatcher:
         return f"seq:{self.alias}:last_alert" if self.alias else LAST_ALERT
 
     def check(self) -> str | None:
+        if not self.online():
+            log.info("no uplink: skipping %s", self.name)
+            return None
         now = self.clock()
         since = self.marks.get(self.last_check_key) or now - timedelta(minutes=self.lookback_minutes)
 

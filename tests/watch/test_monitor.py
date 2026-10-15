@@ -393,3 +393,63 @@ def test_an_outage_alerted_before_the_reminders_existed_is_not_reminded(tmp_path
     watch.minutes(80)
 
     assert watch.said == [] and watch.reminded == []
+
+
+# --- sin internet en la ronda --------------------------------------------------
+
+
+def offline_monitor(tmp_path, answers, online):
+    """Un monitor que consulta `online[0]` antes de cada ronda."""
+    said = []
+    asked = []
+    rounds = {name: list(values) for name, values in answers.items()}
+
+    def runner(check, http, tcp, pause=0):
+        asked.append(check.name)
+        up = rounds[check.name].pop(0)
+        return CheckResult(check.name, up, "ok" if up else "HTTP 502", check.urgent, check.target)
+
+    monitor = Monitor(
+        checks=[LANDING],
+        store=StatusStore(tmp_path / "jobs.db"),
+        announce=lambda text, urgent, detail="", check="": said.append(text),
+        run=runner,
+        clock=lambda: NOW,
+        online=lambda: online[0],
+    )
+    return monitor, said, asked
+
+
+def test_without_internet_the_round_counts_no_failures(tmp_path):
+    online = [False]
+    monitor, said, asked = offline_monitor(tmp_path, {"landing": [False, False]}, online)
+
+    monitor.run_once()
+    monitor.run_once()
+
+    assert asked == [], "sin internet no se chequea nada"
+    assert said == []
+    assert monitor.store.get("landing") is None
+
+
+def test_after_the_outage_the_vps_is_declared_only_after_two_rounds(tmp_path):
+    online = [False]
+    monitor, said, _ = offline_monitor(tmp_path, {"landing": [False, False]}, online)
+    monitor.run_once()
+
+    online[0] = True
+    monitor.run_once()
+    assert said == [], "la primera ronda con internet es la primera falla"
+
+    monitor.run_once()
+    assert len(said) == 1
+
+
+def test_without_internet_a_declared_outage_is_not_reminded(tmp_path):
+    watch, _ = declared(tmp_path)
+    online = [False]
+    watch.monitor.online = lambda: online[0]
+
+    watch.minutes(30)
+
+    assert watch.reminded == []
