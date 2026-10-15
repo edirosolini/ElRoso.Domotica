@@ -51,9 +51,11 @@ si está callado y hasta cuándo; `/hablar` lo cancela. Se guarda en SQLite, as�
 reinicio en medio de la siesta no devuelve la casa hablando.
 
 **Resumen de la mañana.** A la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga) dice
-de una vez lo que hay para el día: la agenda, el clima y qué servicios vigilados no responden.
-Si todo está en orden no nombra ningún servicio. No hace falta tener agenda configurada: con
-el clima solo ya sirve, y una fuente que falla no se lleva puestas a las otras.
+de una vez lo que hay para el día: la agenda, el clima, la economía, qué servicios vigilados no
+responden, los errores de la noche y, al final, el versículo del día. Los titulares van solo
+al chat. Si todo está en orden no nombra ningún servicio. No hace falta tener agenda
+configurada: con el clima solo ya sirve, y una fuente que falla no se lleva puestas a las
+otras. El detalle está en [El resumen de la mañana](#el-resumen-de-la-mañana).
 
 **Cierre del día.** A la hora de `CLOSING_AT` (por defecto 22:00, `off` lo apaga) dice lo que
 viene: qué tenés agendado mañana, cómo va a estar el día y qué servicios siguen sin responder.
@@ -292,8 +294,10 @@ original: nadie se queda sin aviso porque el modelo estaba lento.
 ## El resumen de la mañana
 
 A la hora de `BRIEFING_AT` la casa dice, en un solo texto: qué hay en la agenda, cómo está el
-cielo, los tres números de la economía, qué servicios están caídos, los titulares del día y,
-al final, el versículo del día.
+cielo, los tres números de la economía, qué servicios están caídos, los errores de Seq de las
+últimas doce horas, los titulares del día y, al final, el versículo del día. Los servicios
+caídos y los errores de la noche solo se escriben a los chats de `ALERT_CHAT_IDS`; el
+parlante los dice igual.
 
 **Las fuentes son independientes**: la que no contesta deja un hueco, nunca cancela el
 resumen. Un calendario caído no te puede costar el clima.
