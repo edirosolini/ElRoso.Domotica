@@ -42,14 +42,16 @@ FOREVER = "public, max-age=31536000, immutable"
 STATIC = {
     "app.js": (JS, REVALIDATE),
     "kiosk.js": (JS, REVALIDATE),
+    "alarm.js": (JS, REVALIDATE),
     "app.css": (CSS, REVALIDATE),
     f"{FULLCALENDAR}/index.global.min.js": (JS, FOREVER),
     f"{FULLCALENDAR}/es.global.min.js": (JS, FOREVER),
     f"{FULLCALENDAR}/LICENSE.md": (TEXT, FOREVER),
 }
 
-PAGES = {"/agenda": "agenda.html", "/pantalla": "pantalla.html"}
+PAGES = {"/agenda": "agenda.html", "/pantalla": "pantalla.html", "/alarma": "alarma.html"}
 FEEDS = ("/api/events", "/api/board")
+RINGING = re.compile(r"/api/ringing/(\d+)")
 
 PEOPLE = "/api/people"
 JOBS = "/api/jobs"
@@ -148,7 +150,8 @@ class WebApp:
                 or LIST.fullmatch(path)):
             return self._house(request, path)
 
-        known = path in PAGES or path in FEEDS or path.startswith("/static/")
+        ringing = RINGING.fullmatch(path)
+        known = path in PAGES or path in FEEDS or ringing or path.startswith("/static/")
         if request.method != "GET":
             if known:
                 return _json(405, {"error": "método no permitido"}, Allow="GET")
@@ -160,6 +163,8 @@ class WebApp:
             return self._events(request.query)
         if path == "/api/board":
             return self._screen()
+        if ringing:
+            return self._ringing(int(ringing.group(1)))
         if request.path.startswith("/static/"):
             return self._static(request.path[len("/static/"):])
         return _json(404, {"error": "no existe"})
@@ -245,6 +250,13 @@ class WebApp:
         except Exception:  # noqa: BLE001
             log.exception("could not build the events feed")
             return _json(500, {"error": "No pude armar la agenda."})
+
+    def _ringing(self, job_id: int) -> Response:
+        try:
+            return _json(200, self.board.ringing(job_id))
+        except Exception:  # noqa: BLE001
+            log.exception("could not read the ringing alarm %s", job_id)
+            return _json(500, {"error": "No pude leer la alarma."})
 
     def _screen(self) -> Response:
         try:

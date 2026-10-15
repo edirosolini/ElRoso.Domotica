@@ -272,7 +272,9 @@ def test_the_router_measurement_covers_the_vacations_and_their_lookalike():
         "nos vamos de vacaciones hasta el 25 de octubre", "vacaciones", "hasta 25/10"
     ) in CASES
     assert any(
-        message == "recordame comprar los pasajes de las vacaciones" and command == "recordar"
+        message == "recordame comprar los pasajes de las vacaciones"
+        and "recordar" in command
+        and "vacaciones" not in command
         for message, command, _ in CASES
     )
 
@@ -305,3 +307,39 @@ def test_the_router_measurement_covers_the_turns():
     assert (
         "la basura la sacan Cin y Die una semana cada uno, es el 7", "turnos", "7 Cin, Die"
     ) in CASES
+
+
+def test_the_screen_is_routable():
+    assert "pantalla" in ROUTABLE
+
+
+def test_the_prompt_names_the_screen_with_its_tv():
+    from homeauto.route import PROMPT
+
+    assert "- pantalla:" in PROMPT
+    assert (
+        "Mensaje: poné la pantalla en la tele de la recámara\n"
+        "COMANDO: pantalla\n"
+        "ARGUMENTO: en recamara"
+    ) in PROMPT
+
+
+def test_the_prompt_keeps_the_agenda_away_from_the_screen():
+    from homeauto.route import PROMPT
+
+    assert "Mensaje: mostrame la agenda\nCOMANDO: agenda\nARGUMENTO:" in PROMPT
+
+
+def test_a_screen_request_is_routed_with_its_tv():
+    router = Router(model_saying("COMANDO: pantalla\nARGUMENTO: en recamara"))
+
+    decision = router.route("poné la pantalla en la tele de la recámara")
+
+    assert (decision.command, decision.argument) == ("pantalla", "en recamara")
+
+
+def test_the_router_measurement_covers_the_screen_and_its_lookalike():
+    from deploy.measure_router import CASES
+
+    assert ("poné la pantalla en la tele de la recámara", "pantalla", "en recamara") in CASES
+    assert ("mostrame la agenda", "agenda", "") in CASES

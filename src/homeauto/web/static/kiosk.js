@@ -88,9 +88,14 @@
     return text;
   }
 
+  // Si la dirección pide solo lectura con «ver=1», como la tele.
+  function readOnly(search) {
+    return /[?&]ver=1(?:&|$)/.test(search || "");
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { untilText: untilText, nextMeta: nextMeta, nowIndex: nowIndex, skyLine: skyLine,
-      trimPast: trimPast, awayText: awayText };
+      trimPast: trimPast, awayText: awayText, readOnly: readOnly };
   }
   if (typeof document === "undefined") {
     return;
@@ -381,7 +386,11 @@
     wireAdder("pendientes");
     tick();
     poll();
-    loadWritable();
+    if (readOnly(location.search)) {
+      document.body.classList.add("read-only");
+    } else {
+      loadWritable();
+    }
     setInterval(tick, 1000);
     setInterval(poll, POLL_MS);
   });

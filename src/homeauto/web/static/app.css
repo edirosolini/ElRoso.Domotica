@@ -72,6 +72,14 @@ button { font: inherit; color: inherit; }
 .list-card { overflow: hidden; }
 .kiosk .problems { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); margin: 0; font-size: 14px; }
 .kiosk .problems:empty { display: none; }
+/* Solo lectura, en la tele: sin campos para agregar ni círculos para tachar. */
+.read-only .add-item, .read-only .check { display: none; }
+
+/* Vista de alarma */
+.alarm { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; padding: 4vw; text-align: center; }
+.alarm-time { font-size: clamp(96px, 32vh, 360px); font-weight: 250; line-height: .9; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.alarm-message { font-size: clamp(28px, 7vh, 80px); font-weight: 600; line-height: 1.1; overflow-wrap: anywhere; }
+.alarm-view .eyebrow { font-size: clamp(16px, 3vh, 32px); }
 
 .timeline { list-style: none; margin: 0; padding: 0; }
 .timeline li { display: grid; grid-template-columns: 4.2em 6px 1fr auto; align-items: center; gap: 14px; padding: clamp(6px, 1.2vh, 12px) 0; font-size: clamp(16px, 2.8vh, 30px); }

@@ -59,4 +59,11 @@ assert.strictEqual(kiosk.awayText("2026-10-05T18:30:00"), "De vacaciones hasta e
 assert.strictEqual(kiosk.awayText(null), "");
 assert.strictEqual(kiosk.awayText("cualquier cosa"), "");
 
+// En la tele, con ?ver=1, el kiosco no escribe.
+assert.strictEqual(kiosk.readOnly("?ver=1"), true);
+assert.strictEqual(kiosk.readOnly("?a=b&ver=1"), true);
+assert.strictEqual(kiosk.readOnly(""), false);
+assert.strictEqual(kiosk.readOnly("?ver=0"), false);
+assert.strictEqual(kiosk.readOnly("?ver=10"), false);
+
 console.log("ok");

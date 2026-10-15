@@ -93,6 +93,28 @@ TURNS_USAGE = (
 )
 
 
+# «apagar» adelante o atrás del equipo saca la pantalla.
+SCREEN_OFF_WORDS = ("apagar", "apagá", "apaga", "off")
+SCREEN_USAGE = (
+    "Así: /pantalla la pone en la tele · /pantalla en recamara en otra"
+    " · /pantalla apagar la saca"
+)
+
+
+def _feminine(alias: str) -> bool:
+    return alias.endswith(("a", "ion", "ión"))
+
+
+def _the(alias: str) -> str:
+    """El equipo con su artículo: «el comedor», «la recamara»."""
+    return f"{'la' if _feminine(alias) else 'el'} {alias}"
+
+
+def _of(alias: str) -> str:
+    """El equipo como complemento: «del comedor», «de la recamara»."""
+    return f"de la {alias}" if _feminine(alias) else f"del {alias}"
+
+
 class TargetError(Exception):
     """Alguno de los equipos pedidos no existe."""
 
@@ -174,6 +196,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
+/pantalla — la pantalla de la casa en la tele · /pantalla en recamara · /pantalla apagar
 /clima — el pronóstico
 /preguntar <pregunta> — la averigua y te la contesta
 /calcular 15 por 4 — hace la cuenta · /calcular 20 grados en fahrenheit convierte
@@ -234,6 +257,7 @@ class Commands:
         voicemail=None,
         stock=None,
         vacation=None,
+        screens=None,
         correct=as_written,
         polish=as_is,
         clock: Callable[[], datetime] = datetime.now,
@@ -256,6 +280,8 @@ class Commands:
         self.stock = stock
         # Arranca y corta el modo vacaciones avisando a los demás chats.
         self.vacation_notice = vacation
+        # La pantalla de la casa en las teles; None sin API.
+        self.screens = screens
         self.correct = correct
         self.polish = polish
         self.clock = clock
@@ -854,6 +880,7 @@ class Commands:
             "volumen": self.volume,
             "parar": self.stop,
             "apagar": self.turn_off,
+            "pantalla": self.screen,
             "clima": self.weather,
             "agenda": self.agenda_command,
             "estado": self.status,
@@ -1184,6 +1211,53 @@ class Commands:
         if any(problem is None for problem in results.values()):
             summary += "\n\nEl televisor se apaga solo si lo tenés configurado para hacerlo al perder señal."
         return summary
+
+    def screen(self, chat_id: int, text: str = "") -> str:
+        """Pone la pantalla de la casa en una tele, o la saca con «apagar»."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.screens is None:
+            return "La pantalla no está prendida."
+
+        head, _, tail = text.strip().partition(" ")
+        off = head.lower() in SCREEN_OFF_WORDS
+        if off:
+            text = tail
+        try:
+            aliases, rest = self._split_target(chat_id, text, default=[self.config.screen_device])
+        except TargetError as exc:
+            return str(exc)
+        if rest:
+            if off or rest.lower() not in SCREEN_OFF_WORDS:
+                return SCREEN_USAGE
+            off = True
+
+        if not off and away_of(self.quiet, self.clock()):
+            return "De vacaciones: no prendo la tele."
+        return "\n".join(self._one_screen(alias, off, len(aliases) > 1) for alias in aliases)
+
+    def _one_screen(self, alias: str, off: bool, several: bool) -> str:
+        """Prende o apaga la pantalla en un equipo y dice cómo salió."""
+        if not self.screens.is_screen(alias):
+            return f"{_the(alias).capitalize()} no tiene pantalla."
+        try:
+            if off:
+                if self.screens.hide(alias):
+                    return f"Apagué la pantalla {_of(alias)}."
+                return f"La pantalla {_of(alias)} no estaba prendida."
+            if not self.screens.show(alias):
+                return "De vacaciones: no prendo la tele."
+        except UnknownDevice as exc:
+            return str(exc)
+        except DEVICE_ERRORS as exc:
+            log.warning("screen on %s failed: %s", alias, exc)
+            if off:
+                return f"No veo la tele {_of(alias)}."
+            return f"No veo la tele {_of(alias)}: prendela y probá de nuevo."
+        label = f"Apagar pantalla ({alias})" if several else "Apagar pantalla"
+        offer((label, f"pantalla apagar en {alias}"))
+        return f"📺 Puse la pantalla en la tele {_of(alias)}."
 
     def devices(self, chat_id: int) -> str:
         denial = self._denial(chat_id)

@@ -53,5 +53,14 @@ class Speaker:
     def turn_off(self) -> None:
         self.caster.turn_off()
 
+    def show(self, url: str) -> None:
+        self.caster.show(url)
+
+    def showing(self) -> bool:
+        return self.caster.showing()
+
+    def hide(self) -> bool:
+        return self.caster.hide()
+
     def device_name(self) -> str:
         return self.caster.device_name()

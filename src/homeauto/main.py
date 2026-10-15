@@ -49,6 +49,7 @@ from homeauto.translate import TRANSLATE_TIMEOUT, Translator
 from homeauto.lists import ListStore
 from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import AwayStore, Hush, HushStore, Vacation
+from homeauto.screen import ScreenPages, ScreenStore, Screens
 from homeauto.schedule.announcer import Announcer
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
@@ -148,6 +149,7 @@ POSTPONE_COMMANDS = ("posponer",)
 DEVICES_COMMANDS = ("equipos",)
 USE_COMMANDS = ("usar",)
 OFF_COMMANDS = ("apagar",)
+SCREEN_COMMANDS = ("pantalla",)
 WEATHER_COMMANDS = ("clima", "tiempo")
 ASK_COMMANDS = ("preguntar", "pregunta")
 CALC_COMMANDS = ("calcular", "convertir")
@@ -166,7 +168,7 @@ TURNS_COMMANDS = ("turnos",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
-    + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + WEATHER_COMMANDS
+    + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + SCREEN_COMMANDS + WEATHER_COMMANDS
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
     + ASK_COMMANDS + CALC_COMMANDS
     + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
@@ -554,18 +556,23 @@ def build_voicemail(synth) -> Voicemail:
     return Voicemail(synth)
 
 
-def build_speakers(config: Config, synth=None) -> SpeakerRegistry:
+def build_speakers(config: Config, synth=None, restore=None) -> SpeakerRegistry:
     """Un Speaker por equipo configurado, compartiendo síntesis y servidor de audio.
 
     Lo único distinto es el Caster: sintetizar dos veces la misma frase o
-    levantar dos servidores HTTP sería desperdicio.
+    levantar dos servidores HTTP sería desperdicio. `restore(alias)` es la página
+    que vuelve a cada tele después de un anuncio.
     """
     cache_dir = Path(CACHE_DIR)
     synth = synth or build_synth(cache_dir)
     media_server = MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT)
+    aliases = {device_uuid: alias for alias, device_uuid in config.devices.items()}
 
     def build(device_uuid) -> Speaker:
-        return Speaker(synth=synth, caster=Caster(device_uuid), media_server=media_server)
+        alias = aliases[device_uuid]
+        screen = (lambda: restore(alias)) if restore is not None else None
+        caster = Caster(device_uuid, screen=screen)
+        return Speaker(synth=synth, caster=caster, media_server=media_server)
 
     return SpeakerRegistry(config.devices, build=build)
 
@@ -721,6 +728,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
         (DEVICES_COMMANDS, lambda chat_id, _text: commands.devices(chat_id)),
         (USE_COMMANDS, commands.use),
         (OFF_COMMANDS, commands.turn_off),
+        (SCREEN_COMMANDS, commands.screen),
         (WEATHER_COMMANDS, commands.weather),
         (ASK_COMMANDS, commands.ask),
         (CALC_COMMANDS, commands.calculate),
@@ -830,23 +838,43 @@ def main() -> None:
     else:
         polish = as_is
         log.info("sin LLM_API_KEY: el texto generado va tal cual")
+    db_path = STATE_DIR / "jobs.db"
+    # El silencio que todos consultan: las horas fijas más lo que haya pedido
+    # /silencio. Se arma antes que sus usuarios, como el resto del archivo.
+    hush = Hush(hours=config.quiet_hours, store=HushStore(db_path), away=AwayStore(db_path))
+    # La página de cada tele; sin API no hay pantalla que mostrar.
+    pages = None
+    if config.api_enabled:
+        pages = ScreenPages(
+            base=lambda: f"http://{local_ip()}:{config.api_port}",
+            store=ScreenStore(db_path),
+            quiet=hush,
+        )
     # Un solo VoiceSynth: el parlante y la nota de voz comparten cache.
     synth = build_synth(Path(CACHE_DIR))
-    speakers = build_speakers(config, synth)
+    speakers = build_speakers(
+        config, synth, restore=pages.restore_url if pages is not None else None
+    )
     log.info("equipos configurados: %s", ", ".join(speakers.aliases))
 
     app = Application.builder().token(config.telegram_token).build()
 
     notifier = ChatNotifier(app.bot)
-    db_path = STATE_DIR / "jobs.db"
-    # El silencio que todos consultan: las horas fijas más lo que haya pedido
-    # /silencio. Se arma antes que sus usuarios, como el resto del archivo.
-    hush = Hush(hours=config.quiet_hours, store=HushStore(db_path), away=AwayStore(db_path))
     timer = JobQueueTimer(app.job_queue)
+    screens = None
+    if pages is not None:
+        screens = Screens(
+            speakers=speakers,
+            devices=config.screen_devices,
+            pages=pages,
+            timer=timer,
+            fallback=config.default_device,
+        )
     store = Store(db_path)
     history = HistoryStore(db_path)
     holidays = HolidayStore(db_path)
     stock = StockStore(db_path)
+    ringing = RingingStore(db_path)
     announcer = Announcer(
         speakers=speakers,
         notify=notifier,
@@ -865,7 +893,7 @@ def main() -> None:
         fired=FiredStore(db_path),
         awaiting=AwaitingStore(db_path),
         history=history,
-        ringing=RingingStore(db_path),
+        ringing=ringing,
         stop_audio=announcer.stop,
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
@@ -874,6 +902,7 @@ def main() -> None:
         stock=stock,
         lists=ListStore(db_path),
         quiet=hush,
+        screen=screens,
     )
     vacation = Vacation(
         hush=hush,
@@ -987,6 +1016,7 @@ def main() -> None:
         voicemail=build_voicemail(synth),
         stock=stock,
         vacation=vacation,
+        screens=screens,
         correct=build_corrector(config),
         # Solo para /llamar, que es texto nuestro; lo que escribe una persona
         # va por `correct`.
@@ -1036,6 +1066,7 @@ def main() -> None:
                     lists=ListStore(db_path),
                     quiet=hush,
                     holidays=holidays,
+                    ringing=ringing,
                 ),
                 jobs=JobsService(
                     reminders=reminders,

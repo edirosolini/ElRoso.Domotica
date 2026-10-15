@@ -36,6 +36,13 @@ class StubBoard:
         return {"now": "2026-10-05T12:00:00-03:00", "quiet": True, "weather": None,
                 "lists": {"compras": ["leche"]}, "problems": []}
 
+    def ringing(self, job_id):
+        self.asked.append(job_id)
+        if self.fail:
+            raise self.fail
+        return {"now": "2026-10-15T07:00:00-03:00", "ringing": job_id == 17,
+                "message": "<b>arriba</b>" if job_id == 17 else None}
+
 
 @pytest.fixture
 def board():
@@ -58,7 +65,7 @@ def body_json(response):
 # --- las páginas ---
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/agenda/", "/pantalla"])
+@pytest.mark.parametrize("path", ["/agenda", "/agenda/", "/pantalla", "/alarma"])
 def test_the_pages_answer_html_without_a_login(app, path):
     response = get(app, path)
 
@@ -228,7 +235,7 @@ def test_the_kiosk_crosses_items_out(app):
     assert "innerHTML" not in script
 
 
-@pytest.mark.parametrize("name", ["app.js", "kiosk.js"])
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js"])
 def test_our_scripts_stay_in_old_javascript(app, name):
     script = get(app, f"/static/{name}").body.decode("utf-8")
 
@@ -237,21 +244,21 @@ def test_our_scripts_stay_in_old_javascript(app, name):
     assert "innerHTML" not in script
 
 
-@pytest.mark.parametrize("name", ["app.js", "kiosk.js"])
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js"])
 def test_our_scripts_style_only_through_set_property(app, name):
     script = get(app, f"/static/{name}").body.decode("utf-8")
 
     assert script.count(".style.") == script.count(".style.setProperty(")
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma"])
 def test_the_pages_have_no_inline_styles(app, path):
     page = get(app, path).body.decode("utf-8").lower()
 
     assert "style=" not in page and "<style" not in page
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma"])
 def test_the_pages_have_no_inline_javascript(app, path):
     page = get(app, path).body.decode("utf-8").lower()
 
@@ -377,6 +384,7 @@ def test_the_board_feed_is_the_screen(app):
     [
         ("app.js", "text/javascript"),
         ("kiosk.js", "text/javascript"),
+        ("alarm.js", "text/javascript"),
         ("app.css", "text/css"),
         (f"{FULLCALENDAR}/index.global.min.js", "text/javascript"),
         (f"{FULLCALENDAR}/es.global.min.js", "text/javascript"),
@@ -392,7 +400,7 @@ def test_the_static_files_are_served(app, name, kind):
     assert "Cache-Control" in response.headers
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma"])
 def test_the_pages_declare_both_color_schemes(app, path):
     page = get(app, path).body.decode()
 
@@ -700,3 +708,79 @@ def test_writes_carry_no_cors_headers(writer):
     response = send(writer, "POST", "/api/jobs", {"message": "arriba"})
 
     assert not any(name.lower().startswith("access-control") for name in response.headers)
+
+
+# --- la pantalla en la tele ---
+
+
+def test_the_tv_reads_the_kiosk_with_its_query(app):
+    response = app.handle(Request.from_target("GET", "/pantalla?ver=1"))
+
+    assert response.status == 200
+    assert b'src="/static/kiosk.js"' in response.body
+
+
+def test_the_kiosk_has_a_read_only_mode_for_the_tv(app):
+    script = get(app, "/static/kiosk.js").body.decode("utf-8")
+
+    assert "readOnly(location.search)" in script
+    assert "ver=1" in script
+
+
+def test_the_policy_still_refuses_to_be_framed(app):
+    """Las páginas de la tele siguen prohibiendo que las enmarquen."""
+    for path in ("/pantalla", "/alarma", "/api/ringing/17"):
+        policy = get(app, path).headers["Content-Security-Policy"]
+        assert "frame-ancestors 'none'" in policy, path
+        assert "script-src 'self'" in policy
+        assert "'unsafe-inline'" not in policy.split("script-src")[1].split(";")[0]
+
+
+def test_the_alarm_view_loads_its_own_script_and_has_its_places(app):
+    page = get(app, "/alarma").body.decode("utf-8")
+    script = get(app, "/static/alarm.js").body.decode("utf-8")
+
+    assert 'src="/static/alarm.js"' in page
+    assert "fullcalendar" not in page
+    for place in ("time", "message", "date"):
+        assert f'id="{place}"' in page, place
+    assert "/api/ringing/" in script
+    assert ".textContent = " in script
+    assert "innerHTML" not in script
+
+
+def test_the_alarm_view_goes_back_to_the_read_only_kiosk(app):
+    script = get(app, "/static/alarm.js").body.decode("utf-8")
+
+    assert '"/pantalla?ver=1"' in script
+
+
+def test_the_ringing_feed_says_whether_the_alarm_still_rings(app, board):
+    response = get(app, "/api/ringing/17")
+
+    assert response.status == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert body_json(response) == {
+        "now": "2026-10-15T07:00:00-03:00", "ringing": True, "message": "<b>arriba</b>",
+    }
+    assert board.asked == [17]
+    assert body_json(get(app, "/api/ringing/18"))["ringing"] is False
+
+
+@pytest.mark.parametrize("path", ["/api/ringing/abc", "/api/ringing/", "/api/ringing/1/2"])
+def test_a_malformed_ringing_id_gets_404(app, path):
+    assert get(app, path).status == 404
+
+
+def test_the_ringing_feed_is_read_only(app):
+    response = app.handle(Request(method="POST", path="/api/ringing/17"))
+
+    assert response.status == 405
+    assert response.headers["Allow"] == "GET"
+
+
+def test_a_ringing_feed_that_breaks_gets_500_without_the_details():
+    response = get(WebApp(StubBoard(fail=RuntimeError("secreto"))), "/api/ringing/17")
+
+    assert response.status == 500
+    assert b"secreto" not in response.body

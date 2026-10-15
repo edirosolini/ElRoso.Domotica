@@ -1,4 +1,4 @@
-"""La lógica pura de la agenda y del kiosco, corrida con node si está instalado."""
+"""La lógica pura de la agenda, del kiosco y de la vista de alarma, corrida con node si está instalado."""
 
 import shutil
 import subprocess
@@ -11,7 +11,7 @@ HERE = Path(__file__).parent
 
 
 @pytest.mark.skipif(NODE is None, reason="sin node no se corre la lógica de la pantalla")
-@pytest.mark.parametrize("script", ["agenda_logic.js", "kiosk_logic.js"])
+@pytest.mark.parametrize("script", ["agenda_logic.js", "kiosk_logic.js", "alarm_logic.js"])
 def test_the_screen_logic_passes_in_node(script):
     done = subprocess.run([NODE, str(HERE / script)], capture_output=True, text=True, timeout=30)
 

@@ -762,3 +762,26 @@ def test_the_agenda_and_the_kiosk_say_whose_turn_it_is(parts):
     assert titles == ["📌 Le toca a Cin: sacar la basura", "📌 Le toca a Die: sacar la basura"]
     assert today["today"][0]["label"] == "📌 Le toca a Cin: sacar la basura"
     assert today["next"]["title"] == "📌 Le toca a Cin: sacar la basura"
+
+
+# --- la vista de alarma ---
+
+
+def test_the_alarm_view_reads_the_alarm_that_rings(parts, tmp_path):
+    from homeauto.schedule.ringing import RingingStore
+
+    ringing = RingingStore(tmp_path / "jobs.db")
+    ringing.remember(17, 42, "arriba, <b>ya</b>", "recamara", NOW)
+    built = Board(store=parts["store"], history=parts["history"], clock=Clock(), timezone=TZ,
+                  ringing=ringing)
+
+    assert built.ringing(17) == {
+        "now": "2026-10-05T12:00:00-03:00", "ringing": True, "message": "arriba, <b>ya</b>",
+    }
+    ringing.take(17)
+    assert built.ringing(17)["ringing"] is False
+    assert built.ringing(17)["message"] is None
+
+
+def test_without_a_ringing_store_nothing_rings(parts):
+    assert board(parts).ringing(17)["ringing"] is False

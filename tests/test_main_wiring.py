@@ -73,7 +73,9 @@ class FakeBuilder:
 def wired(tmp_path, monkeypatch):
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
-    monkeypatch.setattr(main, "build_speakers", lambda config, synth=None: _FakeRegistry())
+    monkeypatch.setattr(
+        main, "build_speakers", lambda config, synth=None, restore=None: _FakeRegistry()
+    )
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
     return app
@@ -297,7 +299,9 @@ def test_the_polisher_reaches_everything_the_house_says(tmp_path, monkeypatch):
     """Todo lo que genera el servicio pasa por el mismo pulidor. Menos /decir."""
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
-    monkeypatch.setattr(main, "build_speakers", lambda config, synth=None: _FakeRegistry())
+    monkeypatch.setattr(
+        main, "build_speakers", lambda config, synth=None, restore=None: _FakeRegistry()
+    )
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
 
@@ -348,7 +352,9 @@ def test_the_commands_get_both_the_polisher_and_the_corrector(tmp_path, monkeypa
     """
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
-    monkeypatch.setattr(main, "build_speakers", lambda config, synth=None: _FakeRegistry())
+    monkeypatch.setattr(
+        main, "build_speakers", lambda config, synth=None, restore=None: _FakeRegistry()
+    )
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(
@@ -1436,3 +1442,79 @@ def test_without_proxmox_an_empty_checks_file_has_no_monitor(wired, tmp_path, mo
     run_main(monkeypatch, config_file(tmp_path))
 
     assert commands["monitor"] is None
+
+
+# --- la pantalla en la tele ---------------------------------------------------
+
+
+TOKEN = "API_TOKEN=un-token-suficientemente-largo\n"
+
+
+def test_without_a_token_there_are_no_screens(wired, tmp_path, monkeypatch):
+    commands = _spy_init(monkeypatch, main.Commands)
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert commands["screens"] is None
+    assert reminders["screen"] is None
+    assert commands["config"].screen_device == "comedor"
+
+
+def test_the_screens_are_wired_to_the_one_database_and_usable(wired, tmp_path, monkeypatch):
+    commands = _spy_init(monkeypatch, main.Commands)
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    handed = {}
+
+    def build_speakers(config, synth=None, restore=None):
+        handed["restore"] = restore
+        return _FakeRegistry()
+
+    monkeypatch.setattr(main, "build_speakers", build_speakers)
+    monkeypatch.setattr(main, "local_ip", lambda: "192.0.2.10")
+
+    run_main(monkeypatch, config_file(tmp_path, TOKEN + "SCREEN_DEVICES=comedor,recamara\n"))
+
+    screens = commands["screens"]
+    assert screens is reminders["screen"]
+    assert screens.pages.store.db_path == tmp_path / "jobs.db"
+    assert screens.pages.quiet is reminders["quiet"]
+    assert isinstance(screens.timer, main.JobQueueTimer)
+    assert screens.is_screen("recamara") and not screens.is_screen("parlante")
+    assert screens.fallback == "parlante"
+    from homeauto.quiet import QuietHours
+
+    screens.pages.quiet.hours = QuietHours.parse("00:00", "00:00")
+    assert screens.restore_url("comedor") == "http://192.0.2.10:8099/pantalla?ver=1"
+    assert handed["restore"]("comedor") == "http://192.0.2.10:8099/pantalla?ver=1"
+    screens.pages.store.show("recamara", 17)
+    assert handed["restore"]("recamara") == "http://192.0.2.10:8099/alarma?job=17"
+
+
+def test_the_alarm_view_is_served_from_the_one_database(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    web = _wired_web(monkeypatch, tmp_path)
+
+    assert web.handle(Request(method="GET", path="/alarma")).status == 200
+    reminders["ringing"].remember(17, 42, "arriba", None, main.datetime(2026, 10, 15, 7, 0))
+    answer = json.loads(web.handle(Request(method="GET", path="/api/ringing/17")).body)
+    assert (answer["ringing"], answer["message"]) == (True, "arriba")
+    assert json.loads(web.handle(Request(method="GET", path="/api/ringing/18")).body)["ringing"] is False
+
+
+def test_each_caster_brings_back_the_page_of_its_own_tv(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "local_ip", lambda: "192.0.2.10")
+    monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
+    path = config_file(tmp_path).parent / "otro.env"
+    path.write_text(
+        "TELEGRAM_TOKEN=123:ABC\n"
+        f"CAST_DEVICES=comedor:{uuid.uuid4()},recamara:{uuid.uuid4()}\n",
+        encoding="utf-8",
+    )
+    config = main.Config.from_file(path)
+
+    registry = main.build_speakers(config, synth=object(), restore=lambda alias: f"pagina de {alias}")
+
+    assert registry.get("comedor").caster.screen() == "pagina de comedor"
+    assert registry.get("recamara").caster.screen() == "pagina de recamara"
+    assert main.build_speakers(config, synth=object()).get("comedor").caster.screen is None

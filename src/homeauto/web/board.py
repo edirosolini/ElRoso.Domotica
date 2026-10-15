@@ -151,6 +151,7 @@ class Board:
         lists=None,
         quiet=None,
         holidays=None,
+        ringing=None,
     ):
         self.store = store
         self.history = history
@@ -162,6 +163,8 @@ class Board:
         self.quiet = quiet
         # La caché local de feriados: `get(día)` y `between(desde, hasta)`.
         self.holidays = holidays
+        # Las alarmas que suenan, para la vista de alarma de la tele.
+        self.ringing_store = ringing
         self._lock = threading.Lock()
         self._calendar_cache: dict[tuple[datetime, datetime], tuple[datetime, list, list]] = {}
         self._weather_cache: tuple[datetime, dict] | None = None
@@ -286,6 +289,18 @@ class Board:
             },
         }
 
+    def _stamp(self, now: datetime) -> str:
+        return now.replace(tzinfo=self.timezone).isoformat() if now.tzinfo is None else now.isoformat()
+
+    def ringing(self, job_id: int) -> dict:
+        """Si la alarma sigue sonando y su mensaje, con la hora del servidor."""
+        found = self.ringing_store.get(job_id) if self.ringing_store is not None else None
+        return {
+            "now": self._stamp(self.clock()),
+            "ringing": found is not None,
+            "message": found.message if found is not None else None,
+        }
+
     def screen(self) -> dict:
         """El estado del kiosco: hora del servidor, descanso, clima y listas."""
         now = self.clock()
@@ -295,9 +310,7 @@ class Board:
             problems.append("No pude consultar el clima.")
         return {
             "today": today,
-            "now": now.replace(tzinfo=self.timezone).isoformat()
-            if now.tzinfo is None
-            else now.isoformat(),
+            "now": self._stamp(now),
             "quiet": bool(self.quiet.is_quiet(now)) if self.quiet is not None else False,
             "away": self._away(now),
             "weather": weather,

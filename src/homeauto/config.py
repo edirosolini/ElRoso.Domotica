@@ -80,6 +80,10 @@ DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
 # Preguntar no es pulir: pide un modelo que busque de verdad, no el barato.
 DEFAULT_ASK_MODEL = "gemini-3.7-flash"
 
+# La pantalla de la casa: dónde se muestra por defecto y qué equipos tienen pantalla.
+DEFAULT_SCREEN_DEVICE = "comedor"
+DEFAULT_SCREEN_DEVICES = ("comedor", "recamara", "habitacion")
+
 # Noticias del resumen: una clave por medio, como los calendarios y los Seq.
 NEWS_PREFIX = "NEWS_RSS_"
 DEFAULT_NEWS_COUNT = 5
@@ -219,6 +223,25 @@ def _parse_weekly(pairs: dict[str, str]) -> WeeklyAt | None:
         return WeeklyAt(days=days, at=clock_time(int(hour), int(minute or 0)))
     except ValueError as exc:
         raise ConfigError(f"WEEKLY_AT no es un día y una hora válidos: {raw}") from exc
+
+
+def _check_alias(alias: str, key: str) -> str:
+    if not ALIAS_SHAPE.fullmatch(alias):
+        raise ConfigError(f"{key}: '{alias}' no sirve como alias (letras, números, guiones)")
+    return alias
+
+
+def _parse_screen(pairs: dict[str, str]) -> tuple[str, tuple[str, ...]]:
+    """El equipo de `/pantalla` y los alias que tienen pantalla."""
+    device = pairs.get("SCREEN_DEVICE", "").strip().lower() or DEFAULT_SCREEN_DEVICE
+    _check_alias(device, "SCREEN_DEVICE")
+    raw = pairs.get("SCREEN_DEVICES", "")
+    devices = tuple(
+        _check_alias(chunk.strip().lower(), "SCREEN_DEVICES")
+        for chunk in raw.split(",")
+        if chunk.strip()
+    )
+    return device, devices or DEFAULT_SCREEN_DEVICES
 
 
 def _parse_lead(pairs: dict[str, str]) -> int:
@@ -449,6 +472,8 @@ class Config:
     news_count: int = DEFAULT_NEWS_COUNT
     economy: bool = True
     verse: bool = True
+    screen_device: str = DEFAULT_SCREEN_DEVICE
+    screen_devices: tuple[str, ...] = DEFAULT_SCREEN_DEVICES
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -484,6 +509,7 @@ class Config:
 
         allowed = _parse_chat_ids(pairs.get("ALLOWED_CHAT_IDS", ""))
         pve_url, pve_token, pve_ca_file, pve_disk_alert = _parse_pve(pairs)
+        screen_device, screen_devices = _parse_screen(pairs)
         return cls(
             telegram_token=token,
             devices=devices,
@@ -516,6 +542,8 @@ class Config:
             news_count=_parse_news_count(pairs),
             economy=_parse_economy(pairs),
             verse=_parse_verse(pairs),
+            screen_device=screen_device,
+            screen_devices=screen_devices,
         )
 
     @property
