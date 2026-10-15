@@ -13,7 +13,7 @@ está pensado para sumar dispositivos (luces) sin rediseñar nada.
 Domotica/
 ├── src/homeauto/
 │   ├── config.py        # carga y validación del archivo de entorno
-│   ├── quiet.py         # horario de descanso y silencio a pedido
+│   ├── quiet.py         # horario de descanso, silencio a pedido y modo vacaciones
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00", "lun-vie"
 │   ├── verbalize.py     # números y horas a palabras, para el sintetizador
 │   ├── polish.py        # reescribe la redacción con un LLM, sin tocar los datos
@@ -98,7 +98,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con dieciséis tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con diecisiete tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -119,6 +119,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `schedule.RingingStore` | las alarmas que siguen sonando, con sus repeticiones (`ringing`) |
 | `holidays.HolidayStore` | los feriados del año, y desde noviembre los del siguiente (`holidays`) |
 | `schedule.StockStore` | cuántas dosis quedan de cada remedio y cuándo avisar (`pill_stock`) |
+| `quiet.AwayStore` | hasta cuándo dura el modo vacaciones (`away`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -178,7 +179,7 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son treinta y siete llamadas al
+en el historial del shell, igual que el token de `domotica-say`. Son treinta y nueve llamadas al
 modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
@@ -481,9 +482,11 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   y sus re-avisos además «✅ Confirmar» adelante —la recuperación no—; el de Seq,
   solo «Silenciar 1 h», porque `/estado` muestra los chequeos y no Seq. `HouseVoice` los pasa
   también cuando el aviso cae en descanso y solo se escribe.
-- 🔴 **«Silenciar 1 h» no calla lo urgente**, decisión del dueño. Es `/silencio 1h`, y lo
-  urgente pasa por encima de cualquier silencio, fijo o pedido: la próxima caída urgente
-  suena igual. Lo que calla es lo demás —la recuperación, Seq, la lluvia, la agenda—.
+- 🔴 **«Silenciar 1 h» no calla lo urgente; las vacaciones sí**, decisión del dueño. Es
+  `/silencio 1h`, y lo urgente pasa por encima de cualquier silencio, fijo o pedido: la
+  próxima caída urgente suena igual. Lo que calla es lo demás —la recuperación, Seq, la
+  lluvia, la agenda—. La única excepción es el **Modo vacaciones**: ahí una caída urgente
+  solo se escribe, con sus botones.
 - Un campo desconocido en `checks.json` **hace fallar el arranque**. Un typo silencioso en
   `urgent` significaría que nunca te despierta.
 - 🔴 **El aviso dice el ambiente y la aplicación, y salen del evento.** "Hay dos errores en Seq
@@ -533,7 +536,7 @@ tiene una ruta estática al CT 202, que hace MASQUERADE sobre `wg0`. El túnel d
   borran con `Marks.clear()`. Un corte de una sola ronda no dice nada.
 - 🔴 **Al caer, «Se cortó internet.» solo por el parlante**, una vez y con `chime.SOFT`.
   Sale por `HouseVoice.speak_only()`, que no escribe al chat ni pule: con el corte, el chat
-  no llega. No es urgente: en descanso o con `/silencio` no se dice y **se pierde**, no se
+  no llega. No es urgente: en descanso, con `/silencio` o de vacaciones no se dice y **se pierde**, no se
   repite al terminar el descanso. No hay re-aviso.
 - **Al volver, si se había declarado**, se dice «Volvió internet. Estuvo cortado …» y se
   escribe a todos «🌐 Internet se cortó de HH:MM a HH:MM (N min)». La duración cuenta desde
@@ -582,6 +585,8 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
 | algo programado que un feriado saltea | todos, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
 | corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
+| vacaciones activadas o cortadas | los demás chats: «🧳 <nombre> activó vacaciones hasta el …» / «… cortó las vacaciones» |
+| fin de las vacaciones | todos: «🧳 Terminó el modo vacaciones, vuelvo a hablar.» |
 | agenda, clima, lluvia, API | todos |
 | alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
 | borrado con ese «Cancelar #N» | los demás chats: «🗑 <nombre> borró #N» |
@@ -616,7 +621,8 @@ separada del transporte HTTP y se prueba sin red.
 - `api._Handler` también atiende `PUT` y `DELETE`, y le pasa a `WebApp` los headers y el
   cuerpo. **Un cuerpo de más de ocho kilobytes (`MAX_BODY`) es un 413** antes de leerse.
 - **`urgent` es la única forma de saltear el horario de descanso.** Producción caída a las
-  3 AM lo amerita; un backup terminado, no.
+  3 AM lo amerita; un backup terminado, no. ⚠️ **No saltea el modo vacaciones**: ahí `/say`
+  urgente también queda solo escrito.
 - El CLI `domotica-say` lee el token del archivo de configuración: pasarlo por línea de
   comandos lo dejaría en el historial del shell.
 
@@ -763,7 +769,7 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
   la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
 - ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
   comportamiento medido. Un ejemplo nuevo puede correrle la atención al modelo en los otros
-  comandos, así que se vuelve a medir: la última corrida dio treinta y siete de treinta y siete.
+  comandos, así que se vuelve a medir: la última corrida dio treinta y nueve de treinta y nueve.
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
@@ -1008,16 +1014,52 @@ enseñó que un prefijo que también puede ser texto real se come parte del mens
 `/silencio 2h` agrega una ventana **a pedido** encima de la fija, para una siesta o una
 reunión. `quiet.Hush` la implementa.
 
-- 🔴 **`Hush` tiene la misma forma que `QuietHours`.** Contesta `is_quiet()` y `label`, así
+- 🔴 **`Hush` tiene la misma forma que `QuietHours`.** Contesta `is_quiet()` y `reason()`, así
   que el anunciador, los comandos, la API y `HouseVoice` siguen consultando lo mismo sin
   enterarse de que ahora el silencio se puede mover. `main()` construye un solo `Hush` y lo
   pasa donde antes iban las `QuietHours` sueltas.
+- **`reason()` es el único texto del motivo**: «Horario de descanso (22:00–05:25)» o «De
+  vacaciones hasta el 25/10». `Announcer`, `Commands` y `HouseVoice` le suman su cola
+  —«: no lo dije en voz alta.», «: no se dijo en voz alta.»— por `quiet.reason_of()`, que
+  también acepta unas `QuietHours` sueltas.
 - **El silencio se guarda en SQLite, no en memoria.** Un reinicio en medio de la siesta
   devolvería la casa hablando.
 - **Vence solo**: al consultarlo pasada la hora, `until()` lo borra. Nadie aguas abajo tiene
   que chequear dos cosas.
 - Los comandos verifican con `isinstance` que haya un `Hush` de verdad: con unas `QuietHours`
   sueltas no hay nada que mover y contestan que no está configurado, en vez de reventar.
+
+### Modo vacaciones
+
+`/vacaciones hasta 25/10` calla la casa hasta la vuelta: nada sale por los parlantes y todo
+llega por el chat. `/vacaciones off` las corta; sin argumento, o sin una fecha que se pueda
+leer, contesta cómo están y cómo se usa.
+
+- 🔴 **Es la única excepción a «lo urgente pasa por encima».** En vacaciones también lo
+  urgente queda solo escrito, con sus botones. Abarca `HouseVoice` —el monitor— y la API
+  `/say` con `urgent`.
+- 🔴 **Su propia tabla, `away` (`AwayStore`), separada de `hush`.** Compartida, `/hablar` —que
+  borra el silencio pedido— cortaría las vacaciones sin que nadie lo pidiera.
+- **`Hush.is_quiet()` da verdadero en vacaciones**, así que todo lo que ya consultaba el
+  silencio se entera solo. `is_away()` **vence el modo al leerlo**, como `until()`.
+- **La fecha es `dd/mm`, con hora opcional** (`timespec.parse_return_date`); sin hora es a
+  las 00:00, y `/vacaciones 25/10` sin el «hasta» también sirve. Una fecha que ya pasó este
+  año es la del siguiente. Hoy o antes se rechaza.
+- **`quiet.Vacation` arranca, corta y avisa el final.** El timer `away-end` escribe a todos
+  «🧳 Terminó el modo vacaciones, vuelvo a hablar.». `start()` lo rearma al arrancar y, si
+  las vacaciones vencieron con el servicio caído, avisa ahí. Si se extendieron, el timer viejo
+  no dice nada.
+- **Activarlas o cortarlas avisa a los demás chats** con el nombre de quien lo hizo («🧳
+  <nombre> activó vacaciones hasta el 25/10»). El nombre sale de `main._who()`, que ahora
+  llega también a los comandos escritos y al texto libre; en una nota de voz queda «Alguien».
+- 🔴 **Activarlas corta las alarmas que estén sonando** (`Reminders.stop_all_ringing`), con
+  el historial abierto, como el tope. Durante las vacaciones **una alarma no repite** y sale
+  sin «🔕 Apagar»: no hay nada que apagar.
+- **`/decir`, `/llamar` y lo pedido «por el parlante» se niegan** con el motivo y la pista
+  `/vacaciones off`. `/apagar`, `/parar` y `/volumen` siguen andando: no hablan. El resumen,
+  el cierre, el clima y la agenda salen solo por chat, como en descanso.
+- ⚠️ **Todo camino nuevo que castee tiene que preguntarle a `Hush`**, o se saltea las
+  vacaciones sin que nada avise. Una pantalla de alarma en la TV lo va a necesitar.
 
 ## Alarma, recordatorio y timer
 
@@ -1093,6 +1135,8 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   escribe «Dejé de sonar».
 - **Posponer conserva el tipo**: `FiredStore` guarda `kind`, y un recordatorio pospuesto
   vuelve a sonar como recordatorio.
+- **En vacaciones una alarma no suena: se escribe una sola vez**, no repite y sale sin
+  «🔕 Apagar». Activarlas corta las que estaban sonando. Ver **Modo vacaciones**.
 - ⚠️ **Se tocó el prompt del router** para sumar `recordar` y el ejemplo "recordame mañana a
   las diez" → `timer`. Medido el 2026-09-28: treinta y cuatro de treinta y cuatro, después
   de acotar la regla de las duraciones (ver **Texto libre**).
@@ -1217,7 +1261,7 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
   de silenciar.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
-  treinta y uno de treinta y uno (la última medición, treinta y siete). Ver **Texto libre**.
+  treinta y uno de treinta y uno (la última medición, treinta y nueve). Ver **Texto libre**.
 
 ## Historial de lo que sonó
 
@@ -1287,7 +1331,7 @@ salteado por feriado (`holiday`), con `closed_at`. `Reminders` es el único que 
 | `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes |
 | `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy y las dos listas |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
-| `/api/board` | el estado del kiosco: hora, descanso, hoy, lo próximo, clima y listas como `[{id, text}]` |
+| `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima y listas como `[{id, text}]` |
 | `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre y los equipos |
 | `POST /api/jobs` | crea un aviso de la casa |
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
@@ -1381,7 +1425,9 @@ reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres column
 - 🔴 **El reloj corre con la hora del servidor.** Calcula el offset entre `now` y el punto
   medio de la ida y vuelta, así un dispositivo con la hora mal igual muestra la de la casa.
 - **Se pone en tema nocturno en descanso**, con `quiet`, que es `Hush.is_quiet()`: el
-  horario fijo y el silencio pedido.
+  horario fijo, el silencio pedido y las vacaciones.
+- **En vacaciones, el reloj lleva la leyenda «De vacaciones hasta el 25/10»**, con la hora si
+  no es medianoche. `/api/board` trae `away`, la vuelta en ISO sin zona, o `null`.
 - **El clima trae un ícono por código WMO** (`board.sky_icon`); lo que no figura en
   `SKY_ICONS` es cielo variable.
 - **«Lo próximo» es lo primero con hora que todavía no empezó, de hoy o de mañana**
@@ -1533,14 +1579,16 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
-- 🔴 **Medido el 2026-10-15 contra el endpoint real: treinta y siete de treinta y siete
-  comandos y veintisiete de veintisiete payloads**, con `gemini-3.1-flash-lite`. Es la
-  corrida de después de sumar `pastillas`, con el ejemplo «compré 30 de enalapril»; la
-  anterior, con `hábiles`, había dado treinta y seis de treinta y seis.
-  `deploy/measure_router.py` es esa corrida: vive en el repo porque la regla de volver a medir
-  no sirve si medir es un trabajo. Corre **adentro del CT**, que es donde está la clave.
+- 🔴 **Medido el 2026-10-15 contra el endpoint real: treinta y nueve de treinta y nueve
+  comandos y veintinueve de veintinueve payloads**, con `gemini-3.1-flash-lite`. Es la
+  corrida de después de sumar `vacaciones`, con la regla de pasar la fecha de vuelta a `dd/mm`,
+  el ejemplo «nos vamos de vacaciones hasta el 25 de octubre» → `hasta 25/10` y un caso
+  negativo: «recordame comprar los pasajes de las vacaciones» va a `recordar`. La anterior, con
+  `pastillas`, había dado treinta y siete de treinta y siete. `deploy/measure_router.py` es esa
+  corrida: vive en el repo porque la regla de volver a medir no sirve si medir es un trabajo.
+  Corre **adentro del CT**, que es donde está la clave.
 - ⚠️ **La medición usa el `LLM_MODEL` del env del CT.** Con un modelo que la API no acepta, las
-  treinta y siete llamadas dan `400` y el resultado es cero: es el modelo, no el prompt.
+  treinta y nueve llamadas dan `400` y el resultado es cero: es el modelo, no el prompt.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
   `traducir → "hola al inglés"`, con el idioma **atrás**, y `split_language()` solo lo leía
   adelante: "traducí hola al francés" iba a traducir el texto *"hola al francés"* al inglés.
@@ -1556,7 +1604,7 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; hoy son treinta y siete de treinta y siete con los comandos que se sumaron después. Si se toca el
+  limpios; hoy son treinta y nueve de treinta y nueve con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -1619,6 +1667,9 @@ donde entró y nada más.
 - 🔴 **Las alarmas, los timers, el resumen de la mañana, el cierre del día y los avisos del
   monitor y de Seq siguen saliendo por el parlante**, siempre, más su copia al chat. Son lo que interrumpe a
   propósito: nadie pide a las tres de la mañana que la alerta suene.
+- 🔴 **En vacaciones no sale nada por el parlante**, ni lo urgente: todo eso va solo al chat.
+  `/decir`, `/llamar` y lo pedido «por el parlante» contestan el motivo con la pista
+  `/vacaciones off`. Ver **Modo vacaciones**.
 - 🔴 **La coletilla se saca antes de rutear.** El router arma el argumento del comando y se la
   comería, así que `free_text()` la detecta sobre el mensaje entero, la quita y deja puesto un
   `contextvars.ContextVar`. Va en un contextvar y no en el objeto porque es del pedido: dos
@@ -1688,7 +1739,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (treinta y siete de treinta y siete) y un segundo prompt es un segundo
+  prompt del router **está medido** (treinta y nueve de treinta y nueve) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
@@ -1721,16 +1772,16 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 37 nombres: 27 comandos y 10 **alias** (`help`, `tiempo`,
+`ALL_COMMANDS` tiene 38 nombres: 28 comandos y 10 **alias** (`help`, `tiempo`,
 `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
 funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
 
-🔴 **El menú de Telegram tiene 10, no los 27.** `recordar` entró como el décimo, y es el
+🔴 **El menú de Telegram tiene 10, no los 28.** `recordar` entró como el décimo, y es el
 tope que fija el test. Con los 18, la lista que sale al escribir `/`
 era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
 argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
 `parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
-`sacar`, `traducir`, `posponer`, `pastillas`— **siguen andando escritos** y se alcanzan sin barra por el router.
+`sacar`, `traducir`, `posponer`, `pastillas`, `vacaciones`— **siguen andando escritos** y se alcanzan sin barra por el router.
 
 - **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
   va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
