@@ -3,8 +3,9 @@ from datetime import datetime
 import pytest
 
 from homeauto.schedule.announcer import Announcer
-from homeauto.schedule.store import Job
+from homeauto.schedule.store import REMINDER, Job
 from homeauto.voice.caster import CastError
+from homeauto.voice.speaker import ALARM_MIN_VOLUME
 from homeauto.voice import chime
 from homeauto.voice.tts import TtsError
 
@@ -33,12 +34,27 @@ def test_says_it_out_loud():
     assert speaker.said == ["arriba"]
 
 
-def test_an_alarm_sounds_before_it_speaks():
+def test_an_alarm_wakes_with_its_own_beeps_and_floor():
     announcer, speaker, _ = build()
 
     announcer(JOB)
 
-    assert speaker.chimes == [chime.ALARM]
+    assert speaker.chimes == [chime.WAKE]
+    assert speaker.min_volumes == [ALARM_MIN_VOLUME]
+
+
+@pytest.mark.parametrize("repeat", ["once", "daily"])
+def test_a_reminder_or_timer_keeps_the_soft_beep_and_the_usual_floor(repeat):
+    announcer, speaker, _ = build()
+
+    reminder = Job(
+        id=8, chat_id=42, when=JOB.when, message="la pastilla", repeat=repeat, kind=REMINDER
+    )
+
+    announcer(reminder)
+
+    assert speaker.chimes == [chime.SOFT]
+    assert speaker.min_volumes == [None], "None es el piso propio del equipo, sesenta"
 
 
 def test_also_writes_to_the_chat():

@@ -23,15 +23,17 @@ class FakeSpeaker:
         self.name = name
         self.said = []
         self.chimes = []
+        self.min_volumes = []
         self.volumes = []
         self.stopped = 0
         self.fail = fail
 
-    def say(self, text, chime=False):
+    def say(self, text, chime=False, min_volume=None):
         if self.fail:
             raise self.fail
         self.said.append(text)
         self.chimes.append(chime)
+        self.min_volumes.append(min_volume)
 
     def set_volume(self, percent):
         if self.fail:
