@@ -174,7 +174,7 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son treinta y una llamadas al
+en el historial del shell, igual que el token de `domotica-say`. Son treinta y cinco llamadas al
 modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
@@ -752,7 +752,7 @@ router tenía que sacar de ahí un texto que no estaba, y lo mejor que podía ha
   la noche es "Vengan a cenar", al mediodía "Vengan a almorzar". Sin argumento, también.
 - ⚠️ **Se tocó el prompt del router para agregarlo**, y el prompt es lo que sostiene el
   comportamiento medido. Un ejemplo nuevo puede correrle la atención al modelo en los otros
-  comandos, así que se vuelve a medir: la última corrida dio treinta y cuatro de treinta y cuatro.
+  comandos, así que se vuelve a medir: la última corrida dio treinta y cinco de treinta y cinco.
 - ⚠️ El payload sale del mensaje de la persona, así que un llamado con un número adentro
   ("llamalos a comer en 5 minutos") se sintetiza con el dígito. El caso normal no los tiene.
 
@@ -1015,8 +1015,8 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 
 | | Repite | Sonido | Botones | Si nadie responde |
 | --- | --- | --- | --- | --- |
-| `/alarma` | una vez, diaria o por días | el despertador, a 90 | «🔕 Apagar» y posponer | vuelve a sonar cada minuto |
-| `/recordar` | **siempre**, en los días marcados | un beep suave | «✅ Hecho» y posponer | re-avisa |
+| `/alarma` | una vez, diaria, por días o mensual | el despertador, a 90 | «🔕 Apagar» y posponer | vuelve a sonar cada minuto |
+| `/recordar` | **siempre**, en los días marcados o un día de cada mes | un beep suave | «✅ Hecho» y posponer | re-avisa |
 | `/timer` | nunca | un beep suave | «✅ Hecho» y posponer | re-avisa |
 
 - 🔴 **El tipo es la columna `kind` de `jobs`** (`alarm` / `reminder`). Entra por
@@ -1086,9 +1086,9 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 
 ## Alarmas y repetición
 
-Una alarma o un recordatorio repite de tres formas: `once`, `daily` y `weekly`. La semanal guarda los días en
-la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración que
-`datetime.isoweekday()`.
+Una alarma o un recordatorio repite de cuatro formas: `once`, `daily`, `weekly` y `monthly`.
+La semanal guarda los días en la columna `days` de `jobs`, como números ISO (1 = lunes), la
+misma numeración que `datetime.isoweekday()`; la mensual, el día del mes en `monthday`.
 
 - **Los días eligen la ocurrencia de la hora, no la hora.** Por eso `parse_weekdays()` está
   separado de `parse_schedule()`: primero se resuelve la hora — que ya rueda sola al día
@@ -1108,6 +1108,27 @@ la columna `days` de `jobs`, como números ISO (1 = lunes), la misma numeración
   nunca sus días. Si algún día se hablan, hay que verbalizarlos.
 - El reloj acepta `5.30` además de `5:30`. Es como la gente escribe la hora; no cambia nada
   más del parser.
+
+**La mensual** se escribe `mensual 10 9:00 pagar la luz`, en `/recordar` y en `/alarma`.
+`parse_monthday()` lee el día y `spec.resolve()` busca la primera vez que cae.
+
+- 🔴 **El día pedido se guarda aparte de la próxima fecha.** Un mes que no tiene ese día cae
+  en su último día (`store.on_monthday()`), y el mes siguiente vuelve al pedido: 31/1 → 28/2
+  → 31/3. Sacar el día de `fires_at` lo dejaría en 28 para siempre después de febrero.
+- **Con un día mayor a veintiocho, al crear se avisa** «Los meses que no tienen N, el último
+  día.» (`spec.short_month_note()`).
+- **La hora es obligatoria**, como con días. Sin hora, `slots` pregunta «¿A qué hora?».
+  ⚠️ **`mensual` sin día no pregunta**: no hay pregunta para el día, y el comando contesta con
+  la forma (`Con mensual necesito el día del mes`).
+- `Store.add()` **rechaza un mensual sin día o con un día fuera de uno a treinta y uno**, por
+  lo mismo que un semanal sin días. `monthday` entra por `_add_missing_columns` y queda vacío
+  en todo lo que no es mensual.
+- **Los timers no aceptan mensual**: `/timer` no lo lee y `spec.classify()` lo rechaza desde
+  la pantalla.
+- 🔴 **La repetición se escribe en un solo lugar.** `spec.repetition_label()` («el 10 de cada
+  mes», «lun, mar», «todos los días») la usan `/lista` y el aviso de la pantalla; estaba
+  copiada en los dos. Al sonar, la línea del chat usa `spec.ringing_label()`, sin dígitos:
+  «(recordatorio del diez de cada mes)».
 
 ## Posponer
 
@@ -1142,7 +1163,7 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
   de silenciar.
 - ⚠️ **`callback_data` tiene tope de 64 bytes** en Telegram. Hay test que lo verifica.
 - **Se tocó el prompt del router** para sumar `posponer`, y se volvió a medir el 2026-09-25:
-  treinta y uno de treinta y uno (hoy treinta y cuatro). Ver **Texto libre**.
+  treinta y uno de treinta y uno (hoy treinta y cinco). Ver **Texto libre**.
 
 ## Historial de lo que sonó
 
@@ -1307,6 +1328,10 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
   historial y no trae `job`; **Google es solo lectura**.
 - **Editar un aviso que repite edita la serie**, y borrarlo la borra entera. No hay "solo
   esta vez".
+- **«Todos los meses» toma el día de la fecha elegida**: el formulario no tiene un campo para
+  el día del mes. Qué repetición admite cada tipo lo decide `repeatRule()` de `app.js`, que se
+  prueba con node. **Editar un mensual conserva su día** si la fecha es justo donde ese día
+  cae en el mes: un 31 que se muestra el 28 de febrero sigue siendo 31 (`jobs._monthday()`).
 - **El autor se elige de un desplegable** con los chats de `ALLOWED_CHAT_IDS`, y **no cambia
   al editar**: `Store.update` conserva el id y el dueño. Es a nombre de quien queda en
   `/lista` y de quien puede `/cancelar` escrito.
@@ -1318,7 +1343,7 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
   «Chat <id>». Anotarlo no puede costar la respuesta.
 - 🔴 **`schedule/spec.py` es la única fuente de las reglas de lo programado**, para Telegram y
   para la web: qué tipo y repetición es cada cosa (un timer suena una vez, un recordatorio
-  repite, uno semanal necesita días) y cuándo suena por primera vez. Es la misma lección que
+  repite, uno semanal necesita días y uno mensual, el día del mes) y cuándo suena por primera vez. Es la misma lección que
   `next_run()` y `down_line()`: con dos copias, la pantalla acepta lo que el chat rechaza.
 - **`Reminders.update` guarda antes de desagendar.** Una edición inválida levanta en el
   `Store` y el aviso sigue con su timer. No toca lo que ya sonó y espera su «Hecho», ni su
@@ -1408,10 +1433,10 @@ existen ya saben rechazar un argumento malo.
   de `decir` contra el mensaje original —normalizado, y sacándole el `en <equipo>` que arma
   el propio router— y si no está, se trata como pregunta. Un mensaje inventado en boca de la
   casa es peor que no entender.
-- 🔴 **Medido el 2026-09-28 contra el endpoint real: treinta y cuatro de treinta y cuatro
-  comandos y veinticuatro de veinticuatro payloads**, con `gemini-3.1-flash-lite`. Es la
-  corrida de después de sumar `recordar`; la del 2026-09-25, con `posponer`, había dado
-  treinta y uno de treinta y uno. `deploy/measure_router.py` es esa
+- 🔴 **Medido el 2026-10-15 contra el endpoint real: treinta y cinco de treinta y cinco
+  comandos y veinticinco de veinticinco payloads**, con `gemini-3.1-flash-lite`. Es la
+  corrida de después de sumar la forma mensual a `recordar`; la del 2026-09-28, con
+  `recordar`, había dado treinta y cuatro de treinta y cuatro. `deploy/measure_router.py` es esa
   corrida: vive en el repo porque la regla de volver a medir no sirve si medir es un trabajo.
   Corre **adentro del CT**, que es donde está la clave.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
@@ -1429,7 +1454,7 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; hoy son treinta y cuatro de treinta y cuatro con los comandos que se sumaron después. Si se toca el
+  limpios; hoy son treinta y cinco de treinta y cinco con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -1561,7 +1586,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (treinta y cuatro de treinta y cuatro) y un segundo prompt es un segundo
+  prompt del router **está medido** (treinta y cinco de treinta y cinco) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
