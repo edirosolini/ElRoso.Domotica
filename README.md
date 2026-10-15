@@ -36,6 +36,9 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /volumen 40                     0 a 100
 /parar                          corta lo que esté sonando
 /apagar en todos                cierra la app y deja los equipos en reposo
+/pantalla                       la pantalla de la casa en la tele del comedor
+/pantalla en recamara           en otra tele
+/pantalla apagar                la saca
 /clima                          dice el pronóstico en voz alta
 /preguntar cuánto mide el Aconcagua   lo averigua y lo contesta en voz alta
 /agenda                         qué te queda hoy
@@ -139,6 +142,19 @@ corriendo y deja el equipo en reposo; de ahí en más, un televisor configurado 
 al perder señal se apaga solo por HDMI-CEC. Un apagado de verdad requeriría ADB, que hay
 que habilitar a mano en cada equipo Android TV.
 
+**La pantalla en la tele.** `/pantalla` pone el kiosco de la casa en la tele de
+`SCREEN_DEVICE` (por defecto, el comedor), con `en <equipo>` en otra, y `/pantalla apagar`
+la saca; la respuesta trae el botón «Apagar pantalla». En la tele va **solo para mirar**: sin
+campos para agregar ni círculos para tachar. Apagar solo cierra la pantalla si sigue puesta:
+si alguien abrió otra app, no la toca. Si la casa habla por esa tele, la pantalla vuelve sola
+al terminar el anuncio. Funciona en horario de descanso, porque no hace ruido, pero no de
+vacaciones. Qué equipos tienen pantalla se configura en `SCREEN_DEVICES`: a uno que no está
+ahí le contesta que no tiene pantalla. Sin `API_TOKEN` no hay pantalla que mostrar.
+
+**Alarma en la tele.** Una alarma en un equipo de `SCREEN_DEVICES` prende la tele con la hora
+grande y el mensaje mientras suena. Cuando deja de sonar pasa sola al kiosco, y a los 15
+minutos se cierra, si nadie puso otra cosa. En descanso o de vacaciones no se prende.
+
 **Elegir equipo.** Cualquier comando acepta `en <equipo>` adelante y va solo a ese; `/usar`
 cambia el que se usa cuando no decís nada, y queda guardado por chat. Un timer recuerda a
 qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
@@ -227,6 +243,7 @@ cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconc
 compré 30 de enalapril                    →  /pastillas enalapril +30
 la basura la sacan Cin y Die una semana cada uno, es el 7  →  /turnos 7 Cin, Die
 llamá a todos a cenar                     →  /llamar en todos a cenar
+poné la pantalla en la tele de la recámara  →  /pantalla en recamara
 ```
 
 **Ejecuta y te dice qué entendió**, no pregunta antes. La respuesta arranca con
@@ -547,12 +564,14 @@ token, la API no arranca — apagada es el estado seguro.
 ## La pantalla de la casa
 
 El mismo servidor de la API sirve dos páginas para abrir desde el navegador, en cualquier
-dispositivo de la casa:
+dispositivo de la casa, y una tercera para la tele:
 
 ```
 http://192.168.68.10:8099/agenda              # la agenda, en el mes actual
 http://192.168.68.10:8099/agenda?m=2026-11    # abre en otro mes
 http://192.168.68.10:8099/pantalla            # el kiosco, para dejar fijo en una pantalla
+http://192.168.68.10:8099/pantalla?ver=1      # el kiosco solo para mirar, como va a la tele
+http://192.168.68.10:8099/alarma?job=7        # la alarma #7 mientras suena; después, el kiosco
 ```
 
 **La agenda** junta lo de la casa y lo de Google Calendar. Arriba están el mes o la semana que
@@ -671,6 +690,8 @@ VERSE=on                       # versículo del día (NTV) al final del resumen
 NEWS_RSS_INFOBAE=https://www.infobae.com/arc/outboundfeeds/rss/?outputType=xml
 NEWS_RSS_AMBITO=https://www.ambito.com/rss/pages/home.xml   # una clave por medio
 NEWS_COUNT=5                   # cuántos titulares, hasta diez
+SCREEN_DEVICE=comedor          # dónde muestra /pantalla sin equipo
+SCREEN_DEVICES=comedor,recamara,habitacion   # qué equipos tienen pantalla, por coma
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un
