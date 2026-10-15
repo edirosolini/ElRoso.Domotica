@@ -160,3 +160,60 @@ def test_speak_only_survives_a_broken_speaker():
 
     assert house.speak_only("Se cortó internet.") is False
     assert written == []
+
+
+# --- modo vacaciones ---------------------------------------------------------
+
+
+def away_hush(tmp_path, now=NOON):
+    from homeauto.quiet import AwayStore, Hush, HushStore
+
+    path = tmp_path / "jobs.db"
+    hush = Hush(
+        hours=QuietHours.parse("23:00", "07:00"),
+        store=HushStore(path),
+        clock=lambda: now,
+        away=AwayStore(path),
+    )
+    hush.start_away(datetime(2026, 9, 25, 0, 0))
+    return hush
+
+
+def test_without_vacations_the_urgent_still_wakes_the_house_at_night():
+    house, speaker, written = build(clock=lambda: NIGHT, quiet=QuietHours.parse("23:00", "07:00"))
+
+    result = house.announce("producción caída", urgent=True)
+
+    assert speaker.said == ["producción caída"]
+    assert result["spoken"] is True and written == []
+
+
+def test_on_vacation_even_the_urgent_is_only_written(tmp_path):
+    house, sent = build_with_buttons(quiet=away_hush(tmp_path))
+    speaker = house.speakers.get("parlante")
+
+    result = house.announce("producción caída", urgent=True, actions=ACTIONS)
+
+    assert speaker.said == []
+    assert result["spoken"] is False and result["notified"] is True
+    [(text, actions)] = sent
+    assert "producción caída" in text
+    assert "De vacaciones hasta el 25/09" in text
+    assert actions == ACTIONS
+
+
+def test_on_vacation_the_everyday_notices_are_only_written(tmp_path):
+    house, speaker, written = build(quiet=away_hush(tmp_path))
+
+    result = house.announce("Hoy llueve a la tarde.")
+
+    assert speaker.said == []
+    assert result["notified"] is True
+    assert "Hoy llueve" in written[0]
+
+
+def test_on_vacation_speak_only_keeps_quiet(tmp_path):
+    house, speaker, written = build(quiet=away_hush(tmp_path))
+
+    assert house.speak_only("Se cortó internet.") is False
+    assert speaker.said == [] and written == []

@@ -197,3 +197,45 @@ def test_working_days_skip_holidays(token):
 @pytest.mark.parametrize("token", ["lun-vie", "semana", "lun,mar,mie,jue,vie", "finde", ""])
 def test_other_days_do_not_skip_holidays(token):
     assert skips_holidays(token) is False
+
+
+# --- la fecha de vuelta de las vacaciones ------------------------------------
+
+from homeauto.timespec import parse_return_date  # noqa: E402
+
+TODAY = datetime(2026, 10, 15, 12, 0)
+
+
+def test_a_day_and_month_is_midnight_of_that_day():
+    assert parse_return_date("25/10", TODAY) == datetime(2026, 10, 25, 0, 0)
+
+
+def test_an_hour_can_follow_the_date():
+    assert parse_return_date("25/10 18:00", TODAY) == datetime(2026, 10, 25, 18, 0)
+    assert parse_return_date("25/10 18.30", TODAY) == datetime(2026, 10, 25, 18, 30)
+
+
+def test_the_year_can_be_written():
+    assert parse_return_date("05/01/2027", TODAY) == datetime(2027, 1, 5, 0, 0)
+
+
+def test_a_day_that_already_passed_this_year_is_next_year():
+    assert parse_return_date("05/01", TODAY) == datetime(2027, 1, 5, 0, 0)
+
+
+@pytest.mark.parametrize("text", ["15/10", "10/10/2026", "15/10 08:00", "01/01/2026"])
+def test_today_or_a_past_date_is_refused(text):
+    with pytest.raises(TimeSpecError):
+        parse_return_date(text, TODAY)
+
+
+@pytest.mark.parametrize("text", ["31/02", "32/10", "25/13", "29/02/2027", "25/10 25:00"])
+def test_an_impossible_date_is_refused(text):
+    with pytest.raises(TimeSpecError):
+        parse_return_date(text, TODAY)
+
+
+@pytest.mark.parametrize("text", ["", "el domingo", "25 de octubre", "25/10 tarde", "25-10"])
+def test_what_cannot_be_read_is_refused(text):
+    with pytest.raises(TimeSpecError):
+        parse_return_date(text, TODAY)

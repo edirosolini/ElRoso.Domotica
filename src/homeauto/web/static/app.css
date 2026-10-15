@@ -55,6 +55,7 @@ button { font: inherit; color: inherit; }
 .clock-card { grid-area: clock; display: flex; flex-direction: column; justify-content: center; }
 .time { font-size: clamp(64px, 15vh, 180px); font-weight: 250; line-height: .95; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
 .date { font-size: clamp(18px, 3vh, 32px); color: var(--muted); margin-top: 6px; }
+.away { font-size: clamp(16px, 2.6vh, 28px); margin-top: 8px; }
 .weather-card { grid-area: weather; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .weather-main { display: flex; align-items: center; gap: 12px; }
 .weather-icon { font-size: clamp(40px, 8vh, 88px); line-height: 1; }

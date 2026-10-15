@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Callable, Iterable
 
 from homeauto.polish import as_is
+from homeauto.quiet import away_of, reason_of
 from homeauto.schedule.spec import ringing_label
 from homeauto.schedule.store import Job
 from homeauto.voice import chime
@@ -83,6 +84,10 @@ class Announcer:
         else:
             text = self._text(message, job, problem, resting)
             actions = self._actions(job)
+            if away_of(self.quiet, self.clock()):
+                # En vacaciones saca los botones de apagar la alarma.
+                off = _numbered(self.ring_actions, job)
+                actions = tuple(action for action in actions if action not in off)
         for chat_id in self.chat_ids or [job.chat_id]:
             try:
                 if actions:
@@ -131,7 +136,7 @@ class Announcer:
     def _tail(self, text: str, problem: str | None, resting: bool) -> str:
         """Suma al texto por qué no se dijo en voz alta, si no se dijo."""
         if resting:
-            text += f"\n\nHorario de descanso ({self.quiet.label}): no lo dije en voz alta."
+            text += f"\n\n{reason_of(self.quiet, self.clock())}: no lo dije en voz alta."
         elif problem:
             text += f"\n\nNo pude decirlo en voz alta: {problem}"
         return text

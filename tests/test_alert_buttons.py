@@ -158,3 +158,13 @@ def test_every_button_runs_a_command_that_exists():
     for actions in (main.SNOOZE_ACTIONS, main.MONITOR_ACTIONS, main.SEQ_ACTIONS):
         for _label, data in actions:
             assert data.split(" ")[0] in known, data
+
+
+def test_an_alert_that_was_only_written_is_not_written_twice():
+    """En vacaciones lo urgente no suena: la casa ya lo escribió con sus botones."""
+    house = FakeHouse(spoken=False)
+
+    main._alert(house, "vps no responde", True, actions=main._monitor_actions("vps"))
+
+    assert house.announced == [main._monitor_actions("vps")]
+    assert house.told == []

@@ -136,3 +136,28 @@ def test_health_needs_no_token():
 
     assert health["ok"] is True
     assert "parlante" in health["devices"]
+
+
+def test_on_vacation_an_urgent_message_does_not_sound_and_is_notified(tmp_path):
+    from homeauto.quiet import AwayStore, Hush, HushStore
+
+    path = tmp_path / "jobs.db"
+    hush = Hush(hours=NIGHT, store=HushStore(path), clock=lambda: BY_DAY, away=AwayStore(path))
+    hush.start_away(datetime(2026, 9, 10, 0, 0))
+    speakers = {"parlante": FakeSpeaker("parlante")}
+    sent = []
+    service = ApiService(
+        token=TOKEN,
+        speakers=StubRegistry(**speakers),
+        default_devices=["parlante"],
+        notify=lambda chat_id, text: sent.append((chat_id, text)),
+        chat_ids=(42,),
+        quiet=hush,
+        clock=lambda: BY_DAY,
+    )
+
+    result = service.say(TOKEN, {"text": "se cayó produccion", "urgent": True})
+
+    assert speakers["parlante"].said == []
+    assert result["spoken"] is False and result["notified"] is True
+    assert "se cayó produccion" in sent[0][1]

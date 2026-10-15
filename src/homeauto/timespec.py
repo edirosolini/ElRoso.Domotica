@@ -23,6 +23,7 @@ MONTHLY_WORDS = ("mensual",)
 
 # "5.30" es como la gente escribe la hora tanto como "5:30"; significan lo mismo.
 _CLOCK_RE = re.compile(r"(\d{1,2})[:.](\d{2})")
+_DATE_RE = re.compile(r"(\d{1,2})/(\d{1,2})(?:/(\d{4}))?")
 _DURATION_RE = re.compile(r"(?:(\d+)h)?(?:(\d+)min|(\d+)m)?(?:(\d+)s)?", re.IGNORECASE)
 
 
@@ -183,3 +184,42 @@ def next_weekday(when: datetime, days: tuple[int, ...] | list[int]) -> datetime:
 
 def format_weekdays(days: tuple[int, ...] | list[int]) -> str:
     return ", ".join(DAY_NAMES[day] for day in sorted(days))
+
+
+def parse_return_date(text: str, now: datetime) -> datetime:
+    """La vuelta de unas vacaciones: «dd/mm», «dd/mm/aaaa» y una hora opcional.
+
+    Sin año, una fecha que ya pasó es la del año siguiente. Sin hora, las 00:00.
+    """
+    date_part, _, clock_part = text.strip().partition(" ")
+    match = _DATE_RE.fullmatch(date_part)
+    if match is None:
+        raise TimeSpecError(f"No entiendo la fecha: '{text.strip()}'. Así: 25/10 o 25/10 18:00")
+
+    day, month = int(match.group(1)), int(match.group(2))
+    hour = minute = 0
+    clock_part = clock_part.strip()
+    if clock_part:
+        clock = _CLOCK_RE.fullmatch(clock_part)
+        if clock is None:
+            raise TimeSpecError(f"No entiendo la hora: '{clock_part}'")
+        hour, minute = int(clock.group(1)), int(clock.group(2))
+        if hour > 23 or minute > 59:
+            raise TimeSpecError(f"No entiendo la hora: '{clock_part}'")
+
+    def build(year: int) -> datetime:
+        try:
+            return datetime(year, month, day, hour, minute)
+        except ValueError as exc:
+            raise TimeSpecError(f"Esa fecha no existe: '{date_part}'") from exc
+
+    if match.group(3):
+        when = build(int(match.group(3)))
+    else:
+        when = build(now.year)
+        if when.date() < now.date():
+            when = build(now.year + 1)
+
+    if when.date() <= now.date():
+        raise TimeSpecError("La vuelta tiene que ser un día que todavía no llegó.")
+    return when

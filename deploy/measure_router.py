@@ -54,6 +54,8 @@ CASES = (
     ("sacá el 2 de la lista de compras", "sacar", "2"),
     ("traducí hola al inglés", "traducir", "hola"),
     ("compré 30 de enalapril", "pastillas", "enalapril +30"),
+    ("nos vamos de vacaciones hasta el 25 de octubre", "vacaciones", "hasta 25/10"),
+    ("recordame comprar los pasajes de las vacaciones", "recordar", "pasajes"),
 )
 
 

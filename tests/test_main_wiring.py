@@ -1292,3 +1292,68 @@ def test_the_pills_are_counted_in_the_one_database(wired, tmp_path, monkeypatch)
     lists = reminders["lists"]
     assert lists.db_path == tmp_path / "jobs.db"
     assert lists.add("compras", ["enalapril"]) == ["enalapril"]
+
+
+# --- modo vacaciones ---------------------------------------------------------
+
+
+def test_the_vacations_live_in_the_one_database_and_quiet_everything(wired, tmp_path, monkeypatch):
+    hush = _spy_init(monkeypatch, main.Hush)
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    house = _spy_init(monkeypatch, main.HouseVoice)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    away = hush["away"]
+    assert isinstance(away, main.AwayStore)
+    assert away.db_path == tmp_path / "jobs.db"
+    away.set(main.datetime(2099, 1, 1))
+    assert away.until() == main.datetime(2099, 1, 1)
+    assert reminders["quiet"] is house["quiet"], "las alarmas y la casa leen el mismo silencio"
+    assert reminders["quiet"].is_away() is True
+
+
+def test_the_vacations_command_arms_the_end_on_the_job_queue(wired, tmp_path, monkeypatch):
+    commands = _spy_init(monkeypatch, main.Commands)
+    monkeypatch.setattr(main, "ChatNotifier", _FakeNotifier)
+
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\n"))
+    vacation = commands["vacation"]
+    vacation.begin(main.datetime(2099, 1, 1), 42, "Eze")
+
+    from homeauto.quiet import AWAY_END_KEY
+
+    assert AWAY_END_KEY in wired.job_queue.once
+    assert commands["quiet"].is_away() is True
+    assert _FakeNotifier.sent == [(77, "🧳 Eze activó vacaciones hasta el 01/01", ())]
+    assert vacation.end(42, "Eze") is True
+
+
+def test_the_post_init_rearms_the_end_of_the_vacations(wired, tmp_path, monkeypatch):
+    handed = {}
+    original = main.build_post_init
+
+    def spy(notifier, reminders, api=None, vacation=None):
+        handed["vacation"] = vacation
+        return original(notifier, reminders, api, vacation)
+
+    monkeypatch.setattr(main, "build_post_init", spy)
+    commands = _spy_init(monkeypatch, main.Commands)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert handed["vacation"] is commands["vacation"]
+    assert callable(handed["vacation"].start)
+
+
+def test_the_vacations_stop_the_alarms_of_the_wired_reminders(wired, tmp_path, monkeypatch):
+    vacation = _spy_init(monkeypatch, main.Vacation)
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    stop = vacation["stop_ringing"]
+    assert stop.__self__.ringing is reminders["ringing"]
+    reminders["ringing"].remember(17, 42, "arriba", None, main.datetime(2026, 10, 15, 7, 0))
+    assert stop() == 1
+    assert reminders["ringing"].get(17) is None

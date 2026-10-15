@@ -85,7 +85,7 @@ def parts(tmp_path):
     def notify(chat_id, text, actions=()):
         told.append((chat_id, text, actions))
 
-    def build(chat_ids=(OWNER, OTHER)):
+    def build(chat_ids=(OWNER, OTHER), quiet=None):
         return Reminders(
             store=Store(path),
             timer=timer,
@@ -98,6 +98,7 @@ def parts(tmp_path):
             notify=notify,
             clock=clock,
             chat_ids=chat_ids,
+            quiet=quiet,
         )
 
     return {
@@ -417,3 +418,58 @@ def test_reaching_the_limit_leaves_its_history_open(parts):
 
     [entry] = history(parts)
     assert entry.closed is None
+
+
+# --- modo vacaciones ---------------------------------------------------------
+
+
+def away_hush(parts):
+    from homeauto.quiet import AwayStore, Hush, HushStore, QuietHours
+
+    hush = Hush(
+        hours=QuietHours.parse("22:00", "05:25"),
+        store=HushStore(parts["path"]),
+        clock=parts["clock"],
+        away=AwayStore(parts["path"]),
+    )
+    hush.start_away(datetime(2026, 10, 25, 0, 0))
+    return hush
+
+
+def test_on_vacation_an_alarm_does_not_ring_again(parts):
+    reminders = parts["build"](quiet=away_hush(parts))
+
+    job = fire(parts, reminders)
+
+    assert ring_key(job.id) not in parts["timer"].armed
+    assert parts["announcer"].calls == [(job.id, "arriba", 0, True)], "un solo aviso al chat"
+    assert RingingStore(parts["path"]).get(job.id) is None
+
+
+def test_without_vacations_the_quiet_hush_still_lets_it_ring_again(parts):
+    from homeauto.quiet import Hush, HushStore, QuietHours
+
+    hush = Hush(hours=QuietHours.parse("22:00", "05:25"), store=HushStore(parts["path"]))
+    job = fire(parts, parts["build"](quiet=hush))
+
+    assert ring_key(job.id) in parts["timer"].armed
+
+
+def test_stopping_every_alarm_closes_them_as_the_limit_does(parts):
+    reminders = parts["build"]()
+    first = fire(parts, reminders, message="arriba")
+    parts["clock"].now = NOW
+    second = fire(parts, reminders, message="colegio")
+    told = len(parts["told"])
+
+    assert reminders.stop_all_ringing() == 2
+
+    for job in (first, second):
+        assert ring_key(job.id) not in parts["timer"].armed
+        assert RingingStore(parts["path"]).get(job.id) is None
+    assert [entry.closed for entry in history(parts)] == [None, None], "igual que el tope"
+    assert len(parts["told"]) == told, "no avisa por cada una"
+
+
+def test_stopping_every_alarm_with_nothing_ringing_does_nothing(parts):
+    assert parts["build"]().stop_all_ringing() == 0
