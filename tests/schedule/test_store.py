@@ -177,6 +177,75 @@ def test_update_can_turn_a_job_monthly(store):
     assert (updated.repeat, updated.monthday) == ("monthly", 30)
 
 
+# --- feriados --------------------------------------------------------------
+
+WORKDAYS = (1, 2, 3, 4, 5)
+
+
+def test_a_weekly_job_can_skip_holidays(store):
+    job = store.add(OWNER, T1, "el colegio", repeat="weekly", days=WORKDAYS, skip_holidays=True)
+
+    assert job.skip_holidays is True
+    assert store.get(job.id).skip_holidays is True
+
+
+def test_by_default_a_job_rings_on_holidays(store):
+    job = store.add(OWNER, T1, "el colegio", repeat="weekly", days=WORKDAYS)
+
+    assert store.get(job.id).skip_holidays is False
+
+
+@pytest.mark.parametrize(
+    ("repeat", "extra"),
+    [("once", {}), ("daily", {}), ("monthly", {"monthday": 10})],
+)
+def test_only_a_weekly_job_can_skip_holidays(store, repeat, extra):
+    with pytest.raises(ValueError):
+        store.add(OWNER, T1, "arriba", repeat=repeat, skip_holidays=True, **extra)
+    assert store.pending() == []
+
+
+def test_update_can_turn_skipping_holidays_on_and_off(store):
+    job = store.add(OWNER, T1, "el colegio", repeat="weekly", days=WORKDAYS)
+
+    on = store.update(job.id, T2, "el colegio", repeat="weekly", days=WORKDAYS, skip_holidays=True)
+    off = store.update(job.id, T2, "el colegio", repeat="weekly", days=WORKDAYS)
+
+    assert on.skip_holidays is True
+    assert off.skip_holidays is False
+
+
+def test_update_refuses_skipping_holidays_on_a_daily(store):
+    job = store.add(OWNER, T1, "arriba", repeat="daily")
+
+    with pytest.raises(ValueError):
+        store.update(job.id, T2, "arriba", repeat="daily", skip_holidays=True)
+    assert store.get(job.id).when == T1
+
+
+def test_skip_holidays_column_is_added_to_an_older_database(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,"
+            " fires_at TEXT NOT NULL, message TEXT NOT NULL, repeat TEXT NOT NULL DEFAULT 'once',"
+            " device TEXT, days TEXT, kind TEXT NOT NULL DEFAULT 'alarm', monthday INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO jobs (chat_id, fires_at, message, repeat, days)"
+            " VALUES (42, '2026-10-05T07:00:00', 'viejo', 'weekly', '1,2,3,4,5')"
+        )
+
+    store = Store(path)
+
+    [old] = store.pending()
+    assert old.skip_holidays is False
+    job = store.add(OWNER, T1, "nuevo", repeat="weekly", days=WORKDAYS, skip_holidays=True)
+    assert store.get(job.id).skip_holidays is True
+
+
 # --- editar ----------------------------------------------------------------
 
 

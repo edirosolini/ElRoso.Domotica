@@ -10,7 +10,7 @@ import asyncio
 import logging
 import os
 import socket
-from datetime import datetime, time as clock_time
+from datetime import date, datetime, time as clock_time
 from pathlib import Path
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -37,6 +37,7 @@ from homeauto.briefing import Briefing
 from homeauto.closing import Closing
 from homeauto.weekly import Weekly
 from homeauto.economy import EconomyClient
+from homeauto.holidays import HolidayClient, HolidayStore, refresh as refresh_holidays
 from homeauto.news import NewsClient
 from homeauto.config import Config
 from homeauto.correct import as_written
@@ -342,6 +343,22 @@ def schedule_weekly(app, config, weekly, tell) -> None:
 
     app.job_queue.run_daily(job, time=moment, days=days, name="weekly")
     log.info("weekly summary at %s on %s", moment.strftime("%H:%M"), days)
+
+
+# Los feriados se refrescan de madrugada y unos segundos después de arrancar.
+HOLIDAYS_AT = (4, 0)
+HOLIDAYS_FIRST = 15
+
+
+def schedule_holidays(app, client, store) -> None:
+    """El refresco de los feriados: al arrancar y una vez por día, fuera del event loop."""
+
+    async def job(_context):
+        await asyncio.to_thread(refresh_holidays, client, store, date.today())
+
+    app.job_queue.run_once(job, when=HOLIDAYS_FIRST, name="holidays-startup")
+    moment = clock_time(*HOLIDAYS_AT, tzinfo=local_timezone())
+    app.job_queue.run_daily(job, time=moment, name="holidays")
 
 
 def build_post_init(notifier, reminders, api=None):
@@ -811,6 +828,7 @@ def main() -> None:
     hush = Hush(hours=config.quiet_hours, store=HushStore(db_path))
     store = Store(db_path)
     history = HistoryStore(db_path)
+    holidays = HolidayStore(db_path)
     announcer = Announcer(
         speakers=speakers,
         notify=notifier,
@@ -834,6 +852,7 @@ def main() -> None:
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
         nag_actions=DONE_ACTIONS,
+        holidays=holidays.get,
     )
     calendar = None
     agenda = None
@@ -979,6 +998,7 @@ def main() -> None:
                     weather=weather,
                     lists=ListStore(db_path),
                     quiet=hush,
+                    holidays=holidays,
                 ),
                 jobs=JobsService(
                     reminders=reminders,
@@ -1023,6 +1043,7 @@ def main() -> None:
             # solo va al chat, así que a la mañana se recuerda.
             seq=[watcher.client for watcher in seq_watchers],
             polish=polish,
+            holidays=holidays.get,
         ),
         lambda text, written=None, others=SAME: _announce(house, text, written, others),
     )
@@ -1039,6 +1060,8 @@ def main() -> None:
         ),
         lambda text, written=None, others=SAME: _announce(house, text, written, others),
     )
+
+    schedule_holidays(app, HolidayClient(), holidays)
 
     schedule_weekly(app, config, Weekly(history=history, clock=datetime.now), house.tell_everyone)
 

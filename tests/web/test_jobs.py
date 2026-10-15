@@ -189,6 +189,10 @@ def test_the_notice_tells_the_day_of_the_month(parts):
         {"repeat": WEEKLY, "days": []},
         {"repeat": WEEKLY, "days": [9]},
         {"repeat": WEEKLY, "days": "lun"},
+        {"repeat": DAILY, "skip_holidays": True},
+        {"repeat": ONCE, "skip_holidays": True},
+        {"repeat": MONTHLY, "skip_holidays": True},
+        {"repeat": WEEKLY, "days": [1], "skip_holidays": "sí"},
         {"when": "2026-10-05T11:00"},
         {"when": "mañana"},
         {"when": None},
@@ -256,10 +260,40 @@ def test_a_job_is_read_back_as_the_form_needs_it(parts):
         "repeat": WEEKLY,
         "days": [1, 5],
         "monthday": None,
+        "skip_holidays": False,
         "device": "comedor",
         "author": EZE,
         "author_name": "Eze",
     }
+
+
+def test_a_weekly_can_be_created_skipping_holidays(parts):
+    jobs = parts["build"]()
+
+    created = jobs.create(
+        payload(type="reminder", repeat=WEEKLY, days=[1, 2, 3, 4, 5], skip_holidays=True)
+    )
+
+    assert parts["store"].get(created["id"]).skip_holidays is True
+    assert jobs.job(created["id"])["skip_holidays"] is True
+    assert any("días hábiles" in text for _, text, _ in parts["told"])
+
+
+def test_without_the_box_a_weekly_rings_on_holidays(parts):
+    created = parts["build"]().create(payload(type="reminder", repeat=WEEKLY, days=[1]))
+
+    assert parts["store"].get(created["id"]).skip_holidays is False
+
+
+def test_editing_can_turn_skipping_holidays_off(parts):
+    jobs = parts["build"]()
+    created = jobs.create(
+        payload(type="reminder", repeat=WEEKLY, days=[1, 2, 3, 4, 5], skip_holidays=True)
+    )
+
+    jobs.update(created["id"], payload(type="reminder", repeat=WEEKLY, days=[1, 2, 3, 4, 5]))
+
+    assert parts["store"].get(created["id"]).skip_holidays is False
 
 
 def test_reading_a_missing_job_is_not_found(parts):

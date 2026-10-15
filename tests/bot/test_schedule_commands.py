@@ -254,3 +254,40 @@ def test_list_shows_the_day_of_a_monthly_alarm(cmd):
     cmd.alarm(OWNER, "mensual 10 9:00 pagar la luz")
 
     assert "· el 10 de cada mes —" in cmd.list(OWNER)
+
+
+# --- hábiles ---
+
+
+def test_a_working_days_alarm_does_not_ring_on_holidays(cmd):
+    reply = cmd.alarm(OWNER, "hábiles 6:30 arriba")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.repeat, job.weekdays, job.skip_holidays) == ("weekly", [1, 2, 3, 4, 5], True)
+    assert "Alarma días hábiles" in reply
+
+
+def test_a_lun_vie_alarm_rings_on_holidays(cmd):
+    cmd.alarm(OWNER, "lun-vie 5:30 arriba")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.skip_holidays is False
+
+
+def test_a_working_days_alarm_needs_a_clock_time(cmd):
+    reply = cmd.alarm(OWNER, "hábiles 10m arriba")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "hora" in reply
+
+
+def test_the_working_days_example_of_the_help_really_skips_holidays(cmd):
+    from homeauto.bot.commands import HELP
+
+    example = "/alarma hábiles 6:30 arriba"
+    assert example in HELP
+
+    cmd.alarm(OWNER, example.split(" ", 1)[1])
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.repeat, job.skip_holidays, job.message) == ("weekly", True, "arriba")

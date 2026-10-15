@@ -307,3 +307,54 @@ def test_an_alarm_turned_off_shows_as_off():
 
     assert item.off and item.done_by == "Eze" and item.nags == 3
     assert not item.done and not item.cancelled
+
+
+# --- feriados ---
+
+COLUMBUS = date(2026, 10, 12)
+
+
+def holidays(day):
+    from homeauto.holidays import MOVABLE, Holiday
+
+    return Holiday(COLUMBUS, MOVABLE, "Diversidad Cultural") if day == COLUMBUS else None
+
+
+def working_days(skip=True):
+    return Job(
+        id=1, chat_id=42, when=datetime(2026, 10, 6, 7, 0), message="el colegio",
+        repeat=WEEKLY, days="1,2,3,4,5", kind=REMINDER, skip_holidays=skip,
+    )
+
+
+def test_a_holiday_is_marked_but_not_hidden():
+    found = occurrences_between(
+        [working_days()], datetime(2026, 10, 12), datetime(2026, 10, 14), NOW, holidays
+    )
+
+    assert [(item.at.day, item.holiday) for item in found] == [
+        (12, "Diversidad Cultural"), (13, None),
+    ]
+
+
+def test_without_the_flag_a_holiday_is_not_marked():
+    found = occurrences_between(
+        [working_days(skip=False)], datetime(2026, 10, 12), datetime(2026, 10, 13), NOW, holidays
+    )
+
+    assert [item.holiday for item in found] == [None]
+
+
+def test_without_holidays_nothing_is_marked():
+    found = occurrences_between([working_days()], datetime(2026, 10, 12), datetime(2026, 10, 13), NOW)
+
+    assert [item.holiday for item in found] == [None]
+
+
+def test_what_was_skipped_for_a_holiday_shows_as_such_and_not_as_unsaid():
+    from homeauto.schedule.history import HOLIDAY
+
+    item = from_history(entry(datetime(2026, 10, 12, 7, 0), announced=False, closed=HOLIDAY))
+
+    assert item.holiday is not None
+    assert item.silent is False

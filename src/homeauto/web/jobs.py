@@ -11,7 +11,9 @@ from homeauto.bot.commands import format_when
 from homeauto.lists import LISTS, split_items
 from homeauto.people import display_name
 from homeauto.schedule.month import item_kind
-from homeauto.schedule.spec import SpecError, classify, repetition_label, resolve
+from homeauto.schedule.spec import (
+    SpecError, check_skip_holidays, classify, repetition_label, resolve,
+)
 from homeauto.schedule.store import MONTHLY, WEEKLY, Job, on_monthday
 from homeauto.web.board import KIND_ICONS
 
@@ -186,6 +188,10 @@ class JobsService:
         if not isinstance(raw_days, list) or any(type(day) is not int for day in raw_days):
             raise WebError("Los días tienen que ser una lista de números.")
 
+        skip_holidays = payload.get("skip_holidays", False)
+        if type(skip_holidays) is not bool:
+            raise WebError("«No suena en feriados» tiene que ser sí o no.")
+
         raw_when = payload.get("when")
         try:
             when = datetime.fromisoformat(raw_when) if isinstance(raw_when, str) else None
@@ -196,6 +202,7 @@ class JobsService:
 
         try:
             kind, repeat = classify(payload.get("type"), payload.get("repeat"))
+            check_skip_holidays(repeat, skip_holidays)
             days = tuple(raw_days) if repeat == WEEKLY else None
             monthday = _monthday(when, previous) if repeat == MONTHLY else None
             when = resolve(
@@ -204,7 +211,8 @@ class JobsService:
         except SpecError as exc:
             raise WebError(str(exc)) from None
         return {"when": when, "message": message, "repeat": repeat, "device": device,
-                "days": days, "kind": kind, "monthday": monthday}
+                "days": days, "kind": kind, "monthday": monthday,
+                "skip_holidays": skip_holidays}
 
     def _as_dict(self, job: Job) -> dict:
         return {
@@ -215,6 +223,7 @@ class JobsService:
             "repeat": job.repeat,
             "days": job.weekdays,
             "monthday": job.monthday,
+            "skip_holidays": job.skip_holidays,
             "device": job.device or "",
             "author": job.chat_id,
             "author_name": display_name(job.chat_id, self._names()),

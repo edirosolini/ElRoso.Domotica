@@ -1,4 +1,4 @@
-"""El resumen de la mañana: el día, el cielo, las cifras, lo que esté caído y el versículo.
+"""El resumen de la mañana: el feriado, el día, el cielo, las cifras, lo caído y el versículo.
 
 Fuentes independientes juntadas en un solo texto hablado: una que falla deja un
 hueco, nunca cancela el resumen. Nada de lo hablado lleva dígitos. Los
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import date
 from typing import Callable
 
 from homeauto.polish import as_is
@@ -45,6 +46,8 @@ class Briefing:
         verse=None,
         seq=(),
         polish: Callable[..., str] = as_is,
+        holidays: Callable[[date], object] | None = None,
+        today: Callable[[], date] = date.today,
     ):
         self.agenda = agenda
         self.weather = weather
@@ -58,6 +61,9 @@ class Briefing:
         # Solo la línea de lo caído: la agenda y el clima ya vienen pulidos por
         # sus propias fuentes, y pulir dos veces no agrega nada.
         self.polish = polish
+        # El feriado de un día, de la caché local.
+        self.holidays = holidays
+        self.today = today
 
     def text(self) -> str:
         """Lo que la casa dice a la hora del resumen."""
@@ -73,13 +79,18 @@ class Briefing:
         night = self._safe_night()
         verse = self._safe_verse()
         headlines = self._safe_news()
+        holiday = self._safe_holiday()
+        holiday_spoken = holiday.spoken if holiday is not None else ""
+        holiday_written = holiday.written if holiday is not None else ""
 
         spoken_verse = verse.spoken if verse is not None else ""
-        said = self._join(day, sky, money, trouble, night.spoken if night else "", spoken_verse)
-        calm = self._join(day, sky, money, spoken_verse)
+        night_spoken = night.spoken if night else ""
+        said = self._join(holiday_spoken, day, sky, money, trouble, night_spoken, spoken_verse)
+        shown = self._join(holiday_written, day, sky, money, trouble, night_spoken, spoken_verse)
+        calm = self._join(holiday_written, day, sky, money, spoken_verse)
 
         tail = verse.written if verse is not None and not verse.spoken else ""
-        written = self._join(said, night.detail if night else "", tail, headlines)
+        written = self._join(shown, night.detail if night else "", tail, headlines)
         public = self._join(calm, tail, headlines)
         return Summary(spoken=said, written=written, public=public)
 
@@ -115,6 +126,16 @@ class Briefing:
         except Exception:
             log.exception("no pude traer las noticias")
             return ""
+
+    def _safe_holiday(self):
+        """El feriado de hoy, o None si no hay o la caché no contesta."""
+        if self.holidays is None:
+            return None
+        try:
+            return self.holidays(self.today())
+        except Exception:
+            log.exception("no pude leer los feriados")
+            return None
 
     def _safe_verse(self):
         """El versículo del día, o None si no hay o no contestó."""

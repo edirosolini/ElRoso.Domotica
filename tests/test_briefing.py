@@ -282,3 +282,74 @@ def test_the_speaker_gets_the_same_paragraphs():
         "Ahora hay veinte grados, despejado.\n\n"
         "El dólar oficial está a mil quinientos pesos."
     )
+
+
+# --- feriados ---
+
+from datetime import date  # noqa: E402
+
+from homeauto.holidays import BRIDGE, FIXED, MOVABLE, Holiday  # noqa: E402
+
+COLUMBUS = date(2026, 10, 12)
+
+
+def calendar(*holidays):
+    by_day = {holiday.day: holiday for holiday in holidays}
+    return by_day.get
+
+
+def on(day, *holidays, **sources):
+    return Briefing(holidays=calendar(*holidays), today=lambda: day, **sources)
+
+
+def test_a_holiday_opens_the_summary():
+    holiday = Holiday(COLUMBUS, MOVABLE, "Día del Respeto a la Diversidad Cultural")
+
+    summary = on(COLUMBUS, holiday, agenda=FakeAgenda(), weather=FakeWeather()).speech()
+
+    first = "Hoy es feriado: Día del Respeto a la Diversidad Cultural."
+    assert summary.spoken.split("\n\n")[0] == first
+    assert summary.written.split("\n\n")[0] == first
+    assert summary.public.split("\n\n")[0] == first
+    assert "dentista" in summary.spoken
+
+
+def test_a_working_day_says_nothing_about_holidays():
+    holiday = Holiday(COLUMBUS, MOVABLE, "Diversidad")
+
+    said = on(date(2026, 10, 13), holiday, weather=FakeWeather()).text()
+
+    assert said == "Ahora hay veinte grados, despejado."
+
+
+def test_a_holiday_with_digits_in_its_name_is_only_written():
+    holiday = Holiday(COLUMBUS, FIXED, "Día de los Caídos en Malvinas 1982")
+
+    summary = on(COLUMBUS, holiday, weather=FakeWeather()).speech()
+
+    assert summary.spoken.startswith("Hoy es feriado.\n\n")
+    assert "1982" in summary.written
+    assert not any(character.isdigit() for character in summary.spoken)
+
+
+def test_a_bridge_is_a_non_working_day():
+    holiday = Holiday(COLUMBUS, BRIDGE, "Puente turístico no laborable")
+
+    said = on(COLUMBUS, holiday, weather=FakeWeather()).text()
+
+    assert said.startswith("Hoy es día no laborable.")
+
+
+def test_a_broken_holiday_source_leaves_a_hole_and_nothing_more():
+    def broken(day):
+        raise RuntimeError("la base no contesta")
+
+    summary = Briefing(holidays=broken, weather=FakeWeather()).speech()
+
+    assert summary.spoken == summary.written == "Ahora hay veinte grados, despejado."
+
+
+def test_the_holiday_alone_is_a_summary():
+    holiday = Holiday(COLUMBUS, FIXED, "Navidad")
+
+    assert on(COLUMBUS, holiday).text() == "Hoy es feriado: Navidad."

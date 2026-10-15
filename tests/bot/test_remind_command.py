@@ -76,6 +76,30 @@ def test_a_reminder_on_some_days(cmd):
     assert "Recordatorio lun, mar, mié, jue, vie" in reply
 
 
+def test_lun_vie_rings_on_holidays(cmd):
+    cmd.remind(OWNER, "lun-vie 7:30 salir al colegio")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.skip_holidays is False
+
+
+def test_working_days_do_not_ring_on_holidays(cmd):
+    reply = cmd.remind(OWNER, "hábiles 7:00 salida al colegio")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.kind, job.repeat, job.weekdays) == (REMINDER, "weekly", [1, 2, 3, 4, 5])
+    assert job.skip_holidays is True
+    assert "Recordatorio días hábiles" in reply
+    assert "días hábiles" in cmd.list(OWNER)
+
+
+def test_working_days_without_accent_too(cmd):
+    cmd.remind(OWNER, "habiles 7:00 salida al colegio")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.skip_holidays is True
+
+
 
 def test_a_monthly_reminder(cmd):
     reply = cmd.remind(OWNER, "mensual 10 9:00 pagar la luz")

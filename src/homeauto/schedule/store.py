@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     device   TEXT,
     days     TEXT,
     kind     TEXT    NOT NULL DEFAULT 'alarm',
-    monthday INTEGER
+    monthday INTEGER,
+    skip_holidays INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS jobs_by_time ON jobs (fires_at);
 """
@@ -52,6 +53,7 @@ class Job:
     days: str | None = None
     kind: str = ALARM
     monthday: int | None = None
+    skip_holidays: bool = False
 
     @property
     def is_reminder(self) -> bool:
@@ -105,9 +107,13 @@ def next_run(job: Job, after: datetime) -> datetime | None:
 
 
 def _validate(
-    repeat: str, kind: str, days: Iterable[int] | None, monthday: int | None
+    repeat: str,
+    kind: str,
+    days: Iterable[int] | None,
+    monthday: int | None,
+    skip_holidays: bool = False,
 ) -> str | None:
-    """Chequea repetición, tipo, días y día del mes; devuelve los días como se guardan."""
+    """Chequea repetición, tipo, días, día del mes y feriados; devuelve los días como se guardan."""
     if repeat not in REPEATS:
         raise ValueError(f"repeat inválido: {repeat}")
     if kind not in KINDS:
@@ -118,6 +124,8 @@ def _validate(
         raise ValueError("una alarma semanal necesita días")
     if repeat == MONTHLY and monthday not in range(1, 32):
         raise ValueError("una alarma mensual necesita el día del mes")
+    if skip_holidays and repeat != WEEKLY:
+        raise ValueError("solo lo semanal saltea feriados")
     return stored_days
 
 
@@ -132,6 +140,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         days=row["days"],
         kind=row["kind"],
         monthday=row["monthday"],
+        skip_holidays=bool(row["skip_holidays"]),
     )
 
 
@@ -155,6 +164,8 @@ class Store:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT '{ALARM}'")
         if "monthday" not in existing:
             conn.execute("ALTER TABLE jobs ADD COLUMN monthday INTEGER")
+        if "skip_holidays" not in existing:
+            conn.execute("ALTER TABLE jobs ADD COLUMN skip_holidays INTEGER NOT NULL DEFAULT 0")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -171,14 +182,16 @@ class Store:
         days: Iterable[int] | None = None,
         kind: str = ALARM,
         monthday: int | None = None,
+        skip_holidays: bool = False,
     ) -> Job:
-        stored_days = _validate(repeat, kind, days, monthday)
+        stored_days = _validate(repeat, kind, days, monthday, skip_holidays)
         monthday = monthday if repeat == MONTHLY else None
         with self._connect() as conn:
             cursor = conn.execute(
-                "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days, kind, monthday)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (chat_id, when.isoformat(), message, repeat, device, stored_days, kind, monthday),
+                "INSERT INTO jobs (chat_id, fires_at, message, repeat, device, days, kind, monthday,"
+                " skip_holidays) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (chat_id, when.isoformat(), message, repeat, device, stored_days, kind, monthday,
+                 int(skip_holidays)),
             )
             return Job(
                 id=cursor.lastrowid,
@@ -190,6 +203,7 @@ class Store:
                 days=stored_days,
                 kind=kind,
                 monthday=monthday,
+                skip_holidays=skip_holidays,
             )
 
     def pending(self, chat_id: int | None = None) -> list[Job]:
@@ -221,15 +235,17 @@ class Store:
         days: Iterable[int] | None = None,
         kind: str = ALARM,
         monthday: int | None = None,
+        skip_holidays: bool = False,
     ) -> Job | None:
         """Reescribe un job conservando su id y su dueño; None si ya no existe."""
-        stored_days = _validate(repeat, kind, days, monthday)
+        stored_days = _validate(repeat, kind, days, monthday, skip_holidays)
         monthday = monthday if repeat == MONTHLY else None
         with self._connect() as conn:
             changed = conn.execute(
                 "UPDATE jobs SET fires_at = ?, message = ?, repeat = ?, device = ?, days = ?,"
-                " kind = ?, monthday = ? WHERE id = ?",
-                (when.isoformat(), message, repeat, device, stored_days, kind, monthday, job_id),
+                " kind = ?, monthday = ?, skip_holidays = ? WHERE id = ?",
+                (when.isoformat(), message, repeat, device, stored_days, kind, monthday,
+                 int(skip_holidays), job_id),
             ).rowcount
         return self.get(job_id) if changed else None
 

@@ -7,14 +7,18 @@ prueba sin esperar tiempo real.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
-from typing import Callable, Iterable, Protocol
+from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING, Callable, Iterable, Protocol
 
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
-from homeauto.schedule.history import CANCEL, SNOOZE, HistoryStore
+from homeauto.schedule.history import CANCEL, HOLIDAY, SNOOZE, HistoryStore
 from homeauto.schedule.ringing import Ringing, RingingStore
+from homeauto.schedule.spec import skips
 from homeauto.schedule.store import ALARM, ONCE, Job, Store, next_run
+
+if TYPE_CHECKING:
+    from homeauto.holidays import Holiday
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +56,7 @@ class Reminders:
         history: HistoryStore | None = None,
         ringing: RingingStore | None = None,
         stop_audio: Callable[[list[str]], None] | None = None,
+        holidays: Callable[[date], Holiday | None] | None = None,
     ):
         self.store = store
         self.timer = timer
@@ -62,6 +67,8 @@ class Reminders:
         self.ringing = ringing
         # Corta el audio en curso en esos equipos.
         self.stop_audio = stop_audio
+        # El feriado de un día, leído de la caché local.
+        self.holidays = holidays
         self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
@@ -103,8 +110,11 @@ class Reminders:
         days: Iterable[int] | None = None,
         kind: str = ALARM,
         monthday: int | None = None,
+        skip_holidays: bool = False,
     ) -> Job:
-        job = self.store.add(chat_id, when, message, repeat, device, days, kind, monthday)
+        job = self.store.add(
+            chat_id, when, message, repeat, device, days, kind, monthday, skip_holidays
+        )
         self._arm(job)
         return job
 
@@ -118,9 +128,12 @@ class Reminders:
         days: Iterable[int] | None = None,
         kind: str = ALARM,
         monthday: int | None = None,
+        skip_holidays: bool = False,
     ) -> Job | None:
         """Reescribe un job y lo rearma; lo que ya sonó y espera su «Hecho» no se toca."""
-        job = self.store.update(job_id, when, message, repeat, device, days, kind, monthday)
+        job = self.store.update(
+            job_id, when, message, repeat, device, days, kind, monthday, skip_holidays
+        )
         if job is None:
             return None
         self.timer.unschedule(str(job_id))
@@ -327,6 +340,12 @@ class Reminders:
         if job is None:  # cancelled between the arming and the firing
             return
 
+        holiday = self._holiday(job)
+        if holiday is not None:
+            self._skip(job, holiday)
+            self._move_on(job)
+            return
+
         # Antes de anunciar: el botón de posponer llega con el aviso.
         if self.fired is not None:
             at = self.clock()
@@ -357,14 +376,38 @@ class Reminders:
             self._write_history(lambda history: history.mark_announced(job.id))
         if rings:
             self._next_ring(job.id, fired_at)
+        self._move_on(job)
 
+    def _move_on(self, job: Job) -> None:
+        """Reagenda el job a su ocurrencia siguiente, o lo borra si no repite."""
         next_time = next_run(job, job.when)
         if next_time is None:
-            self.timer.unschedule(str(job_id))
-            self.store.remove(job_id)
+            self.timer.unschedule(str(job.id))
+            self.store.remove(job.id)
         else:
-            self.store.reschedule(job_id, next_time)
-            self._arm(self.store.get(job_id))
+            self.store.reschedule(job.id, next_time)
+            self._arm(self.store.get(job.id))
+
+    def _holiday(self, job: Job) -> Holiday | None:
+        """El feriado por el que el job no suena hoy; una caché rota deja que suene."""
+        try:
+            return skips(job, job.when.date(), self.holidays)
+        except Exception:
+            log.exception("could not read the holidays for job %s", job.id)
+            return None
+
+    def _skip(self, job: Job, holiday: Holiday) -> None:
+        """Deja el feriado en el historial y avisa a todos los chats que hoy no suena."""
+        at = self.clock()
+        self._write_history(
+            lambda history: history.record(
+                job.id, job.chat_id, job.kind, job.repeat, job.message, at
+            )
+        )
+        self._write_history(lambda history: history.mark_closed(job.id, HOLIDAY, at))
+        log.info("job %s skipped: holiday %s", job.id, holiday.day)
+        for chat in self._audience(job.chat_id):
+            self._write(chat, f"🏖 Feriado ({holiday.name}): hoy no suena «{job.message}»")
 
 
 def _ring_key(job_id: int) -> str:

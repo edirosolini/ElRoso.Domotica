@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timedelta, tzinfo
+from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Callable
 
 from homeauto.lists import LISTS
@@ -28,6 +28,8 @@ MAX_CACHED_RANGES = 32
 
 HOUSE = "casa"
 GOOGLE = "google"
+HOLIDAY = "feriado"
+HOLIDAY_COLOR = "#00897b"
 
 # Los colores de Google Calendar, en orden de alias.
 PALETTE = (
@@ -90,6 +92,8 @@ def marks(item: Item) -> list[str]:
         found.append(f"🔕 apagada {item.done_by or ''}".rstrip())
     if item.silent:
         found.append("⚠️ no sonó")
+    if item.holiday is not None:
+        found.append("🏖 feriado" if item.past else "🏖 feriado, no suena")
     return found
 
 
@@ -112,9 +116,24 @@ def _house_event(item: Item) -> dict:
             "past": item.past,
             "marks": found,
             "job": item.job_id,
+            "holiday": item.holiday,
             "label": f"{KIND_ICONS[item.kind]} {item.message}",
             "ending": _ending(item, found),
         },
+    }
+
+
+def _holiday_event(holiday) -> dict:
+    """Un feriado como evento de día completo de FullCalendar."""
+    return {
+        "title": f"🏖 {holiday.name}",
+        "start": holiday.day.isoformat(),
+        "end": (holiday.day + timedelta(days=1)).isoformat(),
+        "allDay": True,
+        "editable": False,
+        "color": HOLIDAY_COLOR,
+        "classNames": [HOLIDAY],
+        "extendedProps": {"source": HOLIDAY, "kind": holiday.kind},
     }
 
 
@@ -131,6 +150,7 @@ class Board:
         weather=None,
         lists=None,
         quiet=None,
+        holidays=None,
     ):
         self.store = store
         self.history = history
@@ -140,6 +160,8 @@ class Board:
         self.weather = weather
         self.lists = lists
         self.quiet = quiet
+        # La caché local de feriados: `get(día)` y `between(desde, hasta)`.
+        self.holidays = holidays
         self._lock = threading.Lock()
         self._calendar_cache: dict[tuple[datetime, datetime], tuple[datetime, list, list]] = {}
         self._weather_cache: tuple[datetime, dict] | None = None
@@ -165,6 +187,7 @@ class Board:
         timed = [(item.at, _house_event(item)) for item in self._house(start, end, now)]
         google, problems = self._google(start, end, now)
         timed.extend(google)
+        timed.extend(self._holidays(start, end))
         timed.sort(key=lambda pair: (pair[0], pair[1]["title"]))
         return {
             "events": [event for _, event in timed],
@@ -176,7 +199,31 @@ class Board:
         past = []
         if start < now:
             past = [from_history(entry) for entry in self.history.between(start, min(end, now))]
-        return past + occurrences_between(self.store.pending(), start, end, now)
+        return past + occurrences_between(
+            self.store.pending(), start, end, now, self._holiday_on
+        )
+
+    def _holiday_on(self, day: date):
+        """El feriado de ese día, o None también si la caché no contesta."""
+        if self.holidays is None:
+            return None
+        try:
+            return self.holidays.get(day)
+        except Exception:  # noqa: BLE001
+            log.warning("could not read the holidays", exc_info=True)
+            return None
+
+    def _holidays(self, start: datetime, end: datetime) -> list[tuple[datetime, dict]]:
+        """Los feriados del rango como eventos de día completo; ninguno si la caché no contesta."""
+        if self.holidays is None:
+            return []
+        last = (end - timedelta(microseconds=1)).date() + timedelta(days=1)
+        try:
+            found = self.holidays.between(start.date(), last)
+        except Exception:  # noqa: BLE001
+            log.warning("could not read the holidays", exc_info=True)
+            return []
+        return [(datetime.combine(h.day, time.min), _holiday_event(h)) for h in found]
 
     def _google(self, start: datetime, end: datetime, now: datetime) -> tuple[list, list[str]]:
         if self.calendar is None:
@@ -306,7 +353,7 @@ class Board:
                 continue
             props = event["extendedProps"]
             begins = datetime.fromisoformat(event["start"])
-            if begins <= local or props.get("past"):
+            if begins <= local or props.get("past") or props.get("holiday") is not None:
                 continue
             return {
                 "title": event["title"],

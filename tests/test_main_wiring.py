@@ -21,6 +21,7 @@ class FakeJobQueue:
         self.daily = []
         self.days = {}
         self.callbacks = {}
+        self.once = []
 
     def run_repeating(self, callback, interval, first=None, name=None):
         self.repeating.append(name)
@@ -32,7 +33,8 @@ class FakeJobQueue:
         self.callbacks[name] = callback
 
     def run_once(self, callback, when, name=None):
-        pass
+        self.once.append(name)
+        self.callbacks[name] = callback
 
     def get_jobs_by_name(self, name):
         return []
@@ -1197,3 +1199,80 @@ def test_the_wired_uplink_speaks_softly_and_tells_everyone(wired, tmp_path, monk
 
     assert spoken == [("Se cortó internet.", chime.SOFT)]
     assert told == ["🌐 Internet se cortó"]
+
+
+# --- feriados ---------------------------------------------------------------
+
+HOLIDAYS_2026 = [
+    {"fecha": "2026-10-12", "tipo": "trasladable", "nombre": "Día del Respeto a la Diversidad Cultural"},
+]
+
+
+def _fake_holiday_api(monkeypatch):
+    """El cliente real de feriados con un fetch que no sale a la red."""
+    from homeauto.holidays import HolidayClient
+
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        return HOLIDAYS_2026 if url.endswith("/2026") else []
+
+    monkeypatch.setattr(main, "HolidayClient", lambda: HolidayClient(fetch=fetch))
+    return asked
+
+
+def test_the_holidays_are_refreshed_at_startup_and_every_night(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert "holidays" in wired.job_queue.daily
+    assert "holidays-startup" in wired.job_queue.once
+
+
+def test_the_holiday_refresh_fills_the_one_database_the_alarms_read(wired, tmp_path, monkeypatch):
+    asked = _fake_holiday_api(monkeypatch)
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    monkeypatch.setattr(main, "date", type("FixedDate", (main.date,), {
+        "today": classmethod(lambda cls: main.date(2026, 10, 15)),
+    }))
+
+    run_main(monkeypatch, config_file(tmp_path))
+    holiday_of = reminders["holidays"]
+    assert holiday_of(main.date(2026, 10, 12)) is None, "antes de refrescar no hay nada"
+
+    main.asyncio.run(wired.job_queue.callbacks["holidays-startup"](None))
+
+    assert asked == ["https://api.argentinadatos.com/v1/feriados/2026"]
+    assert holiday_of(main.date(2026, 10, 12)).name == "Día del Respeto a la Diversidad Cultural"
+    assert holiday_of(main.date(2026, 10, 13)) is None
+
+
+def test_the_nightly_refresh_runs_too(wired, tmp_path, monkeypatch):
+    asked = _fake_holiday_api(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path))
+    main.asyncio.run(wired.job_queue.callbacks["holidays"](None))
+
+    assert asked, "el refresco diario tiene que pedir los feriados"
+
+
+def test_the_briefing_reads_the_holidays(wired, tmp_path, monkeypatch):
+    seen = briefing_built(monkeypatch)
+
+    run_main(monkeypatch, config_file(tmp_path, "BRIEFING_AT=08:00\n"))
+
+    assert seen["holidays"](main.date(2026, 10, 12)) is None
+    assert seen["holidays"].__self__.db_path == tmp_path / "jobs.db"
+
+
+def test_the_screen_shows_the_holidays_of_the_one_database(wired, tmp_path, monkeypatch):
+    from homeauto.holidays import MOVABLE, Holiday
+
+    web = _wired_web(monkeypatch, tmp_path)
+    board = web.board
+    board.holidays.replace(2026, [Holiday(main.date(2026, 10, 12), MOVABLE, "Diversidad")])
+
+    events = board.events(main.datetime(2026, 10, 12), main.datetime(2026, 10, 13))["events"]
+
+    assert board.holidays.db_path == tmp_path / "jobs.db"
+    assert [event["title"] for event in events] == ["🏖 Diversidad"]

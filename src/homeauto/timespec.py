@@ -44,6 +44,9 @@ DAY_GROUPS = {
     "semana": (1, 2, 3, 4, 5),
 }
 
+# Las palabras de días que además saltean feriados.
+HOLIDAY_FREE_WORDS = ("hábiles", "habiles")
+
 # Nombres cortos para el chat. El parlante nunca los dice: una alarma semanal
 # dice su mensaje, y los días solo aparecen escritos.
 DAY_NAMES = {1: "lun", 2: "mar", 3: "mié", 4: "jue", 5: "vie", 6: "sáb", 7: "dom"}
@@ -149,6 +152,11 @@ def parse_weekdays(token: str) -> tuple[int, ...] | None:
         else:
             return None
     return tuple(sorted(days))
+
+
+def skips_holidays(token: str) -> bool:
+    """Si los días de `token` piden no sonar en feriados: los nombra «hábiles»."""
+    return any(part.strip() in HOLIDAY_FREE_WORDS for part in token.lower().split(","))
 
 
 def parse_monthday(head: str, token: str) -> int | None:

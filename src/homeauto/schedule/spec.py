@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Iterable
+from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING, Callable, Iterable
 
 from homeauto.schedule.month import ALARM_ITEM, REMINDER_ITEM, TIMER_ITEM
 from homeauto.schedule.store import (
@@ -12,8 +12,12 @@ from homeauto.schedule.store import (
 from homeauto.timespec import format_weekdays, next_weekday
 from homeauto.verbalize import cardinal
 
+if TYPE_CHECKING:
+    from homeauto.holidays import Holiday
+
 # El día más alto que tienen todos los meses.
 SHORTEST_MONTH = 28
+WORKING_DAYS = (1, 2, 3, 4, 5)
 
 
 class SpecError(ValueError):
@@ -81,6 +85,32 @@ def _first_monthly(when: datetime, now: datetime, monthday: int | None) -> datet
     return first
 
 
+def check_skip_holidays(repeat: str, skip_holidays: bool) -> None:
+    """SpecError si se pide saltear feriados en algo que no repite por días de la semana."""
+    if skip_holidays and repeat != WEEKLY:
+        raise SpecError("Saltear feriados es solo para lo que repite por días de la semana.")
+
+
+def skips(
+    job: Job, day: date, holidays: Callable[[date], Holiday | None] | None
+) -> Holiday | None:
+    """El feriado por el que el job no suena ese día, o None si suena."""
+    if holidays is None or not job.skip_holidays or not job.is_weekly:
+        return None
+    holiday = holidays(day)
+    return holiday if holiday is not None and holiday.skips else None
+
+
+def weekdays_label(days: Iterable[int], skip_holidays: bool = False) -> str:
+    """Los días de un semanal para el chat, diciendo si saltea feriados."""
+    days = sorted(days)
+    if not skip_holidays:
+        return format_weekdays(days)
+    if days == list(WORKING_DAYS):
+        return "días hábiles"
+    return f"{format_weekdays(days)}, sin feriados"
+
+
 def monthly_label(monthday: int) -> str:
     return f"el {monthday} de cada mes"
 
@@ -90,7 +120,7 @@ def repetition_label(job: Job) -> str:
     if job.repeat == DAILY:
         return "todos los días"
     if job.repeat == WEEKLY:
-        return format_weekdays(job.weekdays)
+        return weekdays_label(job.weekdays, job.skip_holidays)
     if job.repeat == MONTHLY and job.monthday:
         return monthly_label(job.monthday)
     return ""

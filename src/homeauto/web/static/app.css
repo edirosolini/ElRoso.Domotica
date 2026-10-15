@@ -180,6 +180,7 @@ a.ghost { display: inline-flex; align-items: center; color: var(--accent); text-
 .days-row { display: flex; gap: 6px; justify-content: space-between; margin-bottom: 12px; }
 .days-row button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: transparent; cursor: pointer; }
 .days-row button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.holiday-check { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
 .sheet-actions { display: flex; gap: 10px; margin-top: 8px; }
 .btn { flex: 1; height: 48px; border-radius: 14px; border: 0; font-weight: 600; cursor: pointer; }
 .btn.primary { background: var(--accent); color: #fff; }

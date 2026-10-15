@@ -159,3 +159,18 @@ def test_a_long_list_is_capped(tmp_path):
     assert f"No salieron por el parlante: {MAX_LINES + 3}" in text
     assert "… y 3 más" in text
 
+
+
+def test_a_day_skipped_for_a_holiday_does_not_count(tmp_path):
+    from homeauto.schedule.history import HOLIDAY
+
+    history, summary = weekly(tmp_path)
+    fire(history, 5, "reminder", "weekly", "el colegio", at(1))
+    history.mark_done(5, at(1, 8, 5), "Eze")
+    fire(history, 5, "reminder", "weekly", "el colegio", at(0), announced=False)
+    history.mark_closed(5, HOLIDAY, at(0))
+
+    text = summary.text()
+
+    assert "el colegio: 1 de 1" in text
+    assert "No salieron por el parlante" not in text

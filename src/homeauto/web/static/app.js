@@ -57,12 +57,18 @@
     };
   }
 
+  // Si el aviso saltea feriados: la casilla marcada y repetición por días de la semana.
+  function skipsHolidays(rule, checked) {
+    return rule.showDays && Boolean(checked);
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       isPastToday: isPastToday,
       toLocalInput: toLocalInput,
       nowScroll: nowScroll,
       repeatRule: repeatRule,
+      skipsHolidays: skipsHolidays,
     };
   }
   if (typeof document === "undefined") {
@@ -269,6 +275,9 @@
     byId("detail-title").textContent = event.title;
     byId("detail-when").textContent = describeWhen(event);
     var where = props.source === "google" ? "Calendario " + props.calendar : "La casa";
+    if (props.source === "feriado") {
+      where = "Feriado nacional";
+    }
     if (props.location) {
       where += " · " + props.location;
     }
@@ -347,6 +356,7 @@
     repeat.querySelector('option[value="once"]').disabled = rule.onceOff;
     repeat.value = rule.repeat;
     byId("editor-days").hidden = !rule.showDays;
+    byId("editor-holidays-label").hidden = !rule.showDays;
   }
 
   function showEditorError(text) {
@@ -372,6 +382,7 @@
     buttonsIn("editor-days").forEach(function (button) {
       press(button, days.indexOf(parseInt(button.getAttribute("data-day"), 10)) !== -1);
     });
+    byId("editor-holidays").checked = job ? Boolean(job.skip_holidays) : false;
     byId("editor-device").value = job ? job.device : "";
     byId("editor-author-label").hidden = Boolean(job);
     setType(job ? job.type : "alarm");
@@ -392,12 +403,14 @@
         days.push(parseInt(button.getAttribute("data-day"), 10));
       }
     });
+    var rule = repeatRule(byId("editor-type").value, byId("editor-repeat").value);
     return {
       type: byId("editor-type").value,
       message: byId("editor-message").value,
       when: byId("editor-when").value,
       repeat: byId("editor-repeat").value,
       days: days,
+      skip_holidays: skipsHolidays(rule, byId("editor-holidays").checked),
       device: byId("editor-device").value,
       author: parseInt(byId("editor-author").value, 10),
     };

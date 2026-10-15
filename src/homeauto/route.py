@@ -49,7 +49,9 @@ Comandos y qué lleva cada uno:
   "diaria 7:30 arriba" o los días adelante, "lun-vie 5:30 arriba"
 - recordar: algo que se repite, como una medicación o salir al colegio, con los días
   adelante y la hora: "diaria 8:00 tomar la pastilla" o "lun-vie 7:30 salir al colegio";
-  una vez por mes, "mensual" y el día del mes adelante: "mensual 10 9:00 pagar la luz"
+  una vez por mes, "mensual" y el día del mes adelante: "mensual 10 9:00 pagar la luz";
+  los días hábiles, que no suenan en feriados, "hábiles" adelante:
+  "hábiles 7:00 salida al colegio"
 - lista: sin argumento, lo que está programado
 - cancelar: el número a cancelar
 - posponer: cuánto posponer la alarma que acaba de sonar, así: "10m"; sin argumento, diez
