@@ -331,9 +331,16 @@ Además del resumen, la casa avisa sola cuando algo del pronóstico lo amerita. 
 | viento | ráfagas de 50 km/h o más en las próximas 6 horas |
 | calor | máxima del día de 33° o más |
 | frío | mínima del día de 3° o menos |
+| sol | índice ultravioleta máximo del día de 11 o más (extremo) |
+| aire | peor índice de calidad del aire (US AQI) de 101 o más entre las 8 y las 20 |
 
-El calor y el frío se avisan **entre las 7 y las 11**: son sobre el día entero y a las cuatro
-de la mañana no le sirven a nadie. Los umbrales son constantes del código, no configuración.
+El calor, el frío, el sol y el aire se avisan **entre las 7 y las 11**: son sobre el día
+entero y a las cuatro de la mañana no le sirven a nadie. Los umbrales son constantes del
+código, no configuración. Ninguno de estos avisos entra en el resumen de la mañana.
+
+La calidad del aire sale de la API de calidad del aire de Open-Meteo, también gratis y sin
+clave. Es un modelo global (CAMS) de unos 40 km de resolución, no un sensor del barrio: sirve
+para un día malo de verdad, no para el aire de la cuadra. El aviso no dice la cifra.
 
 ## Vigilancia de servicios
 

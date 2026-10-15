@@ -24,6 +24,7 @@ Domotica/
 │   ├── slots.py         # qué dato le falta a un comando para poder ejecutarse
 │   ├── pending.py       # la conversación a medio armar de cada chat
 │   ├── weather.py       # clima por Open-Meteo y los avisos del cielo
+│   ├── air.py           # calidad del aire de hoy, por Open-Meteo
 │   ├── economy.py       # dólar, riesgo país e inflación, en palabras
 │   ├── news.py          # titulares por RSS, solo para el chat
 │   ├── bible.py         # versículo del día de YouVersion, en la NTV
@@ -121,7 +122,7 @@ un despliegue nuevo no necesita migración.
 
 - **Python 3.13** en el contenedor, 3.14 en la notebook. Nada específico de versión.
 - **piper-tts** — síntesis de voz **offline**, voz `es_AR-daniela-high`. No sale a internet.
-- **Open-Meteo** para el clima: sin cuenta, sin API key.
+- **Open-Meteo** para el clima y la calidad del aire: sin cuenta, sin API key.
 - **icalendar** y **recurring-ical-events** para leer Google Calendar.
 - Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal), YouVersion
   y **Seq** (este último por el túnel WireGuard, no por internet).
@@ -246,8 +247,9 @@ configuración regional es correcta y no es la causa de las fallas del Asistente
 
 ## Los otros avisos del cielo
 
-`weather.WeatherWatcher` avisa de calor, frío, viento y tormenta. Misma forma que
-`RainWatcher` —una vez por día, y lo que no se pudo decir no se marca— con una diferencia:
+`weather.WeatherWatcher` avisa de calor, frío, ultravioleta, calidad del aire, viento y
+tormenta. Misma forma que `RainWatcher` —una vez por día, y lo que no se pudo decir no se
+marca— con una diferencia:
 
 - 🔴 **Cada aviso lleva su propia marca.** Con una compartida, un día de calor se comería el
   aviso de las ráfagas que voltean las plantas, y nadie se enteraría de por qué. Es el mismo
@@ -255,13 +257,23 @@ configuración regional es correcta y no es la causa de las fallas del Asistente
 - 🔴 **La lluvia sigue en su watcher aparte.** Su marca ya está en la base desplegada y su
   umbral tiene historia; absorberla sería reescribir estado que ya existe para no ganar nada.
   El precio es una consulta más por vuelta a una API gratuita y sin clave.
-- **El calor y el frío esperan a que alguien esté despierto** (`DAY_ALERT_FROM` /
-  `DAY_ALERT_TO`, de 7 a 11). Son sobre el día entero: a las cuatro de la mañana la máxima no
-  le sirve a nadie, y en horario de descanso terminaría en el chat, que es donde un aviso se
-  vuelve ruido. El viento y la tormenta son sobre las próximas horas y salen cuando se ven.
+- **El calor, el frío, el ultravioleta y el aire esperan a que alguien esté despierto**
+  (`DAY_ALERT_FROM` / `DAY_ALERT_TO`, de 7 a 11). Son sobre el día entero: a las cuatro de
+  la mañana la máxima no le sirve a nadie, y en horario de descanso terminaría en el chat,
+  que es donde un aviso se vuelve ruido. El viento y la tormenta son sobre las próximas horas y salen cuando se ven.
 - **Un solo pedido contesta las cuatro reglas.** `hours_ahead()` devuelve la ventana con
   lluvia, ráfaga y código de cielo juntos; pedir el pronóstico una vez por regla sería pegarle
   cuatro veces a un servicio que nos deja entrar gratis.
+- **El ultravioleta viaja en el pedido diario del calor y el frío**: `day_ahead()` devuelve
+  `DayAhead(maximum, minimum, uv)`. Con las tres marcas de hoy puestas no se pide nada. Sin
+  `uv_index_max` legible, `uv` es `None` y el calor y el frío siguen andando.
+- 🔴 **El aire es otro servicio y otro pedido** (`air.py`, `air-quality-api.open-meteo.com`):
+  `AirClient.worst_today()` toma el peor `us_aqi` entre las 8 y las 20. Se saltea con su marca
+  de hoy puesta, y si falla no cuesta el ultravioleta ni nada más.
+- ⚠️ **El aire es CAMS global, de unos cuarenta kilómetros**: mejor que nada, no un sensor.
+  Por eso el aviso no dice cifra, solo que se espera mala calidad.
+- Ninguno de los dos entra en el resumen de la mañana, y los umbrales (`UV_ALERT`,
+  `AIR_ALERT`) son constantes del módulo, como los de la lluvia.
 
 ## Resumen de la mañana
 
