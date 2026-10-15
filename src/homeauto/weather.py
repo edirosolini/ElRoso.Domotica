@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable
 
+from homeauto.air import AirError
 from homeauto.verbalize import clock as spoken_clock, number
 from homeauto.polish import as_is
 
@@ -60,6 +61,12 @@ COLD_MARK = "cold-alert"
 WIND_MARK = "wind-alert"
 STORM_MARK = "storm-alert"
 
+UV_ALERT = 11
+AIR_ALERT = 101
+
+UV_MARK = "uv-alert"
+AIR_MARK = "air-alert"
+
 
 class WeatherError(Exception):
     """El pronóstico no se pudo traer o entender."""
@@ -72,17 +79,20 @@ def describe_code(code: int) -> str:
     return "con el cielo variable"
 
 
-def fetch_open_meteo(latitude: float, longitude: float) -> dict:
+def fetch_open_meteo(latitude: float, longitude: float, get: Callable | None = None) -> dict:
     """La llamada real. Se importa tarde para que los tests no toquen la red."""
-    import requests
+    if get is None:
+        import requests
 
-    response = requests.get(
+        get = requests.get
+
+    response = get(
         API_URL,
         params={
             "latitude": latitude,
             "longitude": longitude,
             "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code",
-            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,uv_index_max",
             # Las ráfagas y el código de cielo viajan con lo demás: un solo
             # pedido contesta todos los avisos.
             "hourly": "precipitation_probability,wind_gusts_10m,weather_code",
@@ -121,6 +131,15 @@ class Tomorrow:
     minimum: int
     rain_chance: int
     code: int
+
+
+@dataclass(frozen=True)
+class DayAhead:
+    """Lo que miran los avisos del día entero; `uv` es None si no vino."""
+
+    maximum: int
+    minimum: int
+    uv: int | None
 
 
 @dataclass(frozen=True)
@@ -278,10 +297,27 @@ class WeatherClient:
             parts.append(f"Probabilidad de lluvia, {number(forecast.rain_chance)} por ciento.")
         return self.polish(" ".join(parts), must_keep=["mañana"])
 
-    def day_ahead(self) -> tuple[int, int]:
-        """La máxima y la mínima de hoy, que es lo que mira un aviso del día entero."""
-        forecast = self.now()
-        return forecast.maximum, forecast.minimum
+    def day_ahead(self) -> DayAhead:
+        """La máxima, la mínima y el ultravioleta de hoy, en un solo pedido."""
+        try:
+            payload = self.fetch(self.latitude, self.longitude)
+        except Exception as exc:
+            log.warning("no se pudo consultar el clima de hoy: %s", exc)
+            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+
+        try:
+            daily = payload["daily"]
+            maximum = round(daily["temperature_2m_max"][0])
+            minimum = round(daily["temperature_2m_min"][0])
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise WeatherError(f"El servicio de clima contestó algo que no entiendo: {exc}") from exc
+
+        # Un ultravioleta que falta o no se entiende queda en None, sin fallar.
+        try:
+            uv = round(daily["uv_index_max"][0])
+        except (KeyError, IndexError, TypeError, ValueError):
+            uv = None
+        return DayAhead(maximum=maximum, minimum=minimum, uv=uv)
 
     def spoken(self) -> str:
         """Una o dos oraciones, escritas para escucharse y no para leerse."""
@@ -354,7 +390,7 @@ class RainWatcher:
 
 
 class WeatherWatcher:
-    """Los otros cuatro avisos del cielo: calor, frío, viento y tormenta.
+    """Los otros avisos del cielo: calor, frío, ultravioleta, aire, viento y tormenta.
 
     Misma forma que `RainWatcher`: una vez por día, y lo que no se pudo decir
     no se marca. Cada aviso lleva su propia marca, así uno no tapa a otro. La
@@ -369,6 +405,7 @@ class WeatherWatcher:
         clock: Callable[[], datetime] = datetime.now,
         window_hours: int = RAIN_WINDOW_HOURS,
         polish: Callable[..., str] = as_is,
+        air=None,
     ):
         self.weather = weather
         self.announce = announce
@@ -376,6 +413,7 @@ class WeatherWatcher:
         self.clock = clock
         self.window_hours = window_hours
         self.polish = polish
+        self.air = air
 
     def check(self) -> list[str]:
         """Everything worth saying right now, said. Usually nothing."""
@@ -401,16 +439,21 @@ class WeatherWatcher:
     def _warnings(self, now: datetime) -> list[tuple[str, str]]:
         found = []
         if DAY_ALERT_FROM <= now.hour < DAY_ALERT_TO:
-            found.extend(self._day_warnings())
+            found.extend(self._day_warnings(now))
+            found.extend(self._air_warning(now))
         found.extend(self._hour_warnings(now))
         return found
 
-    def _day_warnings(self) -> list[tuple[str, str]]:
+    def _day_warnings(self, now: datetime) -> list[tuple[str, str]]:
+        # Con calor, frío y ultravioleta ya dados hoy no se vuelve a pedir el día.
+        if all(self._already_today(mark, now) for mark in (HEAT_MARK, COLD_MARK, UV_MARK)):
+            return []
         try:
-            maximum, minimum = self.weather.day_ahead()
+            day = self.weather.day_ahead()
         except WeatherError:
             return []  # ya quedó en el log; la vuelta siguiente reintenta
 
+        maximum, minimum = day.maximum, day.minimum
         found = []
         if maximum >= HEAT_ALERT:
             found.append((
@@ -426,7 +469,31 @@ class WeatherWatcher:
                     f"Ojo con el frío: hoy la mínima es de {number(minimum)} grados."
                 ),
             ))
+        if day.uv is not None and day.uv >= UV_ALERT and not self._already_today(UV_MARK, now):
+            found.append((
+                UV_MARK,
+                self.polish(
+                    f"Ojo con el sol: hoy el índice ultravioleta llega a {number(day.uv)}, extremo."
+                ),
+            ))
         return found
+
+    def _air_warning(self, now: datetime) -> list[tuple[str, str]]:
+        # Con el aviso de hoy ya dado no se vuelve a consultar.
+        if self.air is None or self._already_today(AIR_MARK, now):
+            return []
+        try:
+            worst = self.air.worst_today(now)
+        except AirError:
+            return []
+        if worst is None or worst < AIR_ALERT:
+            return []
+        return [(
+            AIR_MARK,
+            self.polish(
+                "Ojo con el aire: hoy se espera mala calidad del aire, mejor ventilar poco."
+            ),
+        )]
 
     def _hour_warnings(self, now: datetime) -> list[tuple[str, str]]:
         try:

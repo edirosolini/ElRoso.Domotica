@@ -7,7 +7,7 @@ because nothing exercised the assembly itself.
 
 import json
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -550,6 +550,18 @@ def test_the_other_warnings_of_the_sky_are_scheduled(wired, tmp_path, monkeypatc
     run_main(monkeypatch, config_file(tmp_path))
 
     assert "sky-watch" in wired.job_queue.repeating
+
+
+def test_the_sky_watcher_gets_a_usable_air_client(wired, tmp_path, monkeypatch):
+    seen = _spy_init(monkeypatch, main.WeatherWatcher)
+    run_main(monkeypatch, config_file(tmp_path))
+
+    air = seen["air"]
+    air.fetch = lambda latitude, longitude: {
+        "hourly": {"time": ["2026-10-15T12:00"], "us_aqi": [130], "pm2_5": [40.0]}
+    }
+
+    assert air.worst_today(datetime(2026, 10, 15, 9, 0)) == 130
 
 
 def test_without_a_key_nobody_listens_to_an_audio(wired, tmp_path, monkeypatch):

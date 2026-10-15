@@ -1,6 +1,6 @@
 import pytest
 
-from homeauto.weather import WeatherError, WeatherClient, describe_code
+from homeauto.weather import WeatherError, WeatherClient, describe_code, fetch_open_meteo
 
 PAYLOAD = {
     "current": {
@@ -203,3 +203,41 @@ def test_the_tomorrow_wording_is_polished():
 
     assert weather.spoken_tomorrow() == "REESCRITO"
     assert "veintiocho" in seen["text"]
+
+
+def test_the_day_ahead_brings_the_uv_in_the_same_payload():
+    payload = {**PAYLOAD, "daily": {**PAYLOAD["daily"], "uv_index_max": [11.4, 9.0]}}
+
+    day = client(payload).day_ahead()
+
+    assert (day.maximum, day.minimum, day.uv) == (22, 11, 11)
+
+
+def test_a_payload_without_uv_leaves_the_day_without_uv():
+    day = client().day_ahead()
+
+    assert (day.maximum, day.minimum, day.uv) == (22, 11, None)
+
+
+def test_a_day_that_cannot_be_fetched_is_a_weather_error():
+    with pytest.raises(WeatherError):
+        client(boom=RuntimeError("sin red")).day_ahead()
+
+
+def test_the_one_request_asks_for_the_uv():
+    asked = {}
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {}
+
+    def get(url, params, timeout):
+        asked.update(params)
+        return Response()
+
+    fetch_open_meteo(-34.6, -58.4, get=get)
+
+    assert "uv_index_max" in asked["daily"].split(",")
