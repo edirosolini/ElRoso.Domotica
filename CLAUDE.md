@@ -2159,7 +2159,9 @@ abajo en ese orden a propósito.
 
 ## Convenciones
 
-- Mensajes al usuario del bot en **español**. Identificadores y logs en **inglés**.
+- Mensajes al usuario del bot en **español**. Identificadores en **inglés**.
+- **Los logs van en español**, decisión del dueño del 2026-10-15. Hay logs viejos en inglés:
+  no se traducen de oficio, se emparejan cuando se toca el archivo.
 - 🔴 **Los comentarios y docstrings van en español**, todos. Antes decían inglés y el código
   terminó con 437 en inglés y 47 en español, varios archivos mezclando los dos adentro.
 - Los tests no tocan hardware real: se mockea `pychromecast` y el subproceso de Piper.
