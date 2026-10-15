@@ -7,7 +7,9 @@ from datetime import datetime, timedelta
 from typing import Iterable
 
 from homeauto.schedule.history import CANCEL, DONE, OFF, SNOOZE, Entry
-from homeauto.schedule.store import ALARM, DAILY, ONCE, WEEKLY, Job, next_run
+from homeauto.schedule.store import (
+    ALARM, DAILY, MONTHLY, ONCE, WEEKLY, Job, next_month, next_run, on_monthday,
+)
 from homeauto.timespec import next_weekday
 
 ALARM_ITEM = "alarm"
@@ -57,8 +59,13 @@ def occurrences_between(
 def _first_from(job: Job, since: datetime) -> datetime | None:
     """La primera ocurrencia candidata del job a partir del día de `since`."""
     at = job.when
-    if at >= since or job.repeat not in (DAILY, WEEKLY):
+    if at >= since or job.repeat not in (DAILY, WEEKLY, MONTHLY):
         return at
+    if job.repeat == MONTHLY:
+        if not job.monthday:
+            return None
+        at = on_monthday(since.year, since.month, job.monthday, at)
+        return at if at.date() >= since.date() else next_month(at, job.monthday)
     at += timedelta(days=(since - at).days)
     return next_weekday(at, job.weekdays) if job.repeat == WEEKLY else at
 

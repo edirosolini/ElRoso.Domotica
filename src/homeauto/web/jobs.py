@@ -11,9 +11,8 @@ from homeauto.bot.commands import format_when
 from homeauto.lists import LISTS, split_items
 from homeauto.people import display_name
 from homeauto.schedule.month import item_kind
-from homeauto.schedule.spec import SpecError, classify, resolve
-from homeauto.schedule.store import DAILY, WEEKLY, Job
-from homeauto.timespec import format_weekdays
+from homeauto.schedule.spec import SpecError, classify, repetition_label, resolve
+from homeauto.schedule.store import MONTHLY, WEEKLY, Job, on_monthday
 from homeauto.web.board import KIND_ICONS
 
 log = logging.getLogger(__name__)
@@ -42,6 +41,14 @@ def _in_thread(work: Callable[[], None]) -> None:
 def cancel_action(job_id: int) -> tuple[str, str]:
     """El botón que borra el aviso desde cualquier chat."""
     return (f"Cancelar #{job_id}", f"borrar {job_id}")
+
+
+def _monthday(when: datetime, previous: Job | None) -> int:
+    """El día del mes de la fecha elegida, o el del mensual editado si la fecha es donde ese cae."""
+    if previous is not None and previous.is_monthly and previous.monthday:
+        if on_monthday(when.year, when.month, previous.monthday, when).day == when.day:
+            return previous.monthday
+    return when.day
 
 
 class JobsService:
@@ -109,9 +116,10 @@ class JobsService:
     def update(self, job_id: int, payload: dict) -> dict:
         """Edita la serie entera; el autor no cambia."""
         self._check_writable()
-        if self.store.get(job_id) is None:
+        previous = self.store.get(job_id)
+        if previous is None:
             raise NotFound(f"No existe el aviso #{job_id}.")
-        fields = self._fields(payload)
+        fields = self._fields(payload, previous)
         try:
             job = self.reminders.update(job_id, **fields)
         except ValueError as exc:
@@ -161,8 +169,8 @@ class JobsService:
     def _names(self) -> dict[int, str]:
         return self.people_store.names() if self.people_store is not None else {}
 
-    def _fields(self, payload: dict) -> dict:
-        """Lo que pide el formulario, validado y listo para el store."""
+    def _fields(self, payload: dict, previous: Job | None = None) -> dict:
+        """Lo que pide el formulario, validado para el store; `previous` es el job editado."""
         message = payload.get("message")
         if not isinstance(message, str) or not message.strip():
             raise WebError("Falta el mensaje.")
@@ -189,11 +197,14 @@ class JobsService:
         try:
             kind, repeat = classify(payload.get("type"), payload.get("repeat"))
             days = tuple(raw_days) if repeat == WEEKLY else None
-            when = resolve(repeat, when.replace(second=0, microsecond=0), self.clock(), days)
+            monthday = _monthday(when, previous) if repeat == MONTHLY else None
+            when = resolve(
+                repeat, when.replace(second=0, microsecond=0), self.clock(), days, monthday
+            )
         except SpecError as exc:
             raise WebError(str(exc)) from None
         return {"when": when, "message": message, "repeat": repeat, "device": device,
-                "days": days, "kind": kind}
+                "days": days, "kind": kind, "monthday": monthday}
 
     def _as_dict(self, job: Job) -> dict:
         return {
@@ -203,6 +214,7 @@ class JobsService:
             "when": job.when.strftime("%Y-%m-%dT%H:%M"),
             "repeat": job.repeat,
             "days": job.weekdays,
+            "monthday": job.monthday,
             "device": job.device or "",
             "author": job.chat_id,
             "author_name": display_name(job.chat_id, self._names()),
@@ -212,10 +224,9 @@ class JobsService:
         """El aviso en una línea de chat: ícono, número, cuándo, repetición y mensaje."""
         text = f"{KIND_ICONS[item_kind(job.kind, job.repeat)]} #{job.id} · "
         text += format_when(job.when, self.clock())
-        if job.repeat == DAILY:
-            text += " · todos los días"
-        elif job.repeat == WEEKLY:
-            text += f" · {format_weekdays(job.weekdays)}"
+        repetition = repetition_label(job)
+        if repetition:
+            text += f" · {repetition}"
         if job.device:
             text += f" · {job.device}"
         return f"{text} — «{job.message}»"

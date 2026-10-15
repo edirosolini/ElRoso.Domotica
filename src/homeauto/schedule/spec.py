@@ -6,8 +6,14 @@ from datetime import datetime, timedelta
 from typing import Iterable
 
 from homeauto.schedule.month import ALARM_ITEM, REMINDER_ITEM, TIMER_ITEM
-from homeauto.schedule.store import ALARM, DAILY, ONCE, REMINDER, REPEATS, WEEKLY
-from homeauto.timespec import next_weekday
+from homeauto.schedule.store import (
+    ALARM, DAILY, MONTHLY, ONCE, REMINDER, REPEATS, WEEKLY, Job, next_month, on_monthday,
+)
+from homeauto.timespec import format_weekdays, next_weekday
+from homeauto.verbalize import cardinal
+
+# El día más alto que tienen todos los meses.
+SHORTEST_MONTH = 28
 
 
 class SpecError(ValueError):
@@ -35,9 +41,15 @@ def classify(item: str, repeat: str) -> tuple[str, str]:
 
 
 def resolve(
-    repeat: str, when: datetime, now: datetime, days: Iterable[int] | None = None
+    repeat: str,
+    when: datetime,
+    now: datetime,
+    days: Iterable[int] | None = None,
+    monthday: int | None = None,
 ) -> datetime:
     """La primera vez que suena lo pedido para `when`, o SpecError si no puede sonar."""
+    if repeat == MONTHLY:
+        return _first_monthly(when, now, monthday)
     if repeat == ONCE:
         if when <= now:
             raise SpecError("Esa hora ya pasó.")
@@ -55,3 +67,48 @@ def resolve(
             raise SpecError("Algún día de la semana no existe.")
         return next_weekday(when, chosen)
     raise SpecError("No conozco esa repetición.")
+
+
+def _first_monthly(when: datetime, now: datetime, monthday: int | None) -> datetime:
+    """El primer `monthday` a la hora de `when` que no es antes de `when` ni de `now`."""
+    if monthday is None:
+        raise SpecError("Con mensual necesito el día del mes.")
+    if monthday not in range(1, 32):
+        raise SpecError("Ese día del mes no existe.")
+    first = on_monthday(when.year, when.month, monthday, when)
+    while first < when or first <= now:
+        first = next_month(first, monthday)
+    return first
+
+
+def monthly_label(monthday: int) -> str:
+    return f"el {monthday} de cada mes"
+
+
+def repetition_label(job: Job) -> str:
+    """Cómo repite un job, para el chat; vacío si suena una sola vez."""
+    if job.repeat == DAILY:
+        return "todos los días"
+    if job.repeat == WEEKLY:
+        return format_weekdays(job.weekdays)
+    if job.repeat == MONTHLY and job.monthday:
+        return monthly_label(job.monthday)
+    return ""
+
+
+def ringing_label(job: Job) -> str:
+    """Cómo repite un job en el aviso de que sonó, sin dígitos; vacío si suena una sola vez."""
+    if job.repeat == DAILY:
+        return "de todos los días"
+    if job.repeat == WEEKLY:
+        return f"de {format_weekdays(job.weekdays)}"
+    if job.repeat == MONTHLY and job.monthday:
+        return f"del {cardinal(job.monthday)} de cada mes"
+    return ""
+
+
+def short_month_note(monthday: int) -> str:
+    """El aviso de qué pasa los meses que no tienen ese día; vacío si todos lo tienen."""
+    if monthday <= SHORTEST_MONTH:
+        return ""
+    return f"Los meses que no tienen {monthday}, el último día."

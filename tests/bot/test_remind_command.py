@@ -76,6 +76,26 @@ def test_a_reminder_on_some_days(cmd):
     assert "Recordatorio lun, mar, mié, jue, vie" in reply
 
 
+
+def test_a_monthly_reminder(cmd):
+    reply = cmd.remind(OWNER, "mensual 10 9:00 pagar la luz")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.kind == REMINDER
+    assert job.repeat == "monthly"
+    assert job.monthday == 10
+    assert job.when == datetime(2026, 10, 10, 9, 0)
+    assert reply.startswith("Recordatorio el 10 de cada mes #")
+
+
+def test_a_monthly_reminder_on_the_thirty_first_warns_about_short_months(cmd):
+    reply = cmd.remind(OWNER, "mensual 31 9:00 pagar el alquiler")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.when == datetime(2026, 9, 30, 9, 0)
+    assert job.monthday == 31
+    assert reply.endswith("Los meses que no tienen 31, el último día.")
+
 def test_a_reminder_without_days_is_not_scheduled(cmd):
     reply = cmd.remind(OWNER, "8:00 tomar la pastilla")
 
@@ -128,6 +148,18 @@ def test_the_help_explains_the_three(cmd):
     assert "/recordar lun-vie" in HELP
     assert "/alarma" in HELP
     assert "/timer" in HELP
+
+
+@pytest.mark.parametrize("command", ["recordar", "alarma"])
+def test_the_monthly_example_of_the_help_really_schedules(cmd, command):
+    example = f"/{command} mensual 10 9:00 pagar la luz"
+    assert example in HELP
+
+    run = cmd.remind if command == "recordar" else cmd.alarm
+    run(OWNER, example.split(" ", 1)[1])
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.repeat, job.monthday, job.message) == ("monthly", 10, "pagar la luz")
 
 
 # --- el botón «Hecho» ---------------------------------------------------------

@@ -56,4 +56,21 @@ assert.strictEqual(agenda.nowScroll(at(14, 40)), "13:00:00");
 assert.strictEqual(agenda.nowScroll(at(9, 0)), "08:00:00");
 assert.strictEqual(agenda.nowScroll(at(0, 30)), "00:00:00");
 
+// La repetición que permite cada tipo y si se ven los días de la semana.
+assert.deepStrictEqual(agenda.repeatRule("alarm", "monthly"), {
+  repeat: "monthly", locked: false, onceOff: false, showDays: false,
+});
+assert.deepStrictEqual(agenda.repeatRule("reminder", "monthly"), {
+  repeat: "monthly", locked: false, onceOff: true, showDays: false,
+});
+assert.deepStrictEqual(agenda.repeatRule("alarm", "weekly"), {
+  repeat: "weekly", locked: false, onceOff: false, showDays: true,
+});
+// Un timer suena una vez, aunque se haya elegido mensual.
+assert.deepStrictEqual(agenda.repeatRule("timer", "monthly"), {
+  repeat: "once", locked: true, onceOff: false, showDays: false,
+});
+// Un recordatorio no puede ser de una sola vez.
+assert.strictEqual(agenda.repeatRule("reminder", "once").repeat, "daily");
+
 console.log("ok");

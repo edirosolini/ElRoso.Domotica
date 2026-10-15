@@ -21,6 +21,8 @@ from homeauto import slots
         ("diaria 7:30", "mensaje"),
         ("lun-vie", "hora"),
         ("lun-vie 5:30", "mensaje"),
+        ("mensual 10", "hora"),
+        ("mensual 10 9:00", "mensaje"),
         ("7:30 arriba", "repeticion"),
     ],
 )
@@ -31,7 +33,12 @@ def test_what_an_alarm_is_still_missing(argument, name):
 
 @pytest.mark.parametrize(
     "argument",
-    ["diaria 7:30 arriba", "lun-vie 5:30 arriba", "en comedor diaria 7:30 arriba"],
+    [
+        "diaria 7:30 arriba",
+        "lun-vie 5:30 arriba",
+        "en comedor diaria 7:30 arriba",
+        "mensual 10 9:00 pagar la luz",
+    ],
 )
 def test_an_alarm_that_says_how_it_repeats_is_complete(argument):
     assert slots.missing("alarma", argument) is None
@@ -130,6 +137,8 @@ def test_tomorrow_with_a_clock_only_misses_the_message():
         ("8:00", "mensaje"),
         ("diaria", "hora"),
         ("lun-vie 7:30", "mensaje"),
+        ("mensual 10", "hora"),
+        ("mensual 10 9:00", "mensaje"),
         ("8:00 la pastilla", "dias"),
         ("mañana 8:00 la pastilla", "dias"),
     ],
@@ -140,7 +149,13 @@ def test_what_a_reminder_is_still_missing(argument, name):
 
 
 @pytest.mark.parametrize(
-    "argument", ["diaria 8:00 la pastilla", "lun-vie 7:30 al colegio", "en comedor mar,jue 9:00 x"]
+    "argument",
+    [
+        "diaria 8:00 la pastilla",
+        "lun-vie 7:30 al colegio",
+        "en comedor mar,jue 9:00 x",
+        "mensual 10 9:00 pagar la luz",
+    ],
 )
 def test_a_reminder_with_its_days_is_complete(argument):
     assert slots.missing("recordar", argument) is None
@@ -152,3 +167,7 @@ def test_a_reminder_never_offers_once():
 
     assert slot.choices
     assert all("sola vez" not in answer for _, answer in slot.choices)
+
+
+def test_monthly_is_not_one_of_the_offered_repetitions():
+    assert all("mes" not in answer for _, answer in slots.REPEAT.choices)

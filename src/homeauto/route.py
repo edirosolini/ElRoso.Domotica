@@ -48,7 +48,8 @@ Comandos y qué lleva cada uno:
 - alarma: para despertarse, una hora y el mensaje, así: "7:30 arriba"; para repetir,
   "diaria 7:30 arriba" o los días adelante, "lun-vie 5:30 arriba"
 - recordar: algo que se repite, como una medicación o salir al colegio, con los días
-  adelante y la hora: "diaria 8:00 tomar la pastilla" o "lun-vie 7:30 salir al colegio"
+  adelante y la hora: "diaria 8:00 tomar la pastilla" o "lun-vie 7:30 salir al colegio";
+  una vez por mes, "mensual" y el día del mes adelante: "mensual 10 9:00 pagar la luz"
 - lista: sin argumento, lo que está programado
 - cancelar: el número a cancelar
 - posponer: cuánto posponer la alarma que acaba de sonar, así: "10m"; sin argumento, diez
@@ -114,6 +115,10 @@ ARGUMENTO: 10m sacar la pizza
 Mensaje: recordame tomar la pastilla todos los días a las ocho
 COMANDO: recordar
 ARGUMENTO: diaria 8:00 tomar la pastilla
+
+Mensaje: recordame el 10 de cada mes a las nueve pagar la luz
+COMANDO: recordar
+ARGUMENTO: mensual 10 9:00 pagar la luz
 
 Mensaje: recordame mañana a las diez llamar al médico
 COMANDO: timer

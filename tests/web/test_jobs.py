@@ -9,7 +9,7 @@ from homeauto.people import PeopleStore
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.reminders import Reminders
-from homeauto.schedule.store import ALARM, DAILY, ONCE, REMINDER, WEEKLY, Store
+from homeauto.schedule.store import ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY, Store
 from homeauto.web.jobs import (
     MAX_MESSAGE, JobsService, NotFound, ReadOnly, WebError, cancel_action,
 )
@@ -141,6 +141,37 @@ def test_a_weekly_starts_on_its_first_day(parts):
     assert parts["store"].get(created["id"]).when == datetime(2026, 10, 7, 7, 30)
 
 
+def test_a_monthly_takes_its_day_from_the_date(parts):
+    created = parts["build"]().create(
+        payload(type="reminder", repeat=MONTHLY, when="2026-10-10T09:00", message="pagar la luz")
+    )
+
+    job = parts["store"].get(created["id"])
+    assert (job.kind, job.repeat, job.monthday, job.when) == (
+        REMINDER, MONTHLY, 10, datetime(2026, 10, 10, 9, 0),
+    )
+    assert created["monthday"] == 10
+    assert created["days"] == []
+
+
+def test_a_monthly_on_a_date_gone_by_starts_next_month(parts):
+    created = parts["build"]().create(payload(repeat=MONTHLY, when="2026-10-05T11:00"))
+
+    assert parts["store"].get(created["id"]).when == datetime(2026, 11, 5, 11, 0)
+
+
+def test_a_monthly_ignores_the_weekdays(parts):
+    created = parts["build"]().create(payload(repeat=MONTHLY, days=[1, 3]))
+
+    assert parts["store"].get(created["id"]).weekdays == []
+
+
+def test_the_notice_tells_the_day_of_the_month(parts):
+    parts["build"]().create(payload(type="reminder", repeat=MONTHLY, when="2026-10-10T09:00"))
+
+    assert all("el 10 de cada mes" in text for _, text, _ in parts["told"])
+
+
 @pytest.mark.parametrize(
     "bad",
     [
@@ -154,6 +185,7 @@ def test_a_weekly_starts_on_its_first_day(parts):
         {"type": "despertador"},
         {"type": "reminder", "repeat": ONCE},
         {"type": "timer", "repeat": DAILY},
+        {"type": "timer", "repeat": MONTHLY},
         {"repeat": WEEKLY, "days": []},
         {"repeat": WEEKLY, "days": [9]},
         {"repeat": WEEKLY, "days": "lun"},
@@ -223,6 +255,7 @@ def test_a_job_is_read_back_as_the_form_needs_it(parts):
         "when": "2026-10-09T07:30",
         "repeat": WEEKLY,
         "days": [1, 5],
+        "monthday": None,
         "device": "comedor",
         "author": EZE,
         "author_name": "Eze",
@@ -255,6 +288,35 @@ def test_update_edits_the_series_and_keeps_the_author(parts):
     assert all("la pastilla" in text for _, text, _ in parts["told"])
     assert all(actions == ((f"Cancelar #{job.id}", f"borrar {job.id}"),)
                for _, _, actions in parts["told"])
+
+
+def monthly_on_the_31st_due_in_february(parts):
+    """Un mensual del 31 cuya próxima vez es el 28 de febrero, como lo muestra el formulario."""
+    jobs = parts["build"]()
+    created = jobs.create(payload(type="reminder", repeat=MONTHLY, when="2026-10-31T09:00"))
+    parts["store"].reschedule(created["id"], datetime(2027, 2, 28, 9, 0))
+    return jobs, created["id"]
+
+
+def test_editing_a_monthly_on_its_short_month_day_keeps_the_day_it_asked_for(parts):
+    jobs, job_id = monthly_on_the_31st_due_in_february(parts)
+
+    jobs.update(job_id, payload(type="reminder", repeat=MONTHLY, when="2027-02-28T09:00",
+                                message="pagar el alquiler"))
+
+    job = parts["store"].get(job_id)
+    assert (job.monthday, job.when, job.message) == (
+        31, datetime(2027, 2, 28, 9, 0), "pagar el alquiler",
+    )
+
+
+def test_editing_a_monthly_to_another_day_takes_that_day(parts):
+    jobs, job_id = monthly_on_the_31st_due_in_february(parts)
+
+    jobs.update(job_id, payload(type="reminder", repeat=MONTHLY, when="2027-02-15T09:00"))
+
+    job = parts["store"].get(job_id)
+    assert (job.monthday, job.when) == (15, datetime(2027, 2, 15, 9, 0))
 
 
 def test_updating_a_missing_job_is_not_found(parts):

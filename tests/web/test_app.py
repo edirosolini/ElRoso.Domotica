@@ -155,6 +155,12 @@ def test_the_form_picks_type_and_days_with_buttons(app):
         assert f'data-day="{day}"' in page, day
 
 
+def test_the_form_offers_a_monthly_repetition(app):
+    page = get(app, "/agenda").body.decode("utf-8")
+
+    assert '<option value="monthly">Todos los meses</option>' in page
+
+
 def test_the_month_shows_five_per_day_and_folds_what_already_passed_today(app):
     script = get(app, "/static/app.js").body.decode("utf-8")
 

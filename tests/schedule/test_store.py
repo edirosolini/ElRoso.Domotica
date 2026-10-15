@@ -132,6 +132,51 @@ def test_days_column_is_added_to_an_older_database(tmp_path):
     assert store.get(job.id).weekdays == [6, 7]
 
 
+# --- mensuales -------------------------------------------------------------
+
+
+def test_monthly_job_remembers_its_day(store):
+    job = store.add(OWNER, T1, "pagar la luz", repeat="monthly", monthday=10)
+
+    assert job.monthday == 10
+    assert job.is_monthly
+    assert store.get(job.id).monthday == 10
+
+
+def test_monthly_without_a_day_is_rejected(store):
+    with pytest.raises(ValueError, match="día"):
+        store.add(OWNER, T1, "pagar la luz", repeat="monthly")
+
+
+def test_a_job_that_is_not_monthly_has_no_day(store):
+    assert store.add(OWNER, T1, "arriba").monthday is None
+
+
+def test_monthday_column_is_added_to_an_older_database(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,"
+            " fires_at TEXT NOT NULL, message TEXT NOT NULL, repeat TEXT NOT NULL DEFAULT 'once',"
+            " device TEXT, days TEXT, kind TEXT NOT NULL DEFAULT 'alarm')"
+        )
+
+    store = Store(path)
+    job = store.add(OWNER, T1, "pagar la luz", repeat="monthly", monthday=31)
+
+    assert store.get(job.id).monthday == 31
+
+
+def test_update_can_turn_a_job_monthly(store):
+    job = store.add(OWNER, T1, "arriba")
+
+    updated = store.update(job.id, T2, "pagar la luz", repeat="monthly", monthday=30)
+
+    assert (updated.repeat, updated.monthday) == ("monthly", 30)
+
+
 # --- editar ----------------------------------------------------------------
 
 

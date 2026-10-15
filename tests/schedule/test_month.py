@@ -11,7 +11,9 @@ from homeauto.schedule.month import (
     occurrences_between,
 )
 from homeauto.schedule.reminders import Reminders
-from homeauto.schedule.store import ALARM, DAILY, ONCE, REMINDER, WEEKLY, Job, Store, next_run
+from homeauto.schedule.store import (
+    ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY, Job, Store, next_run,
+)
 
 NOW = datetime(2026, 10, 5, 12, 0)  # lunes
 OCTOBER = (datetime(2026, 10, 1), datetime(2026, 11, 1))
@@ -21,8 +23,11 @@ def october(jobs, now=NOW):
     return occurrences_between(jobs, *OCTOBER, now)
 
 
-def job(when, repeat=ONCE, days=None, kind=ALARM, message="arriba", job_id=1):
-    return Job(id=job_id, chat_id=42, when=when, message=message, repeat=repeat, days=days, kind=kind)
+def job(when, repeat=ONCE, days=None, kind=ALARM, message="arriba", job_id=1, monthday=None):
+    return Job(
+        id=job_id, chat_id=42, when=when, message=message, repeat=repeat, days=days, kind=kind,
+        monthday=monthday,
+    )
 
 
 def entry(at, kind=ALARM, repeat=ONCE, message="arriba", announced=True, **marks):
@@ -68,6 +73,36 @@ def test_a_weekly_from_friday_to_monday_wraps_around():
     assert next_run(weekly, datetime(2026, 10, 11, 7, 0)) == datetime(2026, 10, 12, 7, 0)
 
 
+def test_a_monthly_comes_back_the_same_day_next_month():
+    monthly = job(datetime(2026, 10, 10, 9, 0), MONTHLY, monthday=10)
+
+    assert next_run(monthly, monthly.when) == datetime(2026, 11, 10, 9, 0)
+
+
+def test_a_monthly_crosses_the_year():
+    monthly = job(datetime(2026, 12, 10, 9, 0), MONTHLY, monthday=10)
+
+    assert next_run(monthly, monthly.when) == datetime(2027, 1, 10, 9, 0)
+
+
+def test_a_monthly_on_a_missing_day_falls_on_the_last_one_and_keeps_its_day():
+    monthly = job(datetime(2027, 1, 31, 9, 0), MONTHLY, monthday=31)
+
+    february = next_run(monthly, monthly.when)
+    march = next_run(monthly, february)
+    april = next_run(monthly, march)
+
+    assert february == datetime(2027, 2, 28, 9, 0)
+    assert march == datetime(2027, 3, 31, 9, 0)
+    assert april == datetime(2027, 4, 30, 9, 0)
+
+
+def test_a_monthly_on_the_thirty_first_lands_on_a_leap_february_twenty_ninth():
+    monthly = job(datetime(2028, 1, 31, 9, 0), MONTHLY, monthday=31)
+
+    assert next_run(monthly, monthly.when) == datetime(2028, 2, 29, 9, 0)
+
+
 class _Timer:
     def __init__(self):
         self.armed = {}
@@ -96,6 +131,25 @@ def test_the_screen_and_the_reminders_follow_the_same_rule(tmp_path):
     assert fired == expected
 
 
+
+def test_the_screen_and_the_reminders_follow_the_same_monthly_rule(tmp_path):
+    """Lo mensual en la pantalla es lo que Reminders rearma, también en los meses cortos."""
+    store = Store(tmp_path / "jobs.db")
+    timer = _Timer()
+    reminders = Reminders(store=store, timer=timer, announce=lambda job: None, clock=lambda: NOW)
+    added = reminders.add(42, datetime(2026, 10, 31, 9, 0), "luz", repeat=MONTHLY, monthday=31)
+
+    expected = [
+        item.at
+        for item in occurrences_between([added], datetime(2026, 10, 1), datetime(2027, 5, 1), NOW)
+    ]
+    fired = [added.when]
+    for _ in range(len(expected) - 1):
+        timer.armed[str(added.id)][1]()
+        fired.append(store.get(added.id).when)
+
+    assert fired == expected
+
 # --- la expansión de lo programado ---
 
 
@@ -123,6 +177,30 @@ def test_a_weekly_only_lands_on_its_days():
 
     assert {item.at.isoweekday() for item in found} == {1, 5, 6, 7}
     assert found[0].at == datetime(2026, 10, 9, 7, 0)
+
+
+def test_a_monthly_lands_once_in_the_month():
+    monthly = job(datetime(2026, 10, 10, 9, 0), MONTHLY, monthday=10)
+
+    assert [item.at for item in october([monthly])] == [datetime(2026, 10, 10, 9, 0)]
+
+
+def test_a_monthly_that_started_long_ago_is_found_in_a_later_range():
+    monthly = job(datetime(2026, 10, 31, 9, 0), MONTHLY, monthday=31)
+
+    found = occurrences_between([monthly], datetime(2027, 2, 1), datetime(2027, 5, 1), NOW)
+
+    assert [item.at for item in found] == [
+        datetime(2027, 2, 28, 9, 0), datetime(2027, 3, 31, 9, 0), datetime(2027, 4, 30, 9, 0),
+    ]
+
+
+def test_a_monthly_whose_day_already_passed_in_the_range_waits_for_the_next_month():
+    monthly = job(datetime(2026, 10, 10, 9, 0), MONTHLY, monthday=10)
+
+    found = occurrences_between([monthly], datetime(2026, 11, 15), datetime(2027, 1, 1), NOW)
+
+    assert [item.at for item in found] == [datetime(2026, 12, 10, 9, 0)]
 
 
 def test_a_range_far_ahead_is_expanded_too():
