@@ -27,6 +27,7 @@ from homeauto.agenda.ical import CalendarClient
 from homeauto.agenda.seen import SeenStore
 from homeauto.agenda.service import AgendaService
 from homeauto.agenda.watcher import EventWatcher
+from homeauto.air import AirClient
 from homeauto.ask import ASK_TIMEOUT, Asker
 from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
@@ -1027,6 +1028,7 @@ def main() -> None:
         announce=lambda text: _announce(house, text),
         marks=Marks(db_path),
         polish=polish,
+        air=AirClient(config.weather_lat, config.weather_lon),
     )
 
     async def check_sky(_context):
