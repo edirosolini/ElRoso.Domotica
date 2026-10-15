@@ -30,6 +30,7 @@ Domotica/
 │   ├── bible.py         # versículo del día de YouVersion, en la NTV
 │   ├── briefing.py      # resumen de la mañana: agenda + clima + servicios caídos
 │   ├── closing.py       # cierre del día: lo de mañana y lo que sigue roto
+│   ├── weekly.py        # balance de la semana sobre el historial, solo escrito
 │   ├── calc.py          # cuentas y conversión de unidades, sin modelo
 │   ├── lists.py         # las listas de compras y de pendientes
 │   ├── translate.py     # traducir, solo para leer
@@ -342,6 +343,33 @@ defecto): lo agendado para **mañana**, el pronóstico de **mañana** y lo que s
   que es la regla de siempre y no una falla.
 - Fuentes independientes y nada de dígitos, como el resumen. Hay test de las dos cosas.
 
+## Resumen semanal
+
+`weekly.py` lee siete días de `fired_history` y arma un balance a la hora de `WEEKLY_AT`
+(por defecto `dom 19:00`; acepta días como una alarma, `lun-vie 9:00`, y `off` lo apaga).
+
+- 🔴 **Solo se escribe, a todos** (`tell_everyone`). No pasa por el parlante ni por el
+  pulidor, así que es la excepción a la regla de los dígitos: "5 de 7" se lee de un vistazo.
+- **Una semana vacía no manda nada**, por la misma regla del cierre vacío.
+- **Tres bloques, cada uno solo si tiene algo**: cuántos días se marcó «Hecho» cada
+  recordatorio (`mensaje: 5 de 7`), las alarmas que nadie apagó y lo que no salió por el
+  parlante (`announced = 0`).
+- 🔴 **Un recordatorio se cuenta por mensaje y por día.** El día es hecho si alguna de sus
+  filas cerró en `done`. Lo pospuesto vuelve como `reminder` de una sola vez, y suma al
+  recordatorio que repite con el mismo mensaje: si no, posponer y después marcar «Hecho»
+  contaría ese día como olvidado.
+- **Los timers quedan afuera**, de los tres bloques. ⚠️ Un timer con el mismo mensaje que un
+  recordatorio que repite no se distingue de un pospuesto y entra.
+- **Alarma que nadie apagó** es la que repitió (`nags >= 1`), sigue sin cerrar y ya pasó
+  `RING_LIMIT`: es la fila que deja abierta el tope. Ver **Historial de lo que sonó**.
+- **Las alarmas sin apagar y lo no dicho llevan tope de diez renglones** (`MAX_LINES`, con
+  "… y N más"); los recordatorios, uno por mensaje y sin tope. Todo mensaje se corta a
+  cuarenta caracteres (`MAX_MESSAGE`).
+- 🔴 **PTB numera los días de 0 = domingo a 6 = sábado**, no ISO. `schedule_weekly()`
+  convierte con `iso % 7`: de lunes a sábado coinciden y el domingo es 7 de un lado y 0 del
+  otro, así que el error solo aparece con un domingo, que es el default.
+- **Las 19:00 del default quedan fuera del cierre del CT (20:00) y del descanso (22:00).**
+
 ## Agenda
 
 `homeauto/agenda/` lee Google Calendar por la **dirección privada en formato iCal**, elegida
@@ -501,6 +529,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | re-aviso de una caída sin confirmar | `ALERT_CHAT_IDS`, con «✅ Confirmar»; en descanso o silencio, solo escrito |
 | caída confirmada | los otros chats de alertas: «✅ <nombre> confirmó: X no responde» |
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
+| resumen semanal | todos, solo escrito |
 | alarmas, recordatorios y timers | todos, con posponer; la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
 | repetición de una alarma sin apagar | todos, una de cada cinco veces y solo con «🔕 Apagar»; «Dejé de sonar» al tope |
 | alarma apagada | los demás chats: «🔕 <nombre> apagó la alarma» |
