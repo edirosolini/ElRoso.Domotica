@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Callable, Iterable
 
+from homeauto.schedule.rota import turn_for, with_turn
 from homeauto.schedule.history import CANCEL, DONE, HOLIDAY, OFF, SNOOZE, Entry
 from homeauto.schedule.store import (
     ALARM, DAILY, MONTHLY, ONCE, WEEKLY, Job, next_month, next_run, on_monthday,
@@ -64,9 +65,11 @@ def occurrences_between(
         while at is not None and at < end:
             if at >= since:
                 holiday = skips(job, at.date(), holidays)
+                turn = turn_for(job, at)
+                message = with_turn(job.message, turn) if turn is not None else job.message
                 found.append(
                     Item(
-                        at=at, kind=kind, message=job.message, job_id=job.id,
+                        at=at, kind=kind, message=message, job_id=job.id,
                         holiday=holiday.name if holiday is not None else None,
                     )
                 )

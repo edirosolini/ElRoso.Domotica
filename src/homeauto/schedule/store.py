@@ -9,7 +9,7 @@ from __future__ import annotations
 import calendar
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     kind     TEXT    NOT NULL DEFAULT 'alarm',
     monthday INTEGER,
     skip_holidays INTEGER NOT NULL DEFAULT 0,
-    stock_id INTEGER
+    stock_id INTEGER,
+    rota     TEXT,
+    rota_from TEXT
 );
 CREATE INDEX IF NOT EXISTS jobs_by_time ON jobs (fires_at);
 """
@@ -56,6 +58,9 @@ class Job:
     monthday: int | None = None
     skip_holidays: bool = False
     stock_id: int | None = None
+    # Los nombres que se turnan, separados por coma, y el lunes desde el que se cuenta.
+    rota: str | None = None
+    rota_from: date | None = None
 
     @property
     def is_reminder(self) -> bool:
@@ -82,6 +87,11 @@ class Job:
     def devices(self) -> list[str]:
         """La columna guarda una lista separada por comas; lo común es un solo equipo."""
         return [part.strip() for part in (self.device or "").split(",") if part.strip()]
+
+    @property
+    def turns(self) -> list[str]:
+        """Los nombres que se turnan, en orden; vacío si no rota."""
+        return [part.strip() for part in (self.rota or "").split(",") if part.strip()]
 
 
 def on_monthday(year: int, month: int, monthday: int, like: datetime) -> datetime:
@@ -144,6 +154,8 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         monthday=row["monthday"],
         skip_holidays=bool(row["skip_holidays"]),
         stock_id=row["stock_id"],
+        rota=row["rota"],
+        rota_from=date.fromisoformat(row["rota_from"]) if row["rota_from"] else None,
     )
 
 
@@ -171,6 +183,10 @@ class Store:
             conn.execute("ALTER TABLE jobs ADD COLUMN skip_holidays INTEGER NOT NULL DEFAULT 0")
         if "stock_id" not in existing:
             conn.execute("ALTER TABLE jobs ADD COLUMN stock_id INTEGER")
+        if "rota" not in existing:
+            conn.execute("ALTER TABLE jobs ADD COLUMN rota TEXT")
+        if "rota_from" not in existing:
+            conn.execute("ALTER TABLE jobs ADD COLUMN rota_from TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -261,6 +277,15 @@ class Store:
         with self._connect() as conn:
             return conn.execute(
                 "UPDATE jobs SET stock_id = ? WHERE id = ?", (stock_id, job_id)
+            ).rowcount > 0
+
+    def set_rota(self, job_id: int, names: Iterable[str] | None, start: date | None) -> bool:
+        """Fija o quita los nombres que se turnan y desde qué lunes; False si el job no existe."""
+        rota = ",".join(names) if names else None
+        with self._connect() as conn:
+            return conn.execute(
+                "UPDATE jobs SET rota = ?, rota_from = ? WHERE id = ?",
+                (rota, start.isoformat() if rota and start else None, job_id),
             ).rowcount > 0
 
     def reschedule(self, job_id: int, when: datetime) -> None:

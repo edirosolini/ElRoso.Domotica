@@ -742,3 +742,23 @@ def test_broken_holidays_leave_the_rest_of_the_board(parts):
     )["events"]
 
     assert [event["start"] for event in found] == ["2026-10-12T07:00:00"]
+
+
+# --- turnos ---
+
+
+def test_the_agenda_and_the_kiosk_say_whose_turn_it_is(parts):
+    from datetime import date
+
+    job = parts["store"].add(42, datetime(2026, 10, 5, 20, 0), "sacar la basura",
+                             repeat=WEEKLY, days=[1], kind=REMINDER)
+    parts["store"].set_rota(job.id, ["Cin", "Die"], date(2026, 10, 5))
+    screen = board(parts)
+
+    titles = [event["title"] for event in screen.events(datetime(2026, 10, 5),
+                                                         datetime(2026, 10, 13))["events"]]
+    today = screen.screen()
+
+    assert titles == ["📌 Le toca a Cin: sacar la basura", "📌 Le toca a Die: sacar la basura"]
+    assert today["today"][0]["label"] == "📌 Le toca a Cin: sacar la basura"
+    assert today["next"]["title"] == "📌 Le toca a Cin: sacar la basura"

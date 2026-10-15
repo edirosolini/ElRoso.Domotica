@@ -358,3 +358,33 @@ def test_what_was_skipped_for_a_holiday_shows_as_such_and_not_as_unsaid():
 
     assert item.holiday is not None
     assert item.silent is False
+
+
+# --- turnos ---
+
+
+def rota_job(when=datetime(2026, 10, 5, 20, 0)):
+    return Job(
+        id=7, chat_id=42, when=when, message="sacar la basura", repeat=WEEKLY, days="1",
+        kind=REMINDER, rota="Cin,Die", rota_from=date(2026, 10, 5),
+    )
+
+
+def test_what_is_coming_says_whose_turn_it_is():
+    found = october([rota_job()])
+
+    assert [(item.at.day, item.message) for item in found] == [
+        (5, "Le toca a Cin: sacar la basura"),
+        (12, "Le toca a Die: sacar la basura"),
+        (19, "Le toca a Cin: sacar la basura"),
+        (26, "Le toca a Die: sacar la basura"),
+    ]
+
+
+def test_the_turn_of_what_is_coming_is_the_one_that_will_sound():
+    from homeauto.schedule.rota import turn_for
+
+    job = rota_job()
+
+    for item in october([job]):
+        assert item.message == f"Le toca a {turn_for(job, item.at)}: sacar la basura"

@@ -162,6 +162,7 @@ STATUS_COMMANDS = ("estado",)
 SILENCE_COMMANDS = ("silencio", "siesta")
 SPEAK_COMMANDS = ("hablar",)
 VACATION_COMMANDS = ("vacaciones",)
+TURNS_COMMANDS = ("turnos",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
@@ -170,6 +171,7 @@ ALL_COMMANDS = (
     + ASK_COMMANDS + CALC_COMMANDS
     + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
     + TRANSLATE_COMMANDS + POSTPONE_COMMANDS + PILLS_COMMANDS + VACATION_COMMANDS
+    + TURNS_COMMANDS
 )
 
 # Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
@@ -733,6 +735,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
         (SILENCE_COMMANDS, commands.silence),
         (SPEAK_COMMANDS, commands.speak),
         (VACATION_COMMANDS, commands.vacation),
+        (TURNS_COMMANDS, commands.turns),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
