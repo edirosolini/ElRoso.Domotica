@@ -62,6 +62,13 @@ viene: qué tenés agendado mañana, cómo va a estar el día y qué servicios s
 Si no juntó nada que decir, se queda callado. Ponerlo después de `QUIET_FROM` lo deja escrito
 en el chat, sin voz.
 
+**Resumen semanal.** A la hora de `WEEKLY_AT` (por defecto el domingo a las 19:00, `off` lo
+apaga) escribe a todos los chats el balance de los últimos siete días: cuántos días se marcó
+«Hecho» cada recordatorio (`la pastilla: 5 de 7`, sumando lo pospuesto), las alarmas que
+sonaron hasta el final sin que nadie las apagara y lo que no salió por el parlante. Los
+timers no entran. Solo va al chat, nunca por el parlante, y una semana sin nada que contar
+no manda nada.
+
 **Cuentas y unidades.** `/calcular 15 por 4` hace la cuenta y `/calcular 20 grados en
 fahrenheit` convierte. No pasa por ningún modelo: el número sale exacto y, si entra en el
 rango que se puede decir, suena en palabras cuando lo pedís por el parlante.
@@ -536,6 +543,7 @@ CALENDAR_URL_PERSONAL=   # dirección privada en formato iCal
 CALENDAR_URL_TRABAJO=    # una clave por calendario; el sufijo es el alias
 BRIEFING_AT=08:00        # resumen del día; "off" lo apaga
 CLOSING_AT=22:00         # cierre del día: lo de mañana; "off" lo apaga
+WEEKLY_AT=dom 19:00      # resumen semanal, solo escrito; días como una alarma; "off" lo apaga
 EVENT_LEAD_MINUTES=10    # cuántos minutos antes avisar
 CHECKS_FILE=/etc/domotica/checks.json
 CHECK_INTERVAL_SECONDS=120
