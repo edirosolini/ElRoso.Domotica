@@ -28,6 +28,8 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /posponer                       repite en 10 minutos la alarma que acaba de sonar
 /silencio 2h                    no habla por un rato
 /hablar                         cancela el silencio
+/vacaciones hasta 25/10         no habla hasta la vuelta, ni lo urgente
+/vacaciones off                 las corta
 /volumen 40                     0 a 100
 /parar                          corta lo que esté sonando
 /apagar en todos                cierra la app y deja los equipos en reposo
@@ -56,6 +58,18 @@ habla el bot.
 ese rato (acepta los mismos formatos que un timer: `30m`, `1h30m`). `/silencio` sin nada dice
 si está callado y hasta cuándo; `/hablar` lo cancela. Se guarda en SQLite, así que un
 reinicio en medio de la siesta no devuelve la casa hablando.
+
+**Modo vacaciones.** `/vacaciones hasta 25/10` calla la casa hasta la vuelta; con hora,
+`/vacaciones hasta 25/10 18:00`, y sin hora es a las 00:00. `/vacaciones 25/10` también
+sirve. Una fecha que ya pasó este año se toma del siguiente; hoy o antes se rechaza.
+`/vacaciones off` las corta y `/vacaciones` sola dice cómo están. Mientras duran **nada sale
+por los parlantes, ni lo urgente**: las alarmas, el monitor, la API, el resumen, el cierre,
+el clima y la agenda llegan solo al chat, con sus botones. Una alarma no repite y no trae
+«🔕 Apagar», y activarlas corta las que estén sonando. `/decir`, `/llamar` y lo que pidas
+«por el parlante» contestan por qué no suena; `/apagar`, `/parar` y `/volumen` siguen
+andando. Activarlas o cortarlas les avisa a los otros chats quién fue, y al terminar se
+escribe a todos «🧳 Terminó el modo vacaciones, vuelvo a hablar.». `/hablar` no las corta.
+Se guardan en SQLite: si vencen con el servicio caído, el aviso sale al arrancar.
 
 **Resumen de la mañana.** A la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga) dice
 de una vez lo que hay para el día: si es feriado, la agenda, el clima, la economía, qué
@@ -196,6 +210,7 @@ recordame el 10 de cada mes a las nueve pagar la luz  →  /recordar mensual 10 
 recordame los días hábiles a las siete salida al colegio  →  /recordar hábiles 7:00 salida al colegio
 bajá el volumen a 40                      →  /volumen 40
 callate una hora                          →  /silencio 1h
+nos vamos de vacaciones hasta el 25 de octubre  →  /vacaciones hasta 25/10
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
 compré 30 de enalapril                    →  /pastillas enalapril +30
 llamá a todos a cenar                     →  /llamar en todos a cenar
@@ -420,7 +435,8 @@ monitor, así que se pueden atrasar hasta un intervalo de chequeo, y sobreviven 
 Confirmar solo se puede desde un chat de `ALERT_CHAT_IDS` y les avisa a los otros chats de
 alertas quién lo hizo. Un aviso urgente despierta una sola vez: los re-avisos suenan con los
 tres beeps pero nunca pasan por encima del horario de descanso ni de `/silencio`, y ahí solo
-se escriben. Silenciar no confirma.
+se escriben. Silenciar no confirma. En modo vacaciones ni la primera caída urgente suena:
+todo va solo al chat.
 
 **Los logs.** Consulta Seq y avisa si hay errores nuevos. Seq dice *por qué* se rompió algo,
 no solo que no responde; pero muere junto con el VPS, y por eso el túnel se vigila aparte.
@@ -443,7 +459,7 @@ conteste uno alcanza. Si no contesta ninguno, esa ronda no chequea los servicios
 Seq: un corte del proveedor no se avisa como caída del VPS. Corre aunque no haya
 `checks.json`. Dos rondas seguidas sin salida declaran el corte, y la casa dice «Se cortó
 internet.» una sola vez, con un beep suave, **solo por el parlante** y nunca en el horario de
-descanso ni con `/silencio`: ahí se pierde. Cuando vuelve, lo dice con cuánto duró y escribe a
+descanso, con `/silencio` ni de vacaciones: ahí se pierde. Cuando vuelve, lo dice con cuánto duró y escribe a
 todos los chats «🌐 Internet se cortó de HH:MM a HH:MM (N min)». Un corte de una sola ronda no
 dice nada. El estado sobrevive un reinicio.
 
@@ -485,10 +501,11 @@ curl http://192.168.68.10:8099/health     # no pide token
 | --- | --- |
 | `text` | Obligatorio, hasta 500 caracteres |
 | `devices` | Lista de alias; por defecto, el equipo principal |
-| `urgent` | `true` ignora el horario de descanso |
+| `urgent` | `true` ignora el horario de descanso; el modo vacaciones, no |
 
 **Sin `urgent`, dentro del horario de descanso el aviso va solo a Telegram** y la respuesta
-lo dice (`"spoken": false`). Nada se pierde, pero nadie se despierta.
+lo dice (`"spoken": false`). Nada se pierde, pero nadie se despierta. En modo vacaciones
+pasa lo mismo aunque venga con `urgent`.
 
 El token se genera solo la primera vez y vive en `/etc/domotica/domotica.env`. Si no hay
 token, la API no arranca — apagada es el estado seguro.
@@ -552,7 +569,8 @@ puede editar, borrar, agregar ni tachar.
   chats.
 
 Se ve claro u oscuro según el tema del dispositivo; en el horario de descanso, o con
-`/silencio`, se pone oscuro y apagado aunque el dispositivo esté en claro. Apaisado ocupa
+`/silencio` o de vacaciones, se pone oscuro y apagado aunque el dispositivo esté en claro.
+De vacaciones, abajo de la fecha dice «De vacaciones hasta el 25/10». Apaisado ocupa
 tres columnas; vertical, dos.
 
 Para dejarlo fijo en una tablet o un teléfono viejo:
