@@ -1,8 +1,9 @@
+import logging
 import uuid
 
 import pytest
 
-from homeauto.voice.caster import CastError, Caster
+from homeauto.voice.caster import CastError, Caster, _Discovery
 
 DEVICE_UUID = uuid.UUID("d17e8311-d82e-5116-8f58-6292603bbc1b")
 OTHER_UUID = uuid.UUID("11111111-2222-3333-4444-555555555555")
@@ -52,9 +53,18 @@ class FakeMediaController:
         self.stopped += 1
 
 
+class FakeSocketClient:
+    def __init__(self, host):
+        self.host = host
+
+
 class FakeDevice:
-    def __init__(self, device_uuid=DEVICE_UUID, name="Nest", volume=0.30, loads=True):
-        self.cast_info = type("Info", (), {"uuid": device_uuid, "friendly_name": name, "host": "192.168.68.20"})()
+    def __init__(
+        self, device_uuid=DEVICE_UUID, name="Nest", volume=0.30, loads=True, host="192.168.68.20"
+    ):
+        self.cast_info = type("Info", (), {"uuid": device_uuid, "friendly_name": name, "host": host})()
+        self.socket_client = FakeSocketClient(host)
+        self.disconnects = []
         self.media_controller = FakeMediaController(loads=loads)
         self.volumes = []
         self.waited = 0
@@ -70,6 +80,9 @@ class FakeDevice:
     def set_volume(self, level):
         self.volumes.append(level)
         self.status.volume_level = level
+
+    def disconnect(self, timeout=None):
+        self.disconnects.append(timeout)
 
 
 def discovery_of(*devices):
@@ -367,3 +380,136 @@ def test_a_working_device_is_never_looked_up_twice():
     caster.play("http://x/2.wav")
 
     assert len(discover.calls) == 1
+
+
+# --- el equipo cambió de IP sin fallar ---------------------------------------
+
+
+def locator(host):
+    """Un `locate` que contesta siempre la misma IP y anota cuántas veces lo llamaron."""
+    calls = []
+
+    def locate(device_uuid):
+        calls.append(device_uuid)
+        return host
+
+    locate.calls = calls
+    return locate
+
+
+def test_a_device_where_discovery_says_is_reused():
+    device = FakeDevice(host="192.168.68.21")
+    discover = discovery_of(device)
+    locate = locator("192.168.68.21")
+    caster = Caster(DEVICE_UUID, discover=discover, discovery_timeout=0, locate=locate)
+
+    caster.play("http://x/1.wav")
+    caster.play("http://x/2.wav")
+
+    assert len(discover.calls) == 1
+    assert locate.calls == [DEVICE_UUID]
+
+
+def test_a_device_connected_to_another_ip_is_looked_up_again(caplog):
+    stale = FakeDevice(host="192.168.68.22")
+    moved = FakeDevice(host="192.168.68.21")
+    discover = moving_discovery(stale, moved)
+    caster = Caster(
+        DEVICE_UUID, discover=discover, discovery_timeout=0, locate=locator("192.168.68.21")
+    )
+    caster.set_volume(40)
+
+    with caplog.at_level(logging.WARNING, logger="homeauto.voice.caster"):
+        caster.play("http://192.168.68.10:8765/aviso.wav")
+
+    assert stale.media_controller.played == [], "no sale por el equipo que quedó en la IP vieja"
+    assert moved.media_controller.played == [("http://192.168.68.10:8765/aviso.wav", "audio/wav")]
+    assert len(discover.calls) == 2
+    assert stale.disconnects, "el equipo viejo se desconecta"
+    assert "192.168.68.22" in caplog.text and "192.168.68.21" in caplog.text
+
+
+def test_a_device_discovery_does_not_know_is_reused():
+    device = FakeDevice(host="192.168.68.22")
+    discover = discovery_of(device)
+    caster = Caster(DEVICE_UUID, discover=discover, discovery_timeout=0, locate=locator(None))
+
+    caster.play("http://x/1.wav")
+    caster.play("http://x/2.wav")
+
+    assert len(discover.calls) == 1
+    assert device.media_controller.played[-1] == ("http://x/2.wav", "audio/wav")
+
+
+def test_a_locate_that_fails_reuses_the_cached_device():
+    def broken(device_uuid):
+        raise RuntimeError("browser caído")
+
+    device = FakeDevice(host="192.168.68.22")
+    discover = discovery_of(device)
+    caster = Caster(DEVICE_UUID, discover=discover, discovery_timeout=0, locate=broken)
+
+    caster.play("http://x/1.wav")
+    caster.play("http://x/2.wav")
+
+    assert len(discover.calls) == 1
+    assert device.media_controller.played[-1] == ("http://x/2.wav", "audio/wav")
+
+
+def test_forget_disconnects_the_old_device_without_blocking():
+    device = FakeDevice()
+    caster = Caster(DEVICE_UUID, discover=discovery_of(device), locate=locator(None))
+    caster.device_name()
+
+    caster.forget()
+
+    assert device.disconnects == [0]
+
+
+def test_forget_swallows_a_failing_disconnect():
+    device = FakeDevice()
+
+    def broken(timeout=None):
+        raise TimeoutError("join", timeout)
+
+    device.disconnect = broken
+    caster = Caster(DEVICE_UUID, discover=discovery_of(device), locate=locator(None))
+    caster.device_name()
+
+    caster.forget()
+
+    assert caster._device is None
+
+
+def test_without_socket_client_the_discovered_host_is_compared():
+    stale = FakeDevice(host="192.168.68.22")
+    del stale.socket_client
+    moved = FakeDevice(host="192.168.68.21")
+    discover = moving_discovery(stale, moved)
+    caster = Caster(
+        DEVICE_UUID, discover=discover, discovery_timeout=0, locate=locator("192.168.68.21")
+    )
+    caster.device_name()
+
+    caster.play("http://x/1.wav")
+
+    assert moved.media_controller.played == [("http://x/1.wav", "audio/wav")]
+    assert len(discover.calls) == 2
+
+
+class FakeBrowser:
+    def __init__(self, devices):
+        self.devices = devices
+
+
+def test_host_of_reads_the_browser():
+    discovery = _Discovery()
+    info = type("CastInfo", (), {"host": "192.168.68.21"})()
+    discovery._browser = FakeBrowser({DEVICE_UUID: info})
+
+    assert discovery.host_of(DEVICE_UUID) == "192.168.68.21"
+    assert discovery.host_of(OTHER_UUID) is None
+
+
+def test_host_of_without_browser_is_unknown():
+    assert _Discovery().host_of(DEVICE_UUID) is None
