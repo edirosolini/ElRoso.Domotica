@@ -133,8 +133,10 @@ un despliegue nuevo no necesita migración.
 - **Open-Meteo** para el clima y la calidad del aire: sin cuenta, sin API key.
 - **icalendar** y **recurring-ical-events** para leer Google Calendar.
 - **argentinadatos** para los feriados, igual que para la inflación: sin cuenta, sin API key.
-- Servicios externos consultados: Telegram, Open-Meteo, Google Calendar (iCal), YouVersion,
-  argentinadatos y **Seq** (este último por el túnel WireGuard, no por internet).
+- Servicios externos consultados: Telegram, Open-Meteo (clima y calidad del aire), Google
+  Calendar (iCal), YouVersion, argentinadatos, dolarapi, los RSS de noticias, la API de Google
+  para el modelo (pulido, router, preguntas, corrección, traducción y transcripción) y **Seq** (este último
+  por el túnel WireGuard, no por internet).
 - La **API del Proxmox** de casa, por la LAN, con un token de solo lectura. Ver
   **Salud del Proxmox**.
 - **pychromecast** — control del parlante.
@@ -169,8 +171,9 @@ y `StubRegistry`; agregar un campo a `Config` se arregla en un solo lugar.
 
 🔴 **Lo que se importa en `src/` va en `requirements.txt`, aunque ande sin declararlo.**
 `requests` andaba en el contenedor sin estar declarado: lo arrastraba `casttube`, que es
-dependencia de pychromecast. Los cinco módulos que lo usan —clima, agenda, monitor, Seq y
-pulido— lo importan **adentro de la función**, así que el día que esa cadena cambie no falla
+dependencia de pychromecast. Los once módulos que lo usan —clima, aire, agenda, economía,
+feriados, noticias, versículo, pulido, monitor, Seq y Proxmox— lo importan **adentro de la
+función**, así que el día que esa cadena cambie no falla
 el arranque: falla el primer comando que alguien use, de a uno.
 `tests/test_requirements_declared.py` lo sostiene.
 
@@ -276,9 +279,10 @@ marca— con una diferencia:
   (`DAY_ALERT_FROM` / `DAY_ALERT_TO`, de 7 a 11). Son sobre el día entero: a las cuatro de
   la mañana la máxima no le sirve a nadie, y en horario de descanso terminaría en el chat,
   que es donde un aviso se vuelve ruido. El viento y la tormenta son sobre las próximas horas y salen cuando se ven.
-- **Un solo pedido contesta las cuatro reglas.** `hours_ahead()` devuelve la ventana con
-  lluvia, ráfaga y código de cielo juntos; pedir el pronóstico una vez por regla sería pegarle
-  cuatro veces a un servicio que nos deja entrar gratis.
+- **Un solo pedido contesta las dos reglas de las próximas horas.** `hours_ahead()` devuelve
+  la ventana con lluvia, ráfaga y código de cielo juntos, y de ahí salen el viento y la
+  tormenta; pedir el pronóstico una vez por regla sería pegarle de más a un servicio que nos
+  deja entrar gratis. La lluvia va por `RainWatcher`, con su propio pedido.
 - **El ultravioleta viaja en el pedido diario del calor y el frío**: `day_ahead()` devuelve
   `DayAhead(maximum, minimum, uv)`. Con las tres marcas de hoy puestas no se pide nada. Sin
   `uv_index_max` legible, `uv` es `None` y el calor y el frío siguen andando.
@@ -2155,7 +2159,9 @@ abajo en ese orden a propósito.
 
 ## Convenciones
 
-- Mensajes al usuario del bot en **español**. Identificadores y logs en **inglés**.
+- Mensajes al usuario del bot en **español**. Identificadores en **inglés**.
+- **Los logs van en español**, decisión del dueño del 2026-10-15. Hay logs viejos en inglés:
+  no se traducen de oficio, se emparejan cuando se toca el archivo.
 - 🔴 **Los comentarios y docstrings van en español**, todos. Antes decían inglés y el código
   terminó con 437 en inglés y 47 en español, varios archivos mezclando los dos adentro.
 - Los tests no tocan hardware real: se mockea `pychromecast` y el subproceso de Piper.
