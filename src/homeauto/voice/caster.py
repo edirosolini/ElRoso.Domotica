@@ -325,7 +325,14 @@ class Caster:
         self._perform(lambda device: device.set_volume(percent / 100))
 
     def stop(self) -> None:
-        self._perform(lambda device: device.media_controller.stop())
+        """Corta el audio en curso; sin audio sonando no hace nada."""
+        def halt(device) -> None:
+            controller = device.media_controller
+            state = getattr(getattr(controller, "status", None), "player_state", None)
+            if state in ("PLAYING", "BUFFERING", "PAUSED"):
+                controller.stop()
+
+        self._perform(halt)
 
     def turn_off(self) -> None:
         """Cierra la app que esté corriendo y deja el equipo en reposo.
