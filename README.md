@@ -17,6 +17,7 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /alarma 7:30 arriba             para despertarse, una vez
 /alarma diaria 7:30 arriba      para despertarse, todos los días
 /alarma lun-vie 5:30 arriba     para despertarse, solo esos días
+/alarma hábiles 6:30 arriba     de lunes a viernes, salvo feriados
 /alarma mensual 10 9:00 luz     el 10 de cada mes
 /lista                          lo que está programado
 /cancelar 3                     cancela por número
@@ -53,8 +54,8 @@ si está callado y hasta cuándo; `/hablar` lo cancela. Se guarda en SQLite, as�
 reinicio en medio de la siesta no devuelve la casa hablando.
 
 **Resumen de la mañana.** A la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga) dice
-de una vez lo que hay para el día: la agenda, el clima, la economía, qué servicios vigilados no
-responden, los errores de la noche y, al final, el versículo del día. Los titulares van solo
+de una vez lo que hay para el día: si es feriado, la agenda, el clima, la economía, qué
+servicios vigilados no responden, los errores de la noche y, al final, el versículo del día. Los titulares van solo
 al chat. Si todo está en orden no nombra ningún servicio. No hace falta tener agenda
 configurada: con el clima solo ya sirve, y una fuente que falla no se lleva puestas a las
 otras. El detalle está en [El resumen de la mañana](#el-resumen-de-la-mañana).
@@ -68,8 +69,8 @@ en el chat, sin voz.
 apaga) escribe a todos los chats el balance de los últimos siete días: cuántos días se marcó
 «Hecho» cada recordatorio (`la pastilla: 5 de 7`, sumando lo pospuesto), las alarmas que
 sonaron hasta el final sin que nadie las apagara y lo que no salió por el parlante. Los
-timers no entran. Solo va al chat, nunca por el parlante, y una semana sin nada que contar
-no manda nada.
+timers no entran, y lo que no sonó por un feriado tampoco. Solo va al chat, nunca por el
+parlante, y una semana sin nada que contar no manda nada.
 
 **Cuentas y unidades.** `/calcular 15 por 4` hace la cuenta y `/calcular 20 grados en
 fahrenheit` convierte. No pasa por ningún modelo: el número sale exacto y, si entra en el
@@ -145,9 +146,20 @@ Formatos de tiempo aceptados: `10m`, `5min`, `2h`, `90s`, `1h30m`, `23:15`, `5.3
 
 Una alarma o un recordatorio puede repetirse los días que se le pidan, escribiéndolos antes de la hora:
 rangos (`lun-vie`, `vie-lun` cruza el fin de semana), listas (`mar,jue`), un día suelto
-(`sab`) o los atajos `finde` y `habiles`. Se aceptan nombres completos y con acento
+(`sab`) o los atajos `finde`, `semana` y `hábiles`. Se aceptan nombres completos y con acento
 (`miércoles`). Los días eligen qué ocurrencia de la hora dispara, así que ahí la hora es
 obligatoria: `/alarma lun-vie 10m` no tiene sentido y se rechaza.
+
+**Feriados.** `hábiles` (o `habiles`) es de lunes a viernes **y además no suena en
+feriados**: `/alarma hábiles 6:30 arriba`, `/recordar hábiles 7:00 salida al colegio`.
+`lun-vie` y `semana` suenan igual en un feriado. Ese día el bot no dice nada y escribe a
+todos «🏖 Feriado (<nombre>): hoy no suena «arriba»»; al día siguiente vuelve a
+su horario. Cuentan los feriados nacionales inamovibles y trasladables; un día puente
+suena. Salen de argentinadatos, sin cuenta ni API key: se
+bajan al arrancar y todos los días a las 4 de la mañana, y desde noviembre también los del
+año siguiente. Si no se pueden bajar se usan los últimos que se bajaron, y si nunca se
+bajaron, todo suena. Solo aplica a lo que repite por días de la semana; las alarmas y
+recordatorios que ya existían no cambian.
 
 Para una vez por mes, `mensual` y el día del mes antes de la hora:
 `/recordar mensual 10 9:00 pagar la luz`. La hora también es obligatoria. Si el mes no tiene
@@ -167,6 +179,7 @@ poneme un timer de 10 minutos para la pizza  →  /timer 10m sacar la pizza
 despertame a las 7 y media                →  /alarma 7:30 despertame
 recordame la pastilla todos los días a las 8  →  /recordar diaria 8:00 la pastilla
 recordame el 10 de cada mes a las nueve pagar la luz  →  /recordar mensual 10 9:00 pagar la luz
+recordame los días hábiles a las siete salida al colegio  →  /recordar hábiles 7:00 salida al colegio
 bajá el volumen a 40                      →  /volumen 40
 callate una hora                          →  /silencio 1h
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
@@ -309,9 +322,10 @@ original: nadie se queda sin aviso porque el modelo estaba lento.
 
 ## El resumen de la mañana
 
-A la hora de `BRIEFING_AT` la casa dice, en un solo texto: qué hay en la agenda, cómo está el
-cielo, los tres números de la economía, qué servicios están caídos, los errores de Seq de las
-últimas doce horas, los titulares del día y, al final, el versículo del día. Los servicios
+A la hora de `BRIEFING_AT` la casa dice, en un solo texto: si hoy es feriado y por qué, qué
+hay en la agenda, cómo está el cielo, los tres números de la economía, qué servicios están
+caídos, los errores de Seq de las últimas doce horas, los titulares del día y, al final, el
+versículo del día. Los servicios
 caídos y los errores de la noche solo se escriben a los chats de `ALERT_CHAT_IDS`; el
 parlante los dice igual.
 
@@ -334,6 +348,11 @@ versículo catorce"— y el texto tal cual. Sin cuenta ni API key. Si el texto t
 no se dice: queda escrito en el chat.
 
 De la agenda, el resumen dice la hora y el título; el lugar queda para `/agenda`.
+
+**Feriado**: arranca con «Hoy es feriado: <motivo>.», con el nombre como lo publica
+argentinadatos. Dicho, las abreviaturas van enteras («Gral.» es «General») y un número
+romano después de un nombre va en palabras («León XIV» es «León catorce»); si aun así
+quedara un número, dice solo «Hoy es feriado.». Un día puente es «Hoy es día no laborable.».
 
 ## Avisos del cielo
 
@@ -475,7 +494,8 @@ se ve, las flechas, «Hoy» y las vistas Mes, Semana, Día y Lista. Cada evento 
 color suave: las alarmas (⏰), los recordatorios (📌) y los timers (⏲️) tienen su color; cada
 calendario de Google, el suyo, con la leyenda arriba. Lo que ya sonó dice cómo terminó: ✅ y
 quién lo marcó, 🔔 los re-avisos o las repeticiones, 💤 pospuesto, ✖️ cancelado, 🔕 apagada y
-quién, ⚠️ no sonó. Lo que viene se
+quién, ⚠️ no sonó, 🏖 feriado. Los feriados aparecen como eventos de todo el día, y lo que
+un feriado va a saltear dice «🏖 feriado, no suena». Lo que viene se
 calcula igual que cuando suena. Un toque sobre un evento muestra el detalle. Si un calendario
 no se pudo leer, lo dice arriba por su nombre. En una computadora el mes entra entero en la
 ventana y cada día muestra lo que cabe; en el teléfono, hasta cinco eventos por día. El resto
@@ -487,8 +507,8 @@ recargar; lo nuevo de Google puede tardar hasta cinco minutos más.
 **Crear, editar y borrar desde la agenda.** Tocando un día, o con el botón «+ Nuevo aviso» de
 abajo a la derecha, se abre un panel: tipo (alarma, recordatorio o timer), mensaje, fecha y
 hora, repetición, equipo y a nombre de quién. Valen las mismas reglas que en Telegram: un
-timer suena una vez, un recordatorio repite, «Algunos días» pide los días y «Todos los meses»
-repite el día del mes de la fecha elegida. Tocando un aviso de
+timer suena una vez, un recordatorio repite, «Algunos días» pide los días —y ofrece la casilla
+«No suena en feriados»— y «Todos los meses» repite el día del mes de la fecha elegida. Tocando un aviso de
 la casa que todavía no sonó aparecen «Editar» y «Borrar»; si repite, se edita o se borra la
 serie entera, y el autor no cambia; borrar pide confirmación. Lo de Google Calendar y lo que
 ya sonó son solo para mirar.
