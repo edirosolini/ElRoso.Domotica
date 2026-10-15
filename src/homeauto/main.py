@@ -72,9 +72,11 @@ from homeauto.voice.tts import (
     PiperRunner,
     VoiceSynth,
 )
+from homeauto.watch.checks import Check
 from homeauto.watch.loading import ChecksError, load_checks
 from homeauto.watch.marks import Marks
 from homeauto.watch.monitor import Monitor
+from homeauto.watch.proxmox import ProxmoxClient, proxmox_checks
 from homeauto.watch.seq import SeqClient
 from homeauto.watch.seq_watcher import SeqWatcher
 from homeauto.watch.status import StatusStore
@@ -416,9 +418,10 @@ def _monitor_actions(name: str = "") -> tuple[tuple[str, str], ...]:
     return confirm + MONITOR_ACTIONS
 
 
-def _still_down(house: HouseVoice, text: str, name: str, detail: str = "") -> None:
+def _still_down(house: HouseVoice, text: str, name: str, detail: str = "", still: str = "") -> None:
     """Re-avisa una caída sin confirmar: suena como lo urgente pero nunca despierta."""
-    written = f"🚨 Sigue caído: {name}"
+    heading = "Sigue caído" if still in ("", Check.still) else still[:1].upper() + still[1:]
+    written = f"🚨 {heading}: {name}"
     if detail:
         written = f"{written}\n{detail}"
     actions = _monitor_actions(name)
@@ -912,6 +915,11 @@ def main() -> None:
         # is worse than no monitor.
         log.error("no pude leer %s: %s", config.checks_file, exc)
         raise
+    if config.pve_enabled:
+        checks += proxmox_checks(
+            ProxmoxClient(config.pve_url, config.pve_token, config.pve_ca_file),
+            config.pve_disk_alert,
+        )
     if checks:
         monitor = Monitor(
             checks=checks,
@@ -920,7 +928,9 @@ def main() -> None:
                 house, text, urgent, detail, _monitor_actions(check)
             ),
             polish=polish,
-            remind=lambda text, name, detail="": _still_down(house, text, name, detail),
+            remind=lambda text, name, detail="": _still_down(
+                house, text, name, detail, next(c.still for c in checks if c.name == name)
+            ),
             tell_others=lambda chat_id, text: _tell_alert_chats(
                 notifier, config.alert_recipients, chat_id, text
             ),

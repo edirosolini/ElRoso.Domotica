@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
-from homeauto.watch.checks import Check, CheckResult
-from homeauto.watch.monitor import Monitor
+from homeauto.watch.checks import Check, CheckResult, ProbeSkipped
+from homeauto.watch.monitor import Monitor, down_line
 from homeauto.watch.status import Status, StatusStore
 
 NOW = datetime(2026, 8, 30, 10, 0)
@@ -453,3 +453,193 @@ def test_without_internet_a_declared_outage_is_not_reminded(tmp_path):
     watch.minutes(30)
 
     assert watch.reminded == []
+
+
+# --- la redacción de cada chequeo ---------------------------------------------
+
+DISK = Check(
+    name="el disco del proxmox",
+    probe=lambda check: (True, ""),
+    down="está casi lleno",
+    up="volvió a tener lugar",
+    still="sigue casi lleno",
+    remind=False,
+)
+MACHINES = Check(
+    name="las máquinas del proxmox",
+    probe=lambda check: (True, ""),
+    down="no están todas en marcha",
+    up="volvieron a estar todas en marcha",
+    still="siguen sin estar todas en marcha",
+)
+
+
+def test_the_existing_checks_keep_their_wording(tmp_path):
+    watch, _ = declared(tmp_path)
+    watch.minutes(5)
+    reply = watch.monitor.acknowledge("landing", "Eze", 42)
+    watch.rounds["landing"] = [True]
+    watch.minutes(1)
+
+    assert watch.said[0][0] == "Atención: landing no responde."
+    assert watch.reminded[0][1] == "Atención: landing sigue sin responder."
+    assert reply == "✅ Confirmado: landing no responde. No vuelvo a avisar hasta que vuelva."
+    assert watch.others == [(42, "✅ Eze confirmó: landing no responde")]
+    assert watch.said[1][0] == "landing volvió a responder."
+    assert watch.monitor.acknowledge("landing", "Eze", 42) == "landing ya volvió a responder."
+
+
+def test_a_check_says_its_own_wording(tmp_path):
+    name = "las máquinas del proxmox"
+    watch, _ = declared(tmp_path, checks=(MACHINES,), name=name)
+    watch.minutes(5)
+    reply = watch.monitor.acknowledge(name, "Eze", 42)
+    watch.rounds[name] = [True]
+    watch.minutes(1)
+
+    assert watch.said[0][0] == f"Atención: {name} no están todas en marcha."
+    assert watch.reminded[0][1] == f"Atención: {name} siguen sin estar todas en marcha."
+    assert reply.startswith(f"✅ Confirmado: {name} no están todas en marcha.")
+    assert watch.others == [(42, f"✅ Eze confirmó: {name} no están todas en marcha")]
+    assert watch.said[1][0] == f"{name} volvieron a estar todas en marcha."
+    assert watch.monitor.acknowledge(name, "Eze", 42) == (
+        f"{name} ya volvieron a estar todas en marcha."
+    )
+
+
+def test_a_check_without_reminders_says_it_once(tmp_path):
+    watch, _ = declared(tmp_path, checks=(DISK,), name="el disco del proxmox")
+
+    watch.minutes(80)
+
+    assert len(watch.said) == 1
+    assert watch.reminded == []
+
+
+def test_the_down_line_keeps_the_wording_of_a_service(tmp_path):
+    monitor, _ = build(tmp_path, [LANDING], {"landing": [False]})
+    monitor.run_once()
+
+    assert down_line(monitor) == "Ojo: landing no responde."
+
+
+def test_the_down_line_keeps_the_wording_of_several_services(tmp_path):
+    monitor, _ = build(
+        tmp_path, [LANDING, FACTURADOR], {"landing": [False], "facturador": [False]}
+    )
+    monitor.run_once()
+
+    assert down_line(monitor) == "Ojo: no responden facturador ni landing."
+
+
+def test_the_down_line_says_each_check_its_own_way(tmp_path):
+    monitor, _ = build(
+        tmp_path, [LANDING, DISK], {"landing": [False], "el disco del proxmox": [False]}
+    )
+    monitor.run_once()
+
+    assert down_line(monitor) == "Ojo: landing no responde, y el disco del proxmox está casi lleno."
+
+
+def test_the_down_line_only_about_a_check_with_its_wording(tmp_path):
+    monitor, _ = build(tmp_path, [DISK], {"el disco del proxmox": [False]})
+    monitor.run_once()
+
+    assert down_line(monitor) == "Ojo: el disco del proxmox está casi lleno."
+
+
+def test_the_down_line_without_the_checks_still_works():
+    """El resumen recibe dobles que solo saben del estado."""
+
+    class Bare:
+        def snapshot(self):
+            return {"landing": Status("landing", False, 2, True, "x", NOW)}
+
+    assert down_line(Bare()) == "Ojo: landing no responde."
+
+
+# --- una sonda que recuerda lo guardado ----------------------------------------
+
+
+class RememberingProbe:
+    def __init__(self):
+        self.restored = []
+
+    def restore(self, state):
+        self.restored.append(state)
+
+    def __call__(self, check):
+        return True, "ok"
+
+
+def test_a_probe_that_remembers_gets_the_saved_state_before_running(tmp_path):
+    store = StatusStore(tmp_path / "jobs.db")
+    saved = Status("disco", False, 2, True, "lleno", NOW)
+    store.save(saved)
+    remembering = RememberingProbe()
+    monitor = Monitor(
+        checks=[Check(name="disco", probe=remembering, attempts=1)],
+        store=store,
+        announce=lambda *a, **k: None,
+        clock=lambda: NOW,
+    )
+
+    monitor.run_once()
+
+    assert [state.up for state in remembering.restored] == [False]
+    assert remembering.restored[0].detail == "lleno"
+
+
+def test_a_probe_without_memory_is_left_alone(tmp_path):
+    monitor, said = build(tmp_path, [LANDING], {"landing": [True]})
+
+    monitor.run_once()
+
+    assert said == []
+
+
+# --- una sonda sin dato --------------------------------------------------------
+
+
+def test_a_skipped_probe_moves_nothing(tmp_path):
+    calls = []
+
+    def runner(check, http, tcp, pause=0):
+        calls.append(check.name)
+        if len(calls) == 2:
+            raise ProbeSkipped("la API no contestó")
+        return CheckResult(check.name, False, "lleno", check.urgent, check.target)
+
+    said = []
+    monitor = Monitor(
+        checks=[DISK],
+        store=StatusStore(tmp_path / "jobs.db"),
+        announce=lambda text, urgent, detail="", check="": said.append(text),
+        run=runner,
+        clock=lambda: NOW,
+    )
+
+    monitor.run_once()
+    before = monitor.store.get("el disco del proxmox")
+    monitor.run_once()
+    after = monitor.store.get("el disco del proxmox")
+
+    assert said == []
+    assert before.failures == after.failures == 1
+
+    monitor.run_once()
+    assert len(said) == 1, "la vuelta salteada no cuenta, la siguiente sí"
+
+
+def test_a_skipped_probe_on_a_declared_outage_neither_recovers_nor_reminds(tmp_path):
+    watch, _ = declared(tmp_path)
+
+    def skipped(check, http, tcp, pause=0):
+        raise ProbeSkipped("sin datos")
+
+    watch.monitor.run = skipped
+    watch.minutes(20)
+
+    assert len(watch.said) == 1
+    assert watch.reminded == []
+    assert watch.monitor.store.get("landing").up is False

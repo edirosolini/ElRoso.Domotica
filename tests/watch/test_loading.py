@@ -92,3 +92,11 @@ def test_an_unknown_field_is_rejected_instead_of_ignored(tmp_path):
 
     with pytest.raises(ChecksError, match="urgnet"):
         load_checks(path)
+
+
+@pytest.mark.parametrize("field", ["probe", "remind", "down", "up", "still"])
+def test_the_probe_and_the_wording_cannot_come_from_the_file(tmp_path, field):
+    path = write(tmp_path, [{"name": "landing", "url": "https://a", field: "x"}])
+
+    with pytest.raises(ChecksError, match=f"desconocidos: {field}"):
+        load_checks(path)

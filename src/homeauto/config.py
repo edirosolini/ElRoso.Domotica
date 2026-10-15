@@ -68,6 +68,13 @@ SEQ_KEY_PREFIX = "SEQ_API_KEY_"
 # bajo se acepta y al hablar se dice como espacio.
 SEQ_ALIAS_SHAPE = re.compile(r"^[a-záéíóúñ]+(?:_[a-záéíóúñ]+)*$")
 
+# Proxmox: la API del host, de solo lectura. Sin URL, apagado.
+DEFAULT_PVE_DISK_ALERT = 85
+# usuario@realm!id=secreto, con el secreto en forma de UUID.
+PVE_TOKEN_SHAPE = re.compile(
+    r"^[\w.-]+@[\w.-]+![\w.-]+=[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$"
+)
+
 # Pulido de la redacción con un LLM. Sin clave, apagado: la casa habla igual.
 DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
 # Preguntar no es pulir: pide un modelo que busque de verdad, no el barato.
@@ -284,6 +291,39 @@ def _parse_seq(pairs: dict[str, str]) -> tuple["SeqInstance", ...]:
     return tuple(instances)
 
 
+def _parse_pve(pairs: dict[str, str]) -> tuple[str, str, str, int]:
+    """URL, token, CA y umbral de disco del Proxmox; todo vacío si no se vigila."""
+    url = pairs.get("PVE_URL", "").strip().rstrip("/")
+    token = pairs.get("PVE_TOKEN", "").strip()
+    if not url and not token:
+        return "", "", "", DEFAULT_PVE_DISK_ALERT
+    if not url:
+        raise ConfigError("Falta PVE_URL para el PVE_TOKEN")
+    if not token:
+        raise ConfigError("Falta PVE_TOKEN para el PVE_URL")
+    if not url.startswith("https://"):
+        raise ConfigError("PVE_URL tiene que empezar con https://")
+    if not PVE_TOKEN_SHAPE.fullmatch(token):
+        raise ConfigError("PVE_TOKEN no tiene la forma usuario@realm!id=secreto")
+
+    ca_file = pairs.get("PVE_CA_FILE", "").strip()
+    if not ca_file:
+        raise ConfigError("Falta PVE_CA_FILE para el PVE_URL: el certificado del Proxmox es propio")
+    if not Path(ca_file).is_file():
+        raise ConfigError(f"PVE_CA_FILE no existe: {ca_file}")
+
+    raw = pairs.get("PVE_DISK_ALERT", "").strip()
+    if not raw:
+        return url, token, ca_file, DEFAULT_PVE_DISK_ALERT
+    try:
+        percent = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"PVE_DISK_ALERT no es un número: {raw}") from exc
+    if not 1 <= percent <= 99:
+        raise ConfigError(f"PVE_DISK_ALERT fuera de rango (1 a 99): {percent}")
+    return url, token, ca_file, percent
+
+
 def _parse_seq_cooldown(pairs: dict[str, str]) -> int:
     raw = pairs.get("SEQ_COOLDOWN_MINUTES", "").strip()
     if not raw:
@@ -397,6 +437,10 @@ class Config:
     check_interval: int = DEFAULT_CHECK_INTERVAL
     seq_instances: tuple[SeqInstance, ...] = ()
     seq_cooldown: int = DEFAULT_SEQ_COOLDOWN
+    pve_url: str = ""
+    pve_token: str = field(default="", repr=False)
+    pve_ca_file: str = ""
+    pve_disk_alert: int = DEFAULT_PVE_DISK_ALERT
     llm_api_key: str = ""
     llm_model: str = DEFAULT_LLM_MODEL
     # Nunca hereda de LLM_MODEL: el modelo barato no busca de forma confiable.
@@ -439,6 +483,7 @@ class Config:
             raise ConfigError(f"CAST_DEFAULT apunta a '{default}', que no está en CAST_DEVICES")
 
         allowed = _parse_chat_ids(pairs.get("ALLOWED_CHAT_IDS", ""))
+        pve_url, pve_token, pve_ca_file, pve_disk_alert = _parse_pve(pairs)
         return cls(
             telegram_token=token,
             devices=devices,
@@ -460,6 +505,10 @@ class Config:
             check_interval=_parse_interval(pairs),
             seq_instances=_parse_seq(pairs),
             seq_cooldown=_parse_seq_cooldown(pairs),
+            pve_url=pve_url,
+            pve_token=pve_token,
+            pve_ca_file=pve_ca_file,
+            pve_disk_alert=pve_disk_alert,
             llm_api_key=pairs.get("LLM_API_KEY", "").strip(),
             llm_model=pairs.get("LLM_MODEL", "").strip() or DEFAULT_LLM_MODEL,
             ask_model=pairs.get("ASK_MODEL", "").strip() or DEFAULT_ASK_MODEL,
@@ -502,6 +551,10 @@ class Config:
     @property
     def seq_enabled(self) -> bool:
         return bool(self.seq_instances)
+
+    @property
+    def pve_enabled(self) -> bool:
+        return bool(self.pve_url)
 
     def has_device(self, alias: str) -> bool:
         return alias.strip().lower() in self.devices

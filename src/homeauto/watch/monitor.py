@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Callable
 
 from homeauto.polish import as_is
-from homeauto.watch.checks import Check, HttpProbe, TcpProbe, run_check
+from homeauto.watch.checks import Check, HttpProbe, ProbeSkipped, TcpProbe, run_check
 from homeauto.watch.status import Status, StatusStore
 
 log = logging.getLogger(__name__)
@@ -30,11 +30,15 @@ def down_line(monitor, polish: Callable[..., str] = as_is) -> str:
     down = sorted(name for name, state in monitor.snapshot().items() if not state.up)
     if not down:
         return ""
-    if len(down) == 1:
-        text = f"Ojo: {down[0]} no responde."
-    else:
-        text = f"Ojo: no responden {', '.join(down[:-1])} ni {down[-1]}."
-    return polish(text, must_keep=tuple(down))
+    wording = {check.name: check.down for check in getattr(monitor, "checks", ())}
+    plain = [name for name in down if wording.get(name, Check.down) == Check.down]
+    clauses = [f"{name} {wording[name]}" for name in down if name not in plain]
+    if len(plain) == 1:
+        clauses.insert(0, f"{plain[0]} {Check.down}")
+    elif plain:
+        clauses.insert(0, f"no responden {', '.join(plain[:-1])} ni {plain[-1]}")
+    text = clauses[0] if len(clauses) == 1 else f"{', '.join(clauses[:-1])}, y {clauses[-1]}"
+    return polish(f"Ojo: {text}.", must_keep=tuple(down))
 
 
 class Monitor:
@@ -84,13 +88,20 @@ class Monitor:
         announced = []
 
         for check in self.checks:
+            previous = self.store.get(check.name)
+            # Una sonda con memoria arranca sabiendo lo último guardado.
+            restore = getattr(check.probe, "restore", None)
+            if restore is not None:
+                restore(previous)
             try:
                 result = self.run(check, http=self.http, tcp=self.tcp)
+            except ProbeSkipped as exc:
+                log.info("skipping %s this round: %s", check.name, exc)
+                continue
             except Exception:  # noqa: BLE001 - el loop no puede morirse por un chequeo
                 log.exception("falló el chequeo de %s", check.name)
                 continue
 
-            previous = self.store.get(check.name)
             message = self._advance(check, result, previous, now)
             if message:
                 announced.append(message)
@@ -110,7 +121,7 @@ class Monitor:
             # Solo vale contarlo si alguien se enteró de la caída.
             message = None
             if was_alerted:
-                message = self._say(f"{check.name} volvió a responder.", check.name)
+                message = self._say(f"{check.name} {check.up}.", check.name)
                 self.announce(message, False, result.detail)
             self.store.save(Status(check.name, True, 0, False, result.detail, now))
             self.store.clear_alert(check.name)
@@ -122,12 +133,12 @@ class Monitor:
             self.store.clear_alert(check.name)
             self.store.save(Status(check.name, False, failures, True, result.detail, now))
             self.store.plan_reminder(check.name, 0, now + REMIND_DELAYS[0])
-            message = self._say(f"Atención: {check.name} no responde.", check.name)
+            message = self._say(f"Atención: {check.name} {check.down}.", check.name)
             self.announce(message, result.urgent, result.detail, check=check.name)
             return message
 
         self.store.save(Status(check.name, False, failures, was_alerted, result.detail, now))
-        if was_alerted and self._reminder_due(previous, now):
+        if was_alerted and check.remind and self._reminder_due(previous, now):
             return self._remind(check, previous.reminders + 1, result.detail, now)
         return None
 
@@ -143,21 +154,22 @@ class Monitor:
     def _remind(self, check: Check, count: int, detail: str, now: datetime) -> str:
         """Re-avisa la caída y agenda el re-aviso siguiente."""
         self.store.plan_reminder(check.name, count, now + _gap(count))
-        message = self._say(f"Atención: {check.name} sigue sin responder.", check.name)
+        message = self._say(f"Atención: {check.name} {check.still}.", check.name)
         self.remind(message, check.name, detail)
         return message
 
     def acknowledge(self, name: str, who: str, chat_id: int) -> str:
         """Confirma la caída de `name` a nombre de `who` y avisa a los otros chats de alertas."""
-        if name not in {check.name for check in self.checks}:
+        check = next((check for check in self.checks if check.name == name), None)
+        if check is None:
             return f"No vigilo nada llamado {name}."
         if self.store.acknowledge(name, who, self.clock()):
             if self.tell_others is not None:
-                self.tell_others(chat_id, f"✅ {who} confirmó: {name} no responde")
-            return f"✅ Confirmado: {name} no responde. No vuelvo a avisar hasta que vuelva."
+                self.tell_others(chat_id, f"✅ {who} confirmó: {name} {check.down}")
+            return f"✅ Confirmado: {name} {check.down}. No vuelvo a avisar hasta que vuelva."
         state = self.store.get(name)
         if state is None or state.up or not state.alerted:
-            return f"{name} ya volvió a responder."
+            return f"{name} ya {check.up}."
         return f"La caída de {name} ya estaba confirmada por {state.acked_by}."
 
 
