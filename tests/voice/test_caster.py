@@ -526,3 +526,132 @@ def test_host_of_reads_the_browser():
 
 def test_host_of_without_browser_is_unknown():
     assert _Discovery().host_of(DEVICE_UUID) is None
+
+
+# --- un solo zeroconf para todo el proceso -----------------------------------
+
+
+class FakeZeroconf:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class FakeCastBrowser:
+    """Como el CastBrowser de pychromecast: parar el descubrimiento cierra su zeroconf."""
+
+    def __init__(self, devices, zc):
+        self.devices = devices
+        self.zc = zc
+        self.stopped = 0
+
+    def stop_discovery(self):
+        self.stopped += 1
+        self.zc.close()
+
+
+def cast_info(device_uuid, name, host):
+    return type("CastInfo", (), {"uuid": device_uuid, "friendly_name": name, "host": host})()
+
+
+def shared_discovery(devices, sleep=None):
+    """Un `_Discovery` con browser y equipos falsos; anota cada browser arrancado."""
+    started = []
+
+    def start():
+        browser = FakeCastBrowser(devices, FakeZeroconf())
+        started.append(browser)
+        return browser
+
+    def build(info, zconf, timeout=None):
+        device = FakeDevice(info.uuid, info.friendly_name, host=info.host)
+        device.zconf = zconf
+        return device
+
+    discovery = _Discovery(start=start, build=build, sleep=sleep or (lambda _seconds: None))
+    discovery.started = started
+    return discovery
+
+
+def test_a_second_caster_does_not_close_the_zeroconf_of_the_first():
+    devices = {
+        DEVICE_UUID: cast_info(DEVICE_UUID, "Habitación", "192.168.68.30"),
+        OTHER_UUID: cast_info(OTHER_UUID, "Comedor", "192.168.68.31"),
+    }
+    discovery = shared_discovery(devices)
+    first = Caster(DEVICE_UUID, discovery=discovery, discovery_timeout=0)
+    second = Caster(OTHER_UUID, discovery=discovery, discovery_timeout=0)
+
+    first.device_name()
+    second.device_name()
+
+    assert not first._device.zconf.closed
+    assert first._device.zconf is second._device.zconf
+    assert len(discovery.started) == 1
+    assert discovery.started[0].stopped == 0
+
+
+def test_looking_a_device_up_again_reuses_the_browser():
+    devices = {DEVICE_UUID: cast_info(DEVICE_UUID, "Nest", "192.168.68.22")}
+    discovery = shared_discovery(devices)
+    caster = Caster(DEVICE_UUID, discovery=discovery, discovery_timeout=0)
+    caster.device_name()
+    old = caster._device
+
+    devices[DEVICE_UUID] = cast_info(DEVICE_UUID, "Nest", "192.168.68.21")
+    caster.forget()
+    caster.device_name()
+
+    assert old.disconnects == [0]
+    assert caster._device.socket_client.host == "192.168.68.21"
+    assert caster._device.zconf is old.zconf and not old.zconf.closed
+    assert len(discovery.started) == 1
+
+
+def test_the_moved_check_reads_the_shared_browser():
+    devices = {DEVICE_UUID: cast_info(DEVICE_UUID, "Nest", "192.168.68.22")}
+    discovery = shared_discovery(devices)
+    caster = Caster(DEVICE_UUID, discovery=discovery, discovery_timeout=0)
+    caster.device_name()
+    stale = caster._device
+
+    devices[DEVICE_UUID] = cast_info(DEVICE_UUID, "Nest", "192.168.68.21")
+    caster.device_name()
+
+    assert stale.disconnects == [0]
+    assert caster._device.socket_client.host == "192.168.68.21"
+    assert len(discovery.started) == 1
+
+
+def test_discovery_waits_for_the_uuid_to_show_up():
+    devices = {}
+    waits = []
+
+    def sleep(seconds):
+        waits.append(seconds)
+        if len(waits) == 3:
+            devices[DEVICE_UUID] = cast_info(DEVICE_UUID, "Nest", "192.168.68.20")
+
+    discovery = shared_discovery(devices, sleep=sleep)
+    caster = Caster(DEVICE_UUID, discovery=discovery, discovery_timeout=20)
+
+    assert caster.device_name() == "Nest"
+    assert len(waits) == 3
+
+
+def test_a_device_that_never_shows_up_names_what_was_seen():
+    devices = {OTHER_UUID: cast_info(OTHER_UUID, "Comedor", "192.168.68.31")}
+    discovery = shared_discovery(devices)
+    caster = Caster(DEVICE_UUID, discovery=discovery, discovery_timeout=0)
+
+    with pytest.raises(CastError, match="No encontré el dispositivo .*Vi: Comedor"):
+        caster.device_name()
+
+
+def test_host_of_does_not_start_the_browser():
+    discovery = shared_discovery({DEVICE_UUID: cast_info(DEVICE_UUID, "Nest", "192.168.68.20")})
+
+    assert discovery.host_of(DEVICE_UUID) is None
+    assert discovery.started == []

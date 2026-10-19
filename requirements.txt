@@ -10,3 +10,4 @@ recurring-ical-events
 # pulido recién cuando alguien los usa.
 requests
 tzlocal
+zeroconf
