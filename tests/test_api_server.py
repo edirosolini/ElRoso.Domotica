@@ -248,11 +248,12 @@ def test_a_write_reaches_the_screen_with_its_headers_and_body(with_web, method):
     assert asked.headers["host"] == host
 
 
-def test_a_huge_write_to_the_screen_gets_413(with_web):
+@pytest.mark.parametrize("path", ["/api/jobs", "/api/command"])
+def test_a_huge_write_to_the_screen_gets_413(with_web, path):
     server, web = with_web
 
     request = urllib.request.Request(
-        f"http://127.0.0.1:{server.actual_port}/api/jobs", data=b"x" * (9 * 1024),
+        f"http://127.0.0.1:{server.actual_port}{path}", data=b"x" * (9 * 1024),
         headers={"Content-Type": "application/json"}, method="POST",
     )
     with pytest.raises(urllib.error.HTTPError) as caught:

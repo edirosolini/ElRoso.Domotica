@@ -84,6 +84,7 @@ from homeauto.watch.status import StatusStore
 from homeauto.watch.uplink import Uplink
 from homeauto.weather import RainWatcher, WeatherClient, WeatherWatcher
 from homeauto.web.app import WebApp
+from homeauto.web.control import ControlService
 from homeauto.web.board import Board
 from homeauto.web.jobs import JobsService
 
@@ -875,6 +876,8 @@ def main() -> None:
     holidays = HolidayStore(db_path)
     stock = StockStore(db_path)
     ringing = RingingStore(db_path)
+    fired = FiredStore(db_path)
+    awaiting = AwaitingStore(db_path)
     announcer = Announcer(
         speakers=speakers,
         notify=notifier,
@@ -890,8 +893,8 @@ def main() -> None:
         store=store,
         timer=timer,
         announce=announcer,
-        fired=FiredStore(db_path),
-        awaiting=AwaitingStore(db_path),
+        fired=fired,
+        awaiting=awaiting,
         history=history,
         ringing=ringing,
         stop_audio=announcer.stop,
@@ -1076,6 +1079,18 @@ def main() -> None:
                     people=people,
                     lists=ListStore(db_path),
                     notify=notifier,
+                    clock=datetime.now,
+                ),
+                control=ControlService(
+                    commands=commands,
+                    ringing=ringing,
+                    awaiting=awaiting,
+                    fired=fired,
+                    monitor=monitor,
+                    quiet=hush,
+                    people=people,
+                    alert_recipients=config.alert_recipients,
+                    chat_ids=config.allowed_chat_ids,
                     clock=datetime.now,
                 ),
             ),

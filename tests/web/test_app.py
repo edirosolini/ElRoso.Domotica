@@ -65,7 +65,7 @@ def body_json(response):
 # --- las páginas ---
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/agenda/", "/pantalla", "/alarma"])
+@pytest.mark.parametrize("path", ["/agenda", "/agenda/", "/pantalla", "/alarma", "/control"])
 def test_the_pages_answer_html_without_a_login(app, path):
     response = get(app, path)
 
@@ -235,7 +235,7 @@ def test_the_kiosk_crosses_items_out(app):
     assert "innerHTML" not in script
 
 
-@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js"])
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js", "control.js"])
 def test_our_scripts_stay_in_old_javascript(app, name):
     script = get(app, f"/static/{name}").body.decode("utf-8")
 
@@ -244,21 +244,21 @@ def test_our_scripts_stay_in_old_javascript(app, name):
     assert "innerHTML" not in script
 
 
-@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js"])
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js", "control.js"])
 def test_our_scripts_style_only_through_set_property(app, name):
     script = get(app, f"/static/{name}").body.decode("utf-8")
 
     assert script.count(".style.") == script.count(".style.setProperty(")
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma"])
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma", "/control"])
 def test_the_pages_have_no_inline_styles(app, path):
     page = get(app, path).body.decode("utf-8").lower()
 
     assert "style=" not in page and "<style" not in page
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma"])
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma", "/control"])
 def test_the_pages_have_no_inline_javascript(app, path):
     page = get(app, path).body.decode("utf-8").lower()
 
@@ -385,6 +385,10 @@ def test_the_board_feed_is_the_screen(app):
         ("app.js", "text/javascript"),
         ("kiosk.js", "text/javascript"),
         ("alarm.js", "text/javascript"),
+        ("control.js", "text/javascript"),
+        ("manifest.webmanifest", "application/manifest+json"),
+        ("icon-192.png", "image/png"),
+        ("icon-512.png", "image/png"),
         ("app.css", "text/css"),
         (f"{FULLCALENDAR}/index.global.min.js", "text/javascript"),
         (f"{FULLCALENDAR}/es.global.min.js", "text/javascript"),
@@ -400,7 +404,7 @@ def test_the_static_files_are_served(app, name, kind):
     assert "Cache-Control" in response.headers
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma"])
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla", "/alarma", "/control"])
 def test_the_pages_declare_both_color_schemes(app, path):
     page = get(app, path).body.decode()
 
@@ -784,3 +788,187 @@ def test_a_ringing_feed_that_breaks_gets_500_without_the_details():
 
     assert response.status == 500
     assert b"secreto" not in response.body
+
+
+# --- la pantalla de control ---
+
+
+class StubControl:
+    """Doble de ControlService: anota lo pedido y contesta o falla como el de verdad."""
+
+    def __init__(self, fail=None):
+        self.asked = []
+        self.fail = fail
+
+    def live(self, chat_id):
+        self.asked.append(("live", chat_id))
+        if self.fail:
+            raise self.fail
+        return {"now": "2026-10-19T12:00:00", "ringing": [], "awaiting": [], "snooze": None,
+                "outages": [], "quiet": {"quiet": False}, "status": []}
+
+    def run(self, payload):
+        self.asked.append(("run", payload))
+        if self.fail:
+            raise self.fail
+        return {"text": "<b>hecho</b>", "actions": [{"label": "Cancelar #7", "data": "borrar 7"}]}
+
+
+@pytest.fixture
+def control():
+    return StubControl()
+
+
+@pytest.fixture
+def controller(board, control):
+    return WebApp(board, control=control)
+
+
+def test_the_control_page_loads_its_script_and_its_manifest(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    assert 'src="/static/control.js"' in page
+    assert '<link rel="manifest" href="/static/manifest.webmanifest">' in page
+    assert '<meta name="theme-color"' in page
+    assert '<link rel="apple-touch-icon" href="/static/icon-192.png">' in page
+    assert "fullcalendar" not in page
+    for place in ("who", "urgent", "answer", "free-text", "devices"):
+        assert f'id="{place}"' in page, place
+    assert 'href="/agenda"' in page
+
+
+def test_the_manifest_opens_the_control_standalone_with_both_icons(app):
+    manifest = body_json(get(app, "/static/manifest.webmanifest"))
+
+    assert manifest["start_url"] == "/control"
+    assert manifest["display"] == "standalone"
+    assert sorted(icon["sizes"] for icon in manifest["icons"]) == ["192x192", "512x512"]
+    for icon in manifest["icons"]:
+        assert get(app, icon["src"]).status == 200, icon["src"]
+
+
+@pytest.mark.parametrize(("name", "side"), [("icon-192.png", 192), ("icon-512.png", 512)])
+def test_the_icons_are_pngs_of_their_size(app, name, side):
+    raw = get(app, f"/static/{name}").body
+
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n"
+    assert int.from_bytes(raw[16:20], "big") == side
+    assert int.from_bytes(raw[20:24], "big") == side
+
+
+@pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
+def test_the_agenda_and_the_kiosk_link_to_the_control(app, path):
+    assert 'href="/control"' in get(app, path).body.decode("utf-8")
+
+
+def test_the_control_script_uses_both_feeds_and_answers_as_text(app):
+    script = get(app, "/static/control.js").body.decode("utf-8")
+
+    assert "/api/live?chat=" in script and "/api/command" in script and "/api/people" in script
+    assert '"Content-Type": "application/json"' in script
+    assert "localStorage" in script
+    assert ".textContent = " in script
+    assert "Procesando" in script
+
+
+def test_the_answer_keeps_its_line_breaks(app):
+    css = get(app, "/static/app.css").body.decode()
+
+    assert "white-space: pre-line" in css
+
+
+def test_live_reads_for_the_chosen_chat(controller, control):
+    response = get(controller, "/api/live", chat="42")
+
+    assert response.status == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert body_json(response)["snooze"] is None
+    assert control.asked == [("live", 42)]
+
+
+@pytest.mark.parametrize("query", [{}, {"chat": ""}, {"chat": "abc"}, {"chat": "4.2"}])
+def test_live_without_a_chat_gets_400(controller, control, query):
+    assert get(controller, "/api/live", **query).status == 400
+    assert control.asked == []
+
+
+def test_live_for_a_chat_outside_the_house_gets_403(board):
+    response = get(WebApp(board, control=StubControl(fail=ReadOnly("Elegí quién sos."))),
+                   "/api/live", chat="99")
+
+    assert response.status == 403
+    assert body_json(response) == {"error": "Elegí quién sos."}
+
+
+def test_a_command_answers_its_text_and_buttons(controller, control):
+    response = send(controller, "POST", "/api/command", {"chat_id": 42, "data": "borrar 7"})
+
+    assert response.status == 200
+    assert body_json(response) == {
+        "text": "<b>hecho</b>", "actions": [{"label": "Cancelar #7", "data": "borrar 7"}]}
+    assert control.asked == [("run", {"chat_id": 42, "data": "borrar 7"})]
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [(WebError("Mandá un comando o un texto."), 400), (ReadOnly("Elegí quién sos."), 403)],
+)
+def test_the_command_refusals_keep_their_status_and_text(board, error, status):
+    response = send(WebApp(board, control=StubControl(fail=error)), "POST", "/api/command",
+                    {"chat_id": 42, "text": "hola"})
+
+    assert response.status == status
+    assert body_json(response) == {"error": str(error)}
+
+
+def test_a_control_that_breaks_gets_500_without_the_details(board):
+    app = WebApp(board, control=StubControl(fail=RuntimeError("jobs.db")))
+
+    for response in (get(app, "/api/live", chat="42"),
+                     send(app, "POST", "/api/command", {"chat_id": 42, "text": "hola"})):
+        assert response.status == 500
+        assert b"jobs.db" not in response.body
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Host": HOST, "Origin": f"http://{HOST}"},
+        {"Content-Type": "text/plain", "Host": HOST, "Origin": f"http://{HOST}"},
+        {"Content-Type": "application/json", "Host": HOST, "Origin": "https://malo.example"},
+        {"Content-Type": "application/json", "Origin": f"http://{HOST}"},
+    ],
+)
+def test_a_command_from_another_site_or_not_json_is_refused(controller, control, headers):
+    response = send(controller, "POST", "/api/command", {"chat_id": 42, "text": "hola"},
+                    headers=headers)
+
+    assert response.status in (403, 415)
+    assert control.asked == []
+
+
+@pytest.mark.parametrize("body", [b"", b"no es json", b"[1, 2]", b"\xff"])
+def test_a_command_that_is_not_a_json_object_gets_400(controller, control, body):
+    response = controller.handle(Request.from_target("POST", "/api/command",
+                                                     headers=JSON_HEADERS, body=body))
+
+    assert response.status == 400
+    assert control.asked == []
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "allow"),
+    [("GET", "/api/command", "POST"), ("PUT", "/api/command", "POST"),
+     ("POST", "/api/live", "GET"), ("POST", "/control", "GET")],
+)
+def test_the_control_routes_refuse_the_wrong_method(controller, control, method, path, allow):
+    response = send(controller, method, path, {})
+
+    assert response.status == 405
+    assert response.headers["Allow"] == allow
+    assert control.asked == []
+
+
+def test_without_the_control_its_feeds_do_not_exist(app):
+    assert get(app, "/api/live", chat="42").status == 404
+    assert send(app, "POST", "/api/command", {"chat_id": 42, "text": "hola"}).status == 404

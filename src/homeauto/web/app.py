@@ -34,6 +34,8 @@ CSS = "text/css; charset=utf-8"
 TEXT = "text/plain; charset=utf-8"
 HTML = "text/html; charset=utf-8"
 JSON = "application/json; charset=utf-8"
+MANIFEST = "application/manifest+json; charset=utf-8"
+PNG = "image/png"
 
 REVALIDATE = "no-cache"
 FOREVER = "public, max-age=31536000, immutable"
@@ -43,13 +45,22 @@ STATIC = {
     "app.js": (JS, REVALIDATE),
     "kiosk.js": (JS, REVALIDATE),
     "alarm.js": (JS, REVALIDATE),
+    "control.js": (JS, REVALIDATE),
+    "manifest.webmanifest": (MANIFEST, REVALIDATE),
+    "icon-192.png": (PNG, REVALIDATE),
+    "icon-512.png": (PNG, REVALIDATE),
     "app.css": (CSS, REVALIDATE),
     f"{FULLCALENDAR}/index.global.min.js": (JS, FOREVER),
     f"{FULLCALENDAR}/es.global.min.js": (JS, FOREVER),
     f"{FULLCALENDAR}/LICENSE.md": (TEXT, FOREVER),
 }
 
-PAGES = {"/agenda": "agenda.html", "/pantalla": "pantalla.html", "/alarma": "alarma.html"}
+PAGES = {
+    "/agenda": "agenda.html",
+    "/pantalla": "pantalla.html",
+    "/alarma": "alarma.html",
+    "/control": "control.html",
+}
 FEEDS = ("/api/events", "/api/board")
 RINGING = re.compile(r"/api/ringing/(\d+)")
 
@@ -59,6 +70,8 @@ JOB = re.compile(r"/api/jobs/(\d+)")
 ITEM = re.compile(r"/api/lists/([a-z]+)/(\d+)/done")
 LIST = re.compile(r"/api/lists/([a-z]+)")
 WRITES = ("POST", "PUT", "DELETE")
+LIVE = "/api/live"
+COMMAND = "/api/command"
 
 
 @dataclass(frozen=True)
@@ -133,10 +146,16 @@ class WebApp:
     """La agenda, el kiosco y sus datos, para el servidor de la API."""
 
     def __init__(
-        self, board, jobs=None, static_dir: Path = STATIC_DIR, pages_dir: Path = PAGES_DIR
+        self,
+        board,
+        jobs=None,
+        control=None,
+        static_dir: Path = STATIC_DIR,
+        pages_dir: Path = PAGES_DIR,
     ):
         self.board = board
         self.jobs = jobs
+        self.control = control
         self.static_dir = static_dir
         self.pages_dir = pages_dir
 
@@ -149,6 +168,8 @@ class WebApp:
         if (path == PEOPLE or path == JOBS or JOB.fullmatch(path) or ITEM.fullmatch(path)
                 or LIST.fullmatch(path)):
             return self._house(request, path)
+        if path == LIVE or path == COMMAND:
+            return self._control(request, path)
 
         ringing = RINGING.fullmatch(path)
         known = path in PAGES or path in FEEDS or ringing or path.startswith("/static/")
@@ -225,6 +246,40 @@ class WebApp:
         except Exception:  # noqa: BLE001
             log.exception("could not write from the screen")
             return _json(500, {"error": "No pude guardar el cambio."})
+
+    def _control(self, request: Request, path: str) -> Response:
+        """Lo urgente de ahora y los comandos de la pantalla de control."""
+        allowed = "GET" if path == LIVE else "POST"
+        if request.method != allowed:
+            return _json(405, {"error": "método no permitido"}, Allow=allowed)
+        if self.control is None:
+            return _json(404, {"error": "no existe"})
+
+        payload = None
+        if path == LIVE:
+            raw = request.query.get("chat", "")
+            if not raw.lstrip("-").isdigit():
+                return _json(400, {"error": "falta el chat"})
+        else:
+            refusal = _refuse_write(request)
+            if refusal is not None:
+                return refusal
+            try:
+                payload = json.loads(request.body.decode("utf-8"))
+            except ValueError:
+                payload = None
+            if not isinstance(payload, dict):
+                return _json(400, {"error": "se esperaba un objeto JSON"})
+
+        try:
+            if path == LIVE:
+                return _json(200, self.control.live(int(raw)))
+            return _json(200, self.control.run(payload))
+        except WebError as exc:
+            return _json(exc.status, {"error": str(exc)})
+        except Exception:  # noqa: BLE001
+            log.exception("la pantalla de control se rompió")
+            return _json(500, {"error": "No pude atender el pedido."})
 
     def _page(self, name: str) -> Response:
         return _respond(200, (self.pages_dir / name).read_bytes(), HTML, REVALIDATE)

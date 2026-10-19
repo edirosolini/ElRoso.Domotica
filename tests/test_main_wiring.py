@@ -1518,3 +1518,76 @@ def test_each_caster_brings_back_the_page_of_its_own_tv(tmp_path, monkeypatch):
     assert registry.get("comedor").caster.screen() == "pagina de comedor"
     assert registry.get("recamara").caster.screen() == "pagina de recamara"
     assert main.build_speakers(config, synth=object()).get("comedor").caster.screen is None
+
+
+# --- la pantalla de control ---
+
+
+def test_the_control_runs_real_commands_on_the_one_database(wired, tmp_path, monkeypatch):
+    registered = {}
+    original = main.register
+
+    def spy(app, commands, strangers=None, people=None):
+        registered["commands"] = commands
+        registered["people"] = people
+        return original(app, commands, strangers, people)
+
+    monkeypatch.setattr(main, "register", spy)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+    control = web.control
+    registered["people"].meet(42, "Eze")
+
+    assert control.commands is registered["commands"]
+    assert sorted(control.chat_ids) == [42, 77]
+    assert sorted(control.alert_recipients) == [42, 77]
+    assert control.quiet is web.board.quiet
+    assert control.ringing.db_path == tmp_path / "jobs.db"
+    assert control.monitor is None
+
+    response = web.handle(Request.from_target(
+        "POST", "/api/command", headers=WRITE,
+        body=json.dumps({"chat_id": 42, "data": "lista"}).encode("utf-8")))
+
+    assert response.status == 200
+    assert json.loads(response.body) == {"text": "No hay nada programado", "actions": []}
+    assert control.people.names() == {42: "Eze"}
+
+
+def test_the_control_reads_what_rang_from_the_stores_reminders_writes(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+    control = web.control
+    now = datetime.now()
+    reminders["ringing"].remember(17, 42, "arriba", None, now)
+    reminders["awaiting"].remember(9, "pastilla", now)
+    reminders["fired"].remember(42, "pastilla", None, now, job_id=9)
+
+    response = web.handle(Request(method="GET", path="/api/live", query={"chat": "42"}))
+
+    assert response.status == 200
+    live = json.loads(response.body)
+    assert [ring["job_id"] for ring in live["ringing"]] == [17]
+    assert [wait["job_id"] for wait in live["awaiting"]] == [9]
+    assert live["snooze"]["job_id"] == 9
+    assert control.awaiting.db_path == reminders["awaiting"].db_path
+
+
+def test_the_control_sees_the_monitor_of_the_house(wired, tmp_path, monkeypatch):
+    monitor = _spy_init(monkeypatch, main.Monitor)
+    checks = tmp_path / "checks.json"
+    checks.write_text('[{"name": "vpn", "host": "10.0.0.1", "port": 443}]', encoding="utf-8")
+    web = _wired_web(monkeypatch, tmp_path, HOUSE + f"CHECKS_FILE={checks}\n")
+
+    assert web.control.monitor is not None
+    assert web.control.monitor.store is monitor["store"]
+    assert web.control.live(42)["status"] == []
+
+
+def test_without_allowed_chats_the_control_does_not_run_commands(wired, tmp_path, monkeypatch):
+    web = _wired_web(monkeypatch, tmp_path)
+
+    response = web.handle(Request.from_target(
+        "POST", "/api/command", headers=WRITE,
+        body=json.dumps({"chat_id": 42, "data": "lista"}).encode("utf-8")))
+
+    assert response.status == 403
