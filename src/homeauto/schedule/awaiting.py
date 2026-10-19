@@ -96,6 +96,12 @@ class AwaitingStore:
             ).fetchone()
         return _row_to_waiting(row) if row else None
 
+    def all(self) -> list[Waiting]:
+        """Todo lo que espera su «Hecho», de lo que sonó antes a lo último."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM awaiting_done ORDER BY fired_at, job_id").fetchall()
+        return [_row_to_waiting(row) for row in rows]
+
     def mark_nagged(self, job_id: int, next_nag: datetime | None) -> None:
         """Suma un re-aviso y fija el próximo; None no re-avisa más."""
         with self._connect() as conn:
