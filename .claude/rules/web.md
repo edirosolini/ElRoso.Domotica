@@ -35,7 +35,7 @@ separada del transporte HTTP y se prueba sin red.
 
 ## Pantalla de la casa
 
-`homeauto/web/` sirve tres páginas y sus datos en el mismo `ApiServer` de la API (puerto
+`homeauto/web/` sirve cuatro páginas y sus datos en el mismo `ApiServer` de la API (puerto
 `API_PORT`, 8099), y **existe solo si la API arrancó**, o sea con `API_TOKEN`.
 
 | Ruta | Qué es |
@@ -43,6 +43,7 @@ separada del transporte HTTP y se prueba sin red.
 | `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes |
 | `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy y las dos listas. `?ver=1` es solo lectura |
 | `/alarma?job=<id>` | la vista de una alarma que suena, para la tele. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md` |
+| `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre y los comandos en paneles. Ver **Control desde la web** |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
 | `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima y listas como `[{id, text}]` |
@@ -51,6 +52,9 @@ separada del transporte HTTP y se prueba sin red.
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
 | `POST /api/lists/<lista>` | suma a compras o pendientes lo escrito, partido como en el chat |
 | `POST /api/lists/<lista>/<id>/done` | tacha un ítem de compras o pendientes |
+| `GET /api/live?chat=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat |
+| `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` |
+| `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 
 `Board` arma los datos y `WebApp.handle(Request) -> Response` rutea; ninguno de los dos
 conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arquitectura**, en `CLAUDE.md`.
@@ -113,7 +117,8 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   atado a `CALENDAR_TTL`, así que un evento nuevo ahí tarda hasta cinco minutos más.
 
 **Cómo se ve la agenda.** Barra propia (`headerToolbar: false`): título del período,
-anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y un enlace a `/pantalla`.
+anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y enlaces a `/pantalla` y
+`/control`.
 
 - **Cada evento es un bloque** (`display: "block"`, también los de hora) con la clase `ev`
   y su color en `--ev`, que `eventDidMount` le pasa: fondo suave con `color-mix()` y un
@@ -125,7 +130,7 @@ anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y un enlace a `
 - **Lo que pasó se avisa con un toast** que se va solo, no con `alert()`. ⚠️ **Borrar sigue
   pidiendo `confirm()`**: es un toque sin deshacer y borra la serie entera.
 
-**Temas.** Los colores son variables en `:root` de `app.css`, una sola hoja para las dos
+**Temas.** Los colores son variables en `:root` de `app.css`, una sola hoja para todas las
 páginas.
 
 - **Claro u oscuro según el dispositivo**, con `prefers-color-scheme`. Las páginas declaran
@@ -156,12 +161,12 @@ reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres column
   `label` —el ícono del tipo y el mensaje— y `mark`, cómo terminó, que se muestra solo si
   ya pasó.
 - **Cada tarjeta de lista y la de «Hoy» llevan un contador** de lo que tienen.
-- ⚠️ **`app.js`, `kiosk.js` y `alarm.js` van en ES5** —`var` y `function`, sin flechas, `const`,
+- ⚠️ **`app.js`, `kiosk.js`, `alarm.js` y `control.js` van en ES5** —`var` y `function`, sin flechas, `const`,
   template strings ni `?.`— para andar en el navegador viejo de un dispositivo reciclado. Sí
-  necesitan `fetch`. Hay test que busca esa sintaxis, y `innerHTML`, en los tres.
+  necesitan `fetch`. Hay test que busca esa sintaxis, y `innerHTML`, en los cuatro.
 - **La lógica pura de los scripts se prueba con node.** Cada uno exporta sus funciones
   sin DOM por `module.exports` cuando corre fuera del navegador; `tests/web/agenda_logic.js`,
-  `kiosk_logic.js` y `alarm_logic.js` las ejercitan y `test_agenda_js.py` los corre. ⚠️ **Sin `node` en la
+  `kiosk_logic.js`, `alarm_logic.js` y `control_logic.js` las ejercitan y `test_agenda_js.py` los corre. ⚠️ **Sin `node` en la
   máquina, ese test se saltea**: no falla.
 - **Pantalla completa al primer toque**: el navegador solo la concede desde un gesto. Que la
   pantalla no se apague y el cargador son cosa del dispositivo.
@@ -174,8 +179,8 @@ reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres column
   chats, decisión del dueño: es una lista, no un aviso. ⚠️ El campo lleva el teclado del
   dispositivo: en uno sin teclado en pantalla no sirve.
 - 🔴 **Con `?ver=1` el kiosco es solo lectura**: `kiosk.js` le pone la clase `read-only` al
-  `body`, que esconde los campos y los círculos, y no consulta `/api/people`. Es lo único que
-  se castea: en la tele no hay con qué tocar.
+  `body`, que esconde los campos, los círculos y el enlace a `/control` de la esquina, y no
+  consulta `/api/people`. Es lo único que se castea: en la tele no hay con qué tocar.
 
 **Escribir desde la pantalla.** `/agenda` crea, edita y borra avisos de la casa con un
 formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
@@ -219,7 +224,7 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
   CORS, y la casa no contesta CORS: un sitio externo abierto en un navegador de la casa no
   puede escribir. ⚠️ **Aceptar otro content-type (un form, `text/plain`) saca esa protección
   sin que nada avise.** No cubre DNS rebinding ni un `curl` desde la LAN: la LAN es de
-  confianza.
+  confianza. `/api/command` pasa por la misma guarda.
 - Un método que la ruta no acepta es un 405 con `Allow`. El mensaje tiene tope de quinientos
   caracteres, como `/say`.
 
@@ -254,3 +259,55 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
   «Lo próximo» del kiosco lo saltea.
 - **La casilla «No suena en feriados» aparece solo con «Algunos días»**, y el formulario
   manda `skip_holidays` en falso con cualquier otra repetición (`skipsHolidays()`).
+
+## Control desde la web
+
+`/control` maneja la casa sin Telegram: apagar una alarma, marcar «Hecho», posponer,
+confirmar una caída y cualquier comando. `ControlService` (`web/control.py`) es la lógica y no
+sabe de HTTP; `WebApp._control()` la rutea.
+
+- 🔴 **Es un segundo transporte de `Commands`, no una copia.** Un botón va por
+  `Commands.press()` y lo escrito por `Commands.free_text()`, los dos con `with_actions()`:
+  las reglas de cada comando, del router y de los botones siguen siendo las de
+  `.claude/rules/router-y-conversacion.md`. Lo que no existe en Telegram no existe acá.
+- **Todo `_dispatch()` y los botones de solo-botón (`hecho`, `callar`, `confirmar`, `borrar`)
+  desde el día uno**, decisión del dueño. La respuesta vuelve con sus botones como
+  `[{label, data}]`, y tocarlos vuelve a `/api/command`.
+- **Se elige quién sos** de un desplegable con `/api/people`, y la elección queda en el
+  `localStorage` del dispositivo. Sin `ALLOWED_CHAT_IDS`, o con un chat que no está en la
+  lista, `/api/live` y `/api/command` contestan 403.
+- 🔴 **El `who` es «<nombre> (pantalla)»**, con el nombre de `PeopleStore`, decisión del
+  dueño: los avisos a los demás chats dicen que vino de la web.
+- **Comparte el estado con Telegram por `chat_id`**: el `PendingStore` —una pregunta hecha en
+  el chat se puede contestar desde la web y al revés— y el equipo de `usar`.
+- 🔴 **Un error del comando se contesta con el motivo**, como en Telegram:
+  «🔴 No pude procesar la solicitud: <qué pasó>», con 200 y sin botones. Un error de la
+  pantalla misma es un 500 genérico.
+- 🔴 **El `fetch` de `/api/command` no se corta por tiempo.** Un comando puede tardar un minuto
+  —una pregunta con búsqueda, un anuncio largo—, y cortarlo antes mostraría un error de algo
+  que sí corrió. Mientras espera muestra «⏳ Procesando…» y deshabilita los botones.
+- **`/api/live` se pide cada cinco segundos** y después de cada comando. Trae lo que suena
+  (`RingingStore`), lo que espera «Hecho» (`AwaitingStore.all()`), lo que se puede posponer,
+  las caídas sin confirmar, el silencio y el estado de cada chequeo.
+- **Lo que espera «Hecho» se filtra a un día** (`awaiting.KEEP`), igual que se poda al sonar
+  otro: si no, un recordatorio de hace una semana seguiría pidiendo atención.
+- 🔴 **Posponer aparece solo pegado a lo último que sonó en ese chat**, dentro de
+  `SNOOZE_WINDOW`. `/posponer` pospone por chat, no por id: un botón al lado de otra cosa
+  pospondría lo que no es.
+- **«Confirmar» solo si el chat elegido es de `ALERT_CHAT_IDS`**, que es a quien
+  `Monitor.acknowledge()` deja confirmar. La caída se ve igual para todos.
+- **Un solo botón de silencio, según el estado**: «Cortar vacaciones» en vacaciones, «Hablar
+  ya» con un silencio pedido y si no «Silenciar 1 h».
+- 🔴 **`/api/live` no manda el `detail` de los chequeos**, solo nombre y si está arriba: el
+  detalle puede traer URLs. `estado` corrido por `/api/command` sí lo trae, como en Telegram.
+- ⚠️ **No hay chequeo de `Host` contra DNS rebinding**, decisión del dueño. Un sitio externo
+  que lo consiga en un navegador de la casa puede hacer hablar la casa, activar vacaciones o
+  correr cualquier comando a nombre de cualquier chat. Es el mismo agujero de las escrituras
+  de la agenda, con más alcance.
+- **Manifest e íconos para «Agregar a pantalla de inicio»**, sobre http y **sin service
+  worker**: una PWA instalable de verdad y el micrófono piden HTTPS, y la casa sirve http.
+- **Se llega desde `/agenda` y `/pantalla`**; el enlace del kiosco se esconde con `?ver=1`, y
+  lo que se castea sigue siendo `/pantalla?ver=1`.
+- ⚠️ **La parte DOM de `control.js` no tiene test automático.** `control_logic.js` cubre la
+  lógica pura —el comando con los equipos, a quién elegir, el cuerpo del POST, el orden de lo
+  urgente—; lo demás se prueba a mano en el navegador.
