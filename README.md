@@ -738,4 +738,4 @@ deploy/deploy.sh <pve> <ctid>
 ```
 
 Empaqueta, copia al contenedor, instala el unit y **reinicia** el servicio. Ver `CLAUDE.md`
-para direcciones y trampas conocidas.
+y `.claude/rules/` para direcciones y trampas conocidas.
