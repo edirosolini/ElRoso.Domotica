@@ -2,8 +2,8 @@
 
 # Domótica — El Roso
 
-Automatización de la casa, manejada por **Telegram**. Hoy hace hablar al parlante;
-está pensado para sumar dispositivos (luces) sin rediseñar nada.
+Automatización de la casa, manejada por **Telegram** y, en la LAN, por la web de `/control`.
+Hoy hace hablar al parlante; está pensado para sumar dispositivos (luces) sin rediseñar nada.
 
 **No es un producto de El Roso, es laboratorio.** Corre en la red de casa, no en el VPS.
 
@@ -43,7 +43,7 @@ Domotica/
 │   ├── agenda/          # Google Calendar: lectura, avisos, resumen
 │   ├── voice/           # equipos cast: tts, cast, registro, difusión
 │   ├── watch/           # vigilancia de servicios, de Seq, de internet y del Proxmox
-│   ├── web/             # pantalla de la casa: agenda, kiosco y sus feeds JSON
+│   ├── web/             # pantalla de la casa: agenda, kiosco, control y sus feeds JSON
 │   └── main.py          # cableado y ciclo de vida del proceso
 ├── deploy/              # unit de systemd, despliegue, CLI y la medición del router
 ├── tests/
@@ -59,6 +59,9 @@ Una sola regla explica el resto del código: **la lógica no conoce su transport
 
 - `bot/commands.py` no importa nada de `telegram`. Cada método recibe `(chat_id, texto)` y
   devuelve el string de respuesta. Quien lo conecta a Telegram es `main.register()`.
+- 🔴 **`Commands` tiene dos transportes**: Telegram y `web.ControlService` (`/control`), que
+  corre los mismos `press()` y `free_text()`. Una regla de un comando vale para los dos; no se
+  copia en la web.
 - `ApiService` no conoce HTTP; `ApiServer` es el `http.server` que lo envuelve.
 - Los colaboradores entran por constructor (`notify`, `clock`, `discover`, `build`, `announce`),
   así que los tests inyectan dobles sin parchear módulos.
@@ -343,6 +346,6 @@ Se cargan solas al trabajar los archivos de su `paths:`. Son tan reglas del proy
 - `.claude/rules/agenda.md` — Google Calendar por iCal.
 - `.claude/rules/router-y-conversacion.md` — texto libre, conversación, notas de voz, por dónde sale la respuesta, botones y comandos.
 - `.claude/rules/consultas.md` — preguntas con búsqueda, cuentas y unidades, listas y traducción.
-- `.claude/rules/web.md` — API HTTP de la LAN y la pantalla web (agenda, kiosco, escritura).
+- `.claude/rules/web.md` — API HTTP de la LAN y la pantalla web (agenda, kiosco, escritura, control).
 - `.claude/rules/pantalla-tv.md` — DashCast: `/pantalla`, restaurar tras un anuncio y la vista de alarma.
 - `.claude/rules/cableado.md` — el composition root `main()` y su test.

@@ -44,6 +44,9 @@ devolviendo un string: los botones van aparte.
   lista larga no puede volverse una pared. `callback_data` lleva el id, no el texto, así que
   un ítem largo entra igual en los 64 bytes.
 - **En las respuestas va un botón por renglón**; en los avisos, todos en uno.
+- ⚠️ **`press()`, `free_text()` y `with_actions()` también los llama `/control`**, el segundo
+  transporte de `Commands`. Cambiarles la firma o lo que devuelven rompe la web. Ver **Control
+  desde la web**, en `.claude/rules/web.md`.
 
 ## Texto libre
 

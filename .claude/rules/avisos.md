@@ -54,6 +54,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | agenda, clima, lluvia, API | todos |
 | alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
 | borrado con ese «Cancelar #N» | los demás chats: «🗑 <nombre> borró #N» |
+| lo hecho desde `/control` | lo mismo que el botón o el comando en Telegram: los demás chats, con «<nombre> (pantalla)» |
 | respuesta de un comando | el chat que lo escribió |
 | aviso de un desconocido | todos (`Strangers`) |
 
@@ -69,3 +70,6 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 - `/lista` y `/cancelar` siguen siendo de quien creó la alarma, aunque el aviso le llegue a
   todos. El «Cancelar #N» de un aviso de la pantalla no: borra desde cualquier chat. Ver
   **Pantalla de la casa**, en `.claude/rules/web.md`.
+- **`/control` no tiene destinatarios propios.** Corre el comando a nombre del chat elegido,
+  así que ese chat queda como «el que lo tocó» y no recibe el aviso a los demás. Ver
+  **Control desde la web**, en `.claude/rules/web.md`.

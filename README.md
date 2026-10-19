@@ -563,8 +563,8 @@ token, la API no arranca — apagada es el estado seguro.
 
 ## La pantalla de la casa
 
-El mismo servidor de la API sirve dos páginas para abrir desde el navegador, en cualquier
-dispositivo de la casa, y una tercera para la tele:
+El mismo servidor de la API sirve tres páginas para abrir desde el navegador, en cualquier
+dispositivo de la casa, y una cuarta para la tele:
 
 ```
 http://192.168.68.10:8099/agenda              # la agenda, en el mes actual
@@ -572,6 +572,7 @@ http://192.168.68.10:8099/agenda?m=2026-11    # abre en otro mes
 http://192.168.68.10:8099/pantalla            # el kiosco, para dejar fijo en una pantalla
 http://192.168.68.10:8099/pantalla?ver=1      # el kiosco solo para mirar, como va a la tele
 http://192.168.68.10:8099/alarma?job=7        # la alarma #7 mientras suena; después, el kiosco
+http://192.168.68.10:8099/control             # manejar la casa sin Telegram
 ```
 
 **La agenda** junta lo de la casa y lo de Google Calendar. Arriba están el mes o la semana que
@@ -631,6 +632,30 @@ Para dejarlo fijo en una tablet o un teléfono viejo:
 1. Abrir `/pantalla` en el navegador y tocar la pantalla una vez: pasa a pantalla completa.
 2. Que no se apague la pantalla y que quede enchufado al cargador se configura en el
    dispositivo, no acá.
+
+**El control** hace desde el navegador lo mismo que Telegram. Se llega desde el enlace
+«Control» de la agenda y del kiosco (el kiosco de solo lectura, `?ver=1`, no lo muestra).
+
+1. Arriba, en «Soy», elegir quién sos. El dispositivo lo recuerda. Todo lo que hagas va a tu
+   nombre, y a los demás chats les llega como «<tu nombre> (pantalla)», igual que si
+   hubieras tocado el botón en Telegram.
+2. **Ahora** muestra lo que pide atención, con sus botones: la alarma que suena («🔕 Apagar»),
+   lo que espera su «Hecho», lo último que sonó en tu chat si todavía se puede posponer, las
+   caídas sin confirmar («✅ Confirmar», solo si tu chat recibe las alertas) y un botón para
+   silenciar la casa, hacerla hablar ya o cortar las vacaciones. Abajo, el estado de cada
+   chequeo. Se actualiza cada cinco segundos.
+3. El campo de texto acepta lo mismo que un mensaje sin barra en Telegram («poné una alarma a
+   las 7»), y los paneles tienen los comandos con sus campos. Los equipos tildados en «Casa»
+   van como `en <equipo>`. Si falta un dato, pregunta como en el chat, y la pregunta se puede
+   contestar desde acá o desde Telegram.
+4. Un comando que tarda —una pregunta con búsqueda— muestra «⏳ Procesando…» hasta que
+   contesta, aunque tarde un minuto.
+
+En el teléfono, el menú del navegador ofrece **«Agregar a pantalla de inicio»** y queda como un
+ícono «Casa» que abre directo en el control. No es una app instalada: la casa sirve http, y
+eso, igual que usar el micrófono, pide HTTPS.
+
+Sin `ALLOWED_CHAT_IDS` el control no maneja nada: no hay a nombre de quién.
 
 **No pide login ni token**, ni para mirar ni para escribir: la usa cualquiera que llegue al
 contenedor por la red. Lo que sí rechaza es una escritura que venga de otro sitio abierto en
