@@ -242,7 +242,7 @@ del wav de Piper. Hay tres:
 - 🔴 **Los dispositivos Google se resuelven por UUID, nunca por IP.** Son DHCP y se mueven:
   el Nest ya saltó de `.13` a `.20` solo. Los UUID están en `CAST_DEVICES`.
 - 🔴 **Resolver por UUID no alcanza: el objeto resuelto se queda con la IP de ese momento.**
-  `Caster` cachea el dispositivo —descubrir cuesta veinte segundos de mDNS— y el 2026-09-10
+  `Caster` cachea el dispositivo —descubrir puede tardar hasta veinte segundos de mDNS— y el 2026-09-10
   se vio el precio: el servicio venía de un arranque del 4 de septiembre hablándole a
   `192.168.68.22` mientras el Nest ya estaba en `.20`, y el log solo decía
   `Chromecast 192.168.68.22:8009 is connecting...`. El aviso llegaba a Telegram y no salía
@@ -316,10 +316,23 @@ del wav de Piper. Hay tres:
   apagados.
 - **El que castea sirve el audio por HTTP desde sí mismo**, y el parlante tiene que poder
   alcanzar ese puerto. No es "mandarle un archivo": es publicarlo y pasarle la URL.
-- 🔴 **No parar el browser de zeroconf antes de conectar.** `pychromecast` lo necesita vivo
-  para abrir la conexión: si se llama `stop_discovery()` antes de `wait()`, el dispositivo
-  aparece en el descubrimiento pero la conexión muere con un timeout de 20 s sin explicación.
-  Por eso `_Discovery` guarda el browser.
+- 🔴 **Un solo zeroconf y un solo browser mDNS para todo el proceso, y nunca se paran.**
+  `pychromecast` necesita el zeroconf vivo para conectar y para reconectar: un equipo armado
+  sobre un zeroconf cerrado no conecta nunca. El 2026-10-19, de 04:51 a 05:29, la TV
+  `habitacion` metió un bucle de `AssertionError: Zeroconf instance loop must be running`
+  a unas mil setecientas líneas por segundo; journald descartó ochocientos veintisiete mil
+  mensajes y se perdió el journal anterior. La causa: `_Discovery` era compartido por todos
+  los `Caster`, cada redescubrimiento hacía `stop_discovery()` sobre el browser anterior
+  —que en pychromecast 14.0.10 cierra su zeroconf— y los equipos cacheados en los otros
+  `Caster` quedaban colgados de ese zeroconf. Al reconectar con la TV en reposo,
+  `SocketClient.run()` atrapa el error y reintenta sin pausa. Ahora `_Discovery` arranca
+  zeroconf y `CastBrowser` la primera vez que se lo necesita, con candado, y no los para.
+  Redescubrir es `find()`: espera a que el browser vea el UUID, sondeando cada
+  `DISCOVERY_POLL`, y arma el equipo con `get_chromecast_from_cast_info(info, browser.zc)`.
+  `host_of()` lee el mismo browser y, si todavía no arrancó, contesta `None`.
+- ⚠️ **Un equipo apagado tarda hasta `DISCOVERY_TIMEOUT` (veinte segundos) en contestar «No
+  encontré»**, y el error nombra lo que sí vio. Uno prendido contesta apenas aparece. Los
+  hilos del browser viven lo que vive el proceso.
 - 🔴 **Kokoro se midió y se descartó.** Es el candidato obvio para reemplazar a Piper y no
   entra: **612 MB de RSS contra los 512 del CT**. El int8 entra (439 MB) pero tarda
   **dieciséis segundos** en una frase de cuatro, y el fp16 es el peor de los dos mundos

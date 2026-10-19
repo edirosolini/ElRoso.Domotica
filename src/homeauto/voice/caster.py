@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid as uuidlib
 from typing import Callable
@@ -10,6 +11,7 @@ from typing import Callable
 log = logging.getLogger(__name__)
 
 DISCOVERY_TIMEOUT = 20
+DISCOVERY_POLL = 0.2
 AUDIO_MIME = "audio/wav"
 
 # El receptor por defecto de Google: la app donde corre nuestro audio.
@@ -29,26 +31,54 @@ class CastError(Exception):
     """No se pudo llegar al equipo, o se le pidió algo inválido."""
 
 
+def _start_browser():
+    """Arranca el zeroconf y el browser mDNS reales, con import tardío."""
+    import pychromecast
+    import zeroconf
+
+    browser = pychromecast.CastBrowser(pychromecast.SimpleCastListener(), zeroconf.Zeroconf())
+    browser.start_discovery()
+    return browser
+
+
+def _build_chromecast(cast_info, zconf, timeout=None):
+    """Arma el Chromecast de un equipo visto por el browser, con el zeroconf compartido."""
+    import pychromecast
+
+    return pychromecast.get_chromecast_from_cast_info(cast_info, zconf, timeout=timeout)
+
+
 class _Discovery:
-    """Descubrimiento mDNS real. Se importa tarde para que los tests no toquen la red.
+    """Un solo zeroconf y un solo browser mDNS para todo el proceso, que nunca se paran."""
 
-    El browser de zeroconf se deja vivo: pychromecast lo necesita para abrir la
-    conexión, y pararlo antes de `wait()` deja el equipo inalcanzable.
-    """
-
-    def __init__(self):
+    def __init__(self, start=_start_browser, build=_build_chromecast, sleep=time.sleep):
+        self._start = start
+        self._build = build
+        self._sleep = sleep
         self._browser = None
+        self._lock = threading.Lock()
 
-    def __call__(self, timeout: int = DISCOVERY_TIMEOUT) -> list:
-        import pychromecast
+    def _running(self):
+        with self._lock:
+            if self._browser is None:
+                self._browser = self._start()
+            return self._browser
 
-        if self._browser is not None:
-            self._browser.stop_discovery()
-            self._browser = None
+    def find(self, device_uuid: uuidlib.UUID, timeout: float = DISCOVERY_TIMEOUT) -> list:
+        """Espera hasta `timeout` a que mDNS vea el UUID y devuelve una lista con su equipo, o levanta CastError."""
+        browser = self._running()
+        deadline = time.monotonic() + timeout
+        while True:
+            info = browser.devices.get(device_uuid)
+            if info is not None:
+                return [self._build(info, browser.zc, timeout=timeout or None)]
+            if time.monotonic() >= deadline:
+                break
+            self._sleep(DISCOVERY_POLL)
 
-        casts, browser = pychromecast.get_chromecasts(timeout=timeout)
-        self._browser = browser
-        return casts
+        names = [getattr(i, "friendly_name", "?") for i in list(browser.devices.values())]
+        seen = ", ".join(names) or "ninguno"
+        raise CastError(f"No encontré el dispositivo {device_uuid}. Vi: {seen}")
 
     def host_of(self, device_uuid: uuidlib.UUID) -> str | None:
         """Devuelve la IP que mDNS anuncia hoy para el UUID, o None si no la sabe."""
@@ -74,20 +104,24 @@ class Caster:
     def __init__(
         self,
         device_uuid: uuidlib.UUID,
-        discover: Callable[..., list] = discover_devices,
+        discover: Callable[..., list] | None = None,
         discovery_timeout: int = DISCOVERY_TIMEOUT,
         settle: float = SETTLE_AFTER_QUIT,
         finish_timeout: float = FINISH_TIMEOUT,
-        locate: Callable[[uuidlib.UUID], str | None] = discover_devices.host_of,
+        locate: Callable[[uuidlib.UUID], str | None] | None = None,
         dashcast: Callable[[], object] = _dashcast_controller,
         screen: Callable[[], str | None] | None = None,
+        discovery: _Discovery = discover_devices,
     ):
         self.device_uuid = device_uuid
         self.dashcast = dashcast
         # La página a volver a mostrar después de un anuncio, o None para dejarla cerrada.
         self.screen = screen
+        if discover is None:
+            def discover(timeout=DISCOVERY_TIMEOUT):
+                return discovery.find(device_uuid, timeout)
         self.discover = discover
-        self.locate = locate
+        self.locate = locate if locate is not None else discovery.host_of
         self.discovery_timeout = discovery_timeout
         self.settle = settle
         self.finish_timeout = finish_timeout
@@ -114,7 +148,7 @@ class Caster:
         try:
             announced = self.locate(self.device_uuid)
         except Exception as exc:  # noqa: BLE001
-            log.debug("could not locate %s: %s", self.device_uuid, exc)
+            log.debug("no pude ubicar %s: %s", self.device_uuid, exc)
             return False
         if announced is None:
             return False
@@ -125,7 +159,7 @@ class Caster:
             return False
 
         log.warning(
-            "%s is connected to %s but announces %s: looking it up again",
+            "%s está conectado a %s pero anuncia %s: lo busco de nuevo",
             self.device_uuid,
             connected,
             announced,
@@ -141,13 +175,13 @@ class Caster:
             # timeout=0 no espera a que termine el hilo del socket.
             device.disconnect(timeout=0)
         except Exception as exc:  # noqa: BLE001
-            log.debug("disconnect of %s failed: %s", self.device_uuid, exc)
+            log.debug("no pude desconectar %s: %s", self.device_uuid, exc)
 
     def _perform(self, action: Callable[[object], object]):
         """Hace algo en el equipo, buscándolo de nuevo si se movió.
 
         El objeto resuelto se queda con la IP que el equipo tenía al encontrarlo,
-        y son DHCP. Redescubrir cuesta veinte segundos de mDNS, así que solo pasa
+        y son DHCP. Redescubrir puede tardar hasta veinte segundos de mDNS, así que solo pasa
         después de un fallo. Un reintento puede repetir un anuncio que sí sonó.
         """
         try:
@@ -299,7 +333,7 @@ class Caster:
             if page:
                 self._show_on(device, page)
         except Exception as exc:  # noqa: BLE001
-            log.warning("could not bring the screen back on %s: %s", self.device_uuid, exc)
+            log.warning("no pude volver a mostrar la pantalla en %s: %s", self.device_uuid, exc)
 
     def show(self, url: str) -> None:
         """Muestra la página en el equipo con DashCast."""

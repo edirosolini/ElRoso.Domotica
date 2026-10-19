@@ -142,7 +142,9 @@ un despliegue nuevo no necesita migración.
   por el túnel WireGuard, no por internet).
 - La **API del Proxmox** de casa, por la LAN, con un token de solo lectura. Ver
   **Salud del Proxmox**, en `.claude/rules/vigilancia.md`.
-- **pychromecast** — control del parlante.
+- **pychromecast** — control del parlante, sobre un solo **zeroconf** para todo el proceso
+  (declarado en `requirements.txt`: se importa en `src/`). Ver los gotchas de cast en
+  `.claude/rules/voz.md`.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
 - **FullCalendar** en la pantalla de la casa, vendorizado y sin CDN. Es el único JavaScript
