@@ -10,7 +10,7 @@ Domotica no tiene board externo ni work items: el backlog es `.claude/memory/bac
 
 ## Carga obligatoria antes de analizar
 
-1. `CLAUDE.md` del repo, entero. No hay `.claude/rules/`: las reglas del proyecto son ese archivo.
+1. `CLAUDE.md` del repo, entero, y las de `.claude/rules/` que toque el pedido: las reglas del proyecto son esos archivos.
 2. `.claude/memory/session.md`, `backlog.md` y `decisions.md`; `scratch.md` si el pedido toca equipos, red o el CT.
 3. El código que el pedido toca. Buscar, no suponer.
 
@@ -18,7 +18,7 @@ Domotica no tiene board externo ni work items: el backlog es `.claude/memory/bac
 
 - Qué se pide, qué ya existe, qué falta.
 - Módulos afectados (`bot/`, `schedule/`, `voice/`, `watch/`, `agenda/`, `route.py`, `main.py`...) y si el cambio cruza la línea de transporte.
-- Invariantes en juego (todos en `CLAUDE.md`):
+- Invariantes en juego (todos en `CLAUDE.md` y `.claude/rules/`):
   - La lógica no conoce su transporte: nada de `telegram` fuera de `main.py`; colaboradores por constructor. Si hace falta `patch()`, el cambio está del lado equivocado.
   - Nada con dígitos al sintetizador: `verbalize`, con el género pensado. Hablado y escrito separados cuando el detalle es de leer.
   - Pulido vs corrección: texto nuestro se pule, texto de una persona se corrige; el original siempre gana.

@@ -28,11 +28,11 @@ Revisar solo las líneas agregadas o modificadas que sean comentarios (`#`) o do
 ## Cómo actuar
 
 - Comentario en regla: no tocar.
-- Comentario largo o con por qué: reescribirlo a una línea con el qué. Si el por qué es valioso, sacarlo y anotarlo en la salida: va al commit, al PR o al `CLAUDE.md` (vía `docs`).
+- Comentario largo o con por qué: reescribirlo a una línea con el qué. Si el por qué es valioso, sacarlo y anotarlo en la salida: va al commit, al PR o al `CLAUDE.md` o `.claude/rules/` (vía `docs`).
 - Comentario redundante: borrarlo.
 - Nunca cambiar una línea de código, ni siquiera formato. Si una edición arrastra código, frenar y reportar.
 - No tocar comentarios que no estén en el diff.
 
 ## Salida
 
-Por archivo: `archivo:línea` → antes / después (o "borrado"). Al final, la lista de por qués extraídos, marcando cuáles son regla durable para `CLAUDE.md` y cuáles son solo para el commit o el PR.
+Por archivo: `archivo:línea` → antes / después (o "borrado"). Al final, la lista de por qués extraídos, marcando cuáles son regla durable para `CLAUDE.md` o `.claude/rules/` y cuáles son solo para el commit o el PR.

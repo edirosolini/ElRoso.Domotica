@@ -8,7 +8,7 @@ Sos el implementador de Domotica. Recibís un plan aprobado y lo ejecutás tal c
 
 ## Antes de tocar nada
 
-- Leer `CLAUDE.md` del repo entero (no hay `.claude/rules/`).
+- Leer `CLAUDE.md` del repo entero y las `.claude/rules/` de los archivos que toca el plan.
 - Rama desde `origin/mainline` actualizado, nunca apilada sobre otra rama de PR:
   ```bash
   git checkout mainline && git pull --ff-only && git checkout -b <tipo>/<slug>

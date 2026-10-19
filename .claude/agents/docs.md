@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Actualiza la documentación versionada de Domotica (README.md y CLAUDE.md) para que coincida con lo desarrollado, antes del PR. Usar después del agente comments y antes del tester.
+description: Actualiza la documentación versionada de Domotica (README.md, CLAUDE.md y .claude/rules/) para que coincida con lo desarrollado, antes del PR. Usar después del agente comments y antes del tester.
 tools: Read, Edit, Write, Grep, Glob, Bash
 ---
 
@@ -17,8 +17,8 @@ El diff de la rama (`git diff origin/mainline...HEAD` + lo no commiteado), el pl
 | Comando nuevo, alias o cambio de uso | `README.md` "Comandos" y, si aplica, "Sin la barra" |
 | Clave de entorno nueva o con otro default | `README.md` "Configuración" (el bloque `ini`). `CLAUDE.md` no lista claves: la fuente es `config.py` |
 | Despliegue, dependencia del sistema (`opusenc`, etc.) | `README.md` "Despliegue" y `deploy/deploy.sh` si instala algo |
-| Regla, invariante, trampa, decisión de "no se hace" | La sección del módulo en `CLAUDE.md` |
-| Módulo nuevo en `src/homeauto/` | Árbol de "Estructura" del `CLAUDE.md` |
+| Regla, invariante, trampa, decisión de "no se hace" | La sección del módulo en su `.claude/rules/<dominio>.md`; en `CLAUDE.md` solo si es transversal |
+| Módulo nuevo en `src/homeauto/` | Árbol de "Estructura" del `CLAUDE.md` y el `paths:` de la regla de su dominio, con sus tests |
 | Tabla nueva en `jobs.db` | Tabla de "Estado" del `CLAUDE.md` y el conteo de tablas en palabras |
 | Aviso nuevo o destinatarios distintos | Tabla "A quién le llega cada aviso" |
 | Comandos o alias | Conteos de "Comandos y alias" y la lista de lo que no está en el menú |
@@ -27,13 +27,13 @@ El diff de la rama (`git diff origin/mainline...HEAD` + lo no commiteado), el pl
 
 `AGENTS.md` es un puntero a `CLAUDE.md` a propósito: no se le copia nada.
 
-## Reglas del CLAUDE.md
+## Reglas del CLAUDE.md y `.claude/rules/`
 
 - La regla y la trampa, en presente. El porqué va acá, no en el código.
 - Mismo estilo que el resto: secciones por módulo, 🔴 para lo que ya mordió, ⚠️ para lo que puede morder.
 - ⛔ Nunca un conteo de suite ni de tests. La medición del router sí se registra.
 - Números en el texto, como el resto del archivo, escritos en palabras cuando son mediciones ("treinta y cuatro de treinta y cuatro").
-- Corto: se carga entero en cada sesión. Reemplazar lo que quedó viejo en vez de sumar al lado.
+- Corto: `CLAUDE.md` se carga entero en cada sesión y queda por debajo de cuarenta mil caracteres; lo de un dominio va a su regla. Reemplazar lo que quedó viejo en vez de sumar al lado.
 - Nada de tokens, chat IDs, UUIDs ni URLs privadas.
 
 ## Corrección de docs independiente del cambio
