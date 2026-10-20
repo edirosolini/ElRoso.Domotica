@@ -282,3 +282,20 @@ basura». `schedule/rota.py` es la lógica; los nombres viven en dos columnas de
   toca la próxima. `/lista` lo muestra como « · turnos Cin, Die».
 - **No hay cambio de turno a mano ni salteo de una semana.** Quedaron fuera de alcance.
 - **`/turnos` no está en el menú**, sí en `HELP`. Ver **Comandos y alias**, en `.claude/rules/router-y-conversacion.md`.
+
+## Nombre entre corchetes
+
+Un mensaje de alarma, recordatorio o timer que empieza con «[Nombre]» se dice y se escribe
+como un llamado: «[Papá] tomar medicación» suena «Papá, tomar medicación».
+`announcer._called()` lo resuelve antes del pulidor.
+
+- 🔴 **El nombre va en el `must_keep` del pulidor**, junto al del turno si lo hay.
+- **Convive con el turno**: «Le toca a Cin: [Papá] tomar» es «Le toca a Cin: Papá, tomar»;
+  el corchete se busca después del prefijo de `rota.with_turn()`.
+- **Solo letras y espacios, y pegado al principio.** Un corchete en el medio, con dígitos,
+  vacío, sin cerrar, con un espacio adelante o con una coma adentro queda como se escribió.
+- **En `jobs` el mensaje se guarda con los corchetes**; la transformación es solo al anunciar.
+- ⚠️ **Fuera del aviso, todo lo escrito muestra el mensaje con los corchetes**: el chat de
+  «⏰ Sigue sonando» (lo hablado de la repetición sí sale «Papá, …»), «🔔 Sigue pendiente»,
+  «⏰ Dejé de sonar», `/lista`, `/turnos`, los avisos a los demás chats, el resumen semanal,
+  `/control` y la pantalla, incluida la vista de alarma de la tele.
