@@ -377,7 +377,7 @@ class Announcer:
         self.registry = registry
         self.log = log
 
-    def __call__(self, job, rings=0, write=True):
+    def __call__(self, job, rings=0):
         for alias in job.devices:
             self.registry.get(alias).say(job.message)
 

@@ -1,4 +1,4 @@
-"""Una alarma suena cada minuto hasta que alguien la apague, con tope."""
+"""Una alarma suena cada cinco minutos hasta que alguien la apague, con tope."""
 
 from datetime import datetime, timedelta
 
@@ -10,7 +10,6 @@ from homeauto.schedule.history import CANCEL, OFF, HistoryStore
 from homeauto.schedule.reminders import (
     RING_DELAY,
     RING_LIMIT,
-    RING_WRITE_EVERY,
     Reminders,
 )
 from homeauto.schedule.ringing import RingingStore
@@ -57,8 +56,8 @@ class Announcer:
         # Lo que pasa mientras suena, como un toque en el botón.
         self.meanwhile = None
 
-    def __call__(self, job, rings=0, write=True):
-        self.calls.append((job.id, job.message, rings, write))
+    def __call__(self, job, rings=0):
+        self.calls.append((job.id, job.message, rings))
         self.devices.append(job.devices)
         self.clock.now += self.takes
         if self.meanwhile:
@@ -131,11 +130,11 @@ def history(parts):
 # --- cuándo ------------------------------------------------------------------
 
 
-def test_an_alarm_that_rang_arms_its_repetition_a_minute_after_it_ended(parts):
+def test_an_alarm_that_rang_arms_its_repetition_five_minutes_after_it_ended(parts):
     parts["announcer"].takes = timedelta(seconds=20)
     job = fire(parts, parts["build"]())
 
-    assert parts["timer"].armed[ring_key(job.id)][0] == SOON + timedelta(seconds=20) + RING_DELAY
+    assert parts["timer"].armed[ring_key(job.id)][0] == SOON + timedelta(minutes=5, seconds=20)
 
 
 def test_a_reminder_never_rings_again(parts):
@@ -144,7 +143,7 @@ def test_a_reminder_never_rings_again(parts):
     assert ring_key(job.id) not in parts["timer"].armed
 
 
-def test_each_repetition_is_a_minute_after_the_last_one_ended(parts):
+def test_each_repetition_is_five_minutes_after_the_last_one_ended(parts):
     parts["announcer"].takes = timedelta(seconds=30)
     job = fire(parts, parts["build"]())
 
@@ -167,7 +166,7 @@ def test_each_repetition_goes_louder(parts):
     ring(parts, job.id)
     ring(parts, job.id)
 
-    assert [rings for *_, rings, _ in parts["announcer"].calls] == [0, 1, 2, 3]
+    assert [rings for *_, rings in parts["announcer"].calls] == [0, 1, 2, 3]
 
 
 def test_it_stops_at_the_limit_and_says_nobody_turned_it_off(parts):
@@ -178,19 +177,19 @@ def test_it_stops_at_the_limit_and_says_nobody_turned_it_off(parts):
 
     assert parts["clock"].now == SOON + RING_LIMIT
     rang = [call for call in parts["announcer"].calls if call[2]]
-    assert len(rang) == int(RING_LIMIT / RING_DELAY) - 1
+    assert len(rang) == 5, "a los cinco, diez, quince, veinte y veinticinco minutos"
     stopped = [text for _, text, _ in parts["told"] if "Dejé de sonar" in text]
     assert stopped == ["⏰ Dejé de sonar: «arriba», nadie la apagó"] * 2
     assert RingingStore(parts["path"]).get(job.id) is None
 
 
-def test_the_chat_hears_about_it_every_five_repetitions(parts):
+def test_every_repetition_writes_to_the_chat(parts):
     job = fire(parts, parts["build"]())
-    for _ in range(10):
+    for _ in range(5):
         ring(parts, job.id)
 
-    writes = [rings for _, _, rings, write in parts["announcer"].calls if rings and write]
-    assert writes == [RING_WRITE_EVERY, 2 * RING_WRITE_EVERY]
+    rang = [rings for *_, rings in parts["announcer"].calls if rings]
+    assert rang == [1, 2, 3, 4, 5]
 
 
 def test_every_repetition_counts_in_the_history(parts):
@@ -212,7 +211,7 @@ def test_a_once_alarm_removed_from_the_jobs_keeps_ringing(parts):
     assert Store(parts["path"]).get(job.id) is None
     ring(parts, job.id)
 
-    job_id, message, rings, _ = parts["announcer"].calls[-1]
+    job_id, message, rings = parts["announcer"].calls[-1]
     assert (job_id, message, rings) == (job.id, "arriba", 1)
 
 
@@ -354,7 +353,7 @@ def test_a_late_repetition_rings_once_and_resumes_the_pace(parts):
 
     parts["build"]().start(now=parts["clock"].now)
 
-    assert [rings for *_, rings, _ in parts["announcer"].calls] == [0, 1]
+    assert [rings for *_, rings in parts["announcer"].calls] == [0, 1]
     assert parts["timer"].armed[ring_key(job.id)][0] == parts["clock"].now + RING_DELAY
 
 
@@ -442,7 +441,7 @@ def test_on_vacation_an_alarm_does_not_ring_again(parts):
     job = fire(parts, reminders)
 
     assert ring_key(job.id) not in parts["timer"].armed
-    assert parts["announcer"].calls == [(job.id, "arriba", 0, True)], "un solo aviso al chat"
+    assert parts["announcer"].calls == [(job.id, "arriba", 0)], "un solo aviso al chat"
     assert RingingStore(parts["path"]).get(job.id) is None
 
 

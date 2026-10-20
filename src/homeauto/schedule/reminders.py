@@ -35,11 +35,9 @@ SNOOZE_WINDOW = timedelta(minutes=30)
 NAG_DELAY = timedelta(minutes=5)
 NAG_LIMIT = 3
 
-# Una alarma vuelve a sonar un minuto después de terminar, hasta media hora desde que sonó.
-RING_DELAY = timedelta(minutes=1)
+# Cada cuánto vuelve a sonar una alarma desde que terminó, y hasta cuándo desde que sonó.
+RING_DELAY = timedelta(minutes=5)
 RING_LIMIT = timedelta(minutes=30)
-# Cada cuántas repeticiones se escribe al chat.
-RING_WRITE_EVERY = 5
 
 
 class Timer(Protocol):
@@ -327,7 +325,7 @@ class Reminders:
         self.ringing.mark_rang(job_id)
         self._write_history(lambda history: history.mark_nag(job_id))
         try:
-            self.announce(_ringing_job(ringing), rings=rings, write=rings % RING_WRITE_EVERY == 0)
+            self.announce(_ringing_job(ringing), rings=rings)
         except Exception:
             log.exception("could not ring job %s again", job_id)
         self._next_ring(job_id, ringing.fired_at)
