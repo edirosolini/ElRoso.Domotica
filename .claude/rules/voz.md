@@ -119,16 +119,29 @@ alcanza y sobra.
 ### Proveedor del texto
 
 `LLM_PROVIDER` elige quién escribe el texto: `google` (default) o `anthropic`. Lo usan el
-pulido, el router, las preguntas, la corrección y la traducción, y los arma a todos
-`main.build_model()`: el barato sin búsqueda, o con `ask=True` el que busca en la web.
+pulido, el router, la corrección y la traducción. `ASK_PROVIDER` elige el de `/preguntar`;
+vacío o ausente, hereda `LLM_PROVIDER`. A todos los arma `main.build_model()`: sin `ask`, el
+barato de `LLM_PROVIDER`; con `ask=True`, el que busca en la web, de `ASK_PROVIDER`.
 `ClaudeModel` (`claude.py`) tiene la misma forma de llamarlo que `GoogleModel`, así que
-ninguno de los cinco sabe con cuál habla.
+ninguno de los cinco sabe con cuál habla. El log de arranque nombra los dos: «texto con
+google: gemini-3.1-flash-lite, y las preguntas con anthropic: claude-sonnet-5-5».
+
+- 🔴 **En esta casa el texto va con Gemini y las preguntas con Claude Sonnet**
+  (`ASK_PROVIDER=anthropic`), decisión del dueño del 2026-10-20. Con el prompt actual, Claude
+  Haiku 5.5 dio treinta y nueve o cuarenta de cuarenta y dos en el router, contra cuarenta y
+  dos de cuarenta y dos de Gemini; en el pulido, con doce textos reales, no mejoró y tardó de
+  cero coma ocho a cuatro coma ocho segundos contra cerca de uno de Gemini. Sonnet contestó bien y con fuentes en unos diez
+  segundos. `gemini-3.8-flash` y `gemini-3.7-flash` pulieron igual que `3.1-flash-lite` y
+  tardaron el doble; `gemini-3.5-flash-lite` da 400. Lo que sonaba raro venía de las
+  plantillas, no del modelo (PR #82): cambiar de modelo no lo arregla.
 
 - ⚠️ **Las notas de voz van siempre a Gemini, con `LLM_API_KEY`**, aunque el proveedor sea
   `anthropic`: Claude no acepta audio. Por eso `transcribe_enabled` es aparte de
   `polish_enabled`. Ver **Notas de voz**, en `.claude/rules/router-y-conversacion.md`.
 - **Un proveedor desconocido, o `anthropic` sin `ANTHROPIC_API_KEY`, frena el arranque** con
-  `ConfigError`. Con `google` sin clave, el texto queda apagado como siempre.
+  `ConfigError`, en `LLM_PROVIDER` y en `ASK_PROVIDER` por igual. Con `google` sin
+  `LLM_API_KEY`, se apaga lo de ese proveedor: con `LLM_PROVIDER` el texto, con
+  `ASK_PROVIDER` solo las preguntas (`ask_enabled`, aparte de `polish_enabled`).
 - ⚠️ **`ANTHROPIC_ASK_MODEL` nunca hereda de `ANTHROPIC_MODEL`**: Haiku no tiene la búsqueda
   web. El barato va con `effort` low; el que pregunta, Sonnet con `effort` medium y la
   herramienta de búsqueda, hasta tres búsquedas y con la ubicación en Argentina.
@@ -136,8 +149,8 @@ ninguno de los cinco sabe con cuál habla.
   usa es el único tope, igual que con Google. Un `pause_turn` se continúa hasta tres vueltas;
   una negativa, un error del SDK o una respuesta sin texto salen como `PolishError`, así que
   el original gana igual que con Google.
-- **Los prompts son los mismos para los dos proveedores.** Lo medido del router es con
-  Gemini; ver la medición en `.claude/rules/router-y-conversacion.md`.
+- **Los prompts son los mismos para los dos proveedores**, y están medidos con Gemini; ver la
+  medición en `.claude/rules/router-y-conversacion.md`.
 
 ### Corrección de lo que escribe una persona
 

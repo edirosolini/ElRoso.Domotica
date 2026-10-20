@@ -17,7 +17,7 @@ Domotica/
 │   ├── timespec.py      # parser de "10m", "7:30", "mañana 8:00", "lun-vie"
 │   ├── verbalize.py     # números y horas a palabras, para el sintetizador
 │   ├── polish.py        # reescribe la redacción con un LLM, sin tocar los datos
-│   ├── claude.py        # el modelo de texto por la API de Anthropic, si LLM_PROVIDER lo pide
+│   ├── claude.py        # el modelo de texto por la API de Anthropic, si LLM_PROVIDER o ASK_PROVIDER lo piden
 │   ├── correct.py       # corrige lo que escribió una persona, sin cambiar las palabras
 │   ├── ask.py           # contesta preguntas con búsqueda: lo escrito y lo dicho
 │   ├── summon.py        # la frase con la que la casa llama a alguien
@@ -139,11 +139,12 @@ un despliegue nuevo no necesita migración.
 - **argentinadatos** para los feriados, igual que para la inflación: sin cuenta, sin API key.
 - Servicios externos consultados: Telegram, Open-Meteo (clima y calidad del aire), Google
   Calendar (iCal), YouVersion, argentinadatos, dolarapi, los RSS de noticias, el modelo de
-  texto (pulido, router, preguntas, corrección y traducción) en la API de Google o en la de
-  Anthropic según `LLM_PROVIDER`, la API de Google para transcribir notas de voz **siempre**, y
-  **Seq** (este último por el túnel WireGuard, no por internet).
-- **anthropic**, el SDK oficial, para el texto con Claude. Ver **Proveedor del texto**, en
-  `.claude/rules/voz.md`.
+  texto (pulido, router, corrección y traducción) en la API de Google o en la de Anthropic
+  según `LLM_PROVIDER`, el de las preguntas según `ASK_PROVIDER` (sin él, el mismo), la API
+  de Google para transcribir notas de voz **siempre**, y **Seq** (este último por el túnel
+  WireGuard, no por internet).
+- **anthropic**, el SDK oficial, para el texto o las preguntas con Claude. Ver **Proveedor
+  del texto**, en `.claude/rules/voz.md`.
 - La **API del Proxmox** de casa, por la LAN, con un token de solo lectura. Ver
   **Salud del Proxmox**, en `.claude/rules/vigilancia.md`.
 - **pychromecast** — control del parlante, sobre un solo **zeroconf** para todo el proceso
