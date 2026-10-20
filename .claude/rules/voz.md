@@ -2,6 +2,7 @@
 paths:
   - "src/homeauto/verbalize.py"
   - "src/homeauto/polish.py"
+  - "src/homeauto/claude.py"
   - "src/homeauto/correct.py"
   - "src/homeauto/summon.py"
   - "src/homeauto/voice/**"
@@ -10,6 +11,7 @@ paths:
   - "tests/voice/**"
   - "tests/test_verbalize.py"
   - "tests/test_polish.py"
+  - "tests/test_claude.py"
   - "tests/test_correct.py"
   - "tests/test_summon.py"
   - "tests/bot/test_say_correction.py"
@@ -54,8 +56,9 @@ detalle aparte, y `HouseVoice.announce(written=...)` lo suma solo a la copia del
 
 ### Pulido de la redacción
 
-`polish.py` le pasa el texto **generado** a la API de Google para que suene más natural antes
-de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de llamadas por día.
+`polish.py` le pasa el texto **generado** al modelo de texto para que suene más natural antes
+de sintetizarlo. El volumen real son decenas de llamadas por día: con Google, el free tier
+alcanza y sobra.
 
 - 🔴 **El original siempre gana.** Sin clave, sin red, con timeout o con una respuesta
   sospechosa, se dice el texto que ya había. Esto es decoración sobre un camino que tiene que
@@ -89,8 +92,9 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
   cachea por frase y una redacción distinta cada vez significaría sintetizar siempre.
 - La clave viaja en el header `x-goog-api-key`, **nunca en la query string**, que terminaría
   en cualquier log que registre la URL.
-- Los modelos Gemma **no aceptan system instruction**: el prompt entero va como turno de
-  usuario.
+- `GoogleModel` acepta `system`: a Gemini le va como `systemInstruction`; a Gemma, que **no
+  acepta system instruction**, pegado adelante del turno de usuario. Hoy ningún prompt lo usa:
+  todos viajan enteros como turno de usuario.
 - 🔴 **Gemma 4 no sirve acá, aunque sea el modelo obvio.** Razona antes de cada respuesta y
   **no se puede apagar**: la API rechaza `thinkingBudget` y `thinkingLevel` con un 400.
   Medido contra el endpoint real, tardó **entre 40 y 79 segundos** en reescribir una frase,
@@ -111,6 +115,29 @@ de sintetizarlo. El free tier alcanza y sobra: el volumen real son decenas de ll
   No agregar un llamador nuevo que lo invoque desde el event loop.
 - ⚠️ La API también pule, así que un aviso urgente puede tardar hasta el timeout de seis
   segundos más de lo que tardaba. El original igual sale: es demora, no pérdida.
+
+### Proveedor del texto
+
+`LLM_PROVIDER` elige quién escribe el texto: `google` (default) o `anthropic`. Lo usan el
+pulido, el router, las preguntas, la corrección y la traducción, y los arma a todos
+`main.build_model()`: el barato sin búsqueda, o con `ask=True` el que busca en la web.
+`ClaudeModel` (`claude.py`) tiene la misma forma de llamarlo que `GoogleModel`, así que
+ninguno de los cinco sabe con cuál habla.
+
+- ⚠️ **Las notas de voz van siempre a Gemini, con `LLM_API_KEY`**, aunque el proveedor sea
+  `anthropic`: Claude no acepta audio. Por eso `transcribe_enabled` es aparte de
+  `polish_enabled`. Ver **Notas de voz**, en `.claude/rules/router-y-conversacion.md`.
+- **Un proveedor desconocido, o `anthropic` sin `ANTHROPIC_API_KEY`, frena el arranque** con
+  `ConfigError`. Con `google` sin clave, el texto queda apagado como siempre.
+- ⚠️ **`ANTHROPIC_ASK_MODEL` nunca hereda de `ANTHROPIC_MODEL`**: Haiku no tiene la búsqueda
+  web. El barato va con `effort` low; el que pregunta, Sonnet con `effort` medium y la
+  herramienta de búsqueda, hasta tres búsquedas y con la ubicación en Argentina.
+- **El cliente es el SDK oficial, sin reintentos** (`max_retries=0`): el timeout de quien lo
+  usa es el único tope, igual que con Google. Un `pause_turn` se continúa hasta tres vueltas;
+  una negativa, un error del SDK o una respuesta sin texto salen como `PolishError`, así que
+  el original gana igual que con Google.
+- **Los prompts son los mismos para los dos proveedores.** Lo medido del router es con
+  Gemini; ver la medición en `.claude/rules/router-y-conversacion.md`.
 
 ### Corrección de lo que escribe una persona
 

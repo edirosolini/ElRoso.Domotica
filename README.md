@@ -227,7 +227,8 @@ tampoco por mes.
 
 ## Sin la barra (opcional)
 
-Con `LLM_API_KEY` cargada, un mensaje suelto también se entiende. No hace falta acordarse de
+Con la clave del modelo de texto cargada (ver **Redacción más natural**), un mensaje suelto
+también se entiende. No hace falta acordarse de
 ningún comando:
 
 ```
@@ -285,7 +286,7 @@ Los comandos con barra siguen funcionando igual y no pasan por el intérprete.
 ## Preguntas (opcional)
 
 `/preguntar` manda la pregunta a un modelo con búsqueda, escribe la respuesta en el chat y
-dice un resumen por el parlante. Usa la misma `LLM_API_KEY` que la redacción.
+dice un resumen por el parlante. Usa el mismo proveedor y la misma clave que la redacción.
 
 ```
 /preguntar top 10 de los mejores goles de Messi
@@ -309,15 +310,19 @@ de cuatro** y contestó el resto de memoria — se inventó la temperatura del m
 entero buscó en las cuatro. Para pulir una frase el lite sobra; para contestar no alcanza.
 
 ```ini
-ASK_MODEL=gemini-3.7-flash     # default; vacío usa este mismo
+ASK_MODEL=gemini-3.7-flash             # default; vacío usa este mismo
+ANTHROPIC_ASK_MODEL=claude-sonnet-5-5  # el de Claude; NO hereda de ANTHROPIC_MODEL
 ```
+
+Con Claude pasa lo mismo, más marcado: Haiku, el barato, **no tiene búsqueda web**. Por eso
+`/preguntar` va con Sonnet, que busca hasta tres veces por pregunta.
 
 ## Redacción más natural (opcional)
 
-Todo lo que la casa dice puede pasar por un modelo de Google para que suene mejor en voz alta:
+Todo lo que la casa dice puede pasar por un modelo de lenguaje para que suene mejor en voz alta:
 agenda, clima, avisos de evento, el mensaje de un timer o una alarma, los avisos del monitor y
-de Seq, el aviso de lluvia y lo que entra por la API. Entra en el free tier de sobra: el uso
-real son decenas de llamadas por día.
+de Seq, el aviso de lluvia y lo que entra por la API. El uso real son decenas de llamadas por
+día: con Google entra en el free tier de sobra.
 
 La respuesta de `/preguntar` **no** pasa por acá: ya es prosa de un modelo, y una segunda
 pasada solo sumaría espera.
@@ -343,20 +348,34 @@ Tres cosas puede tocar, y nada más: la ortografía y la puntuación, los númer
 palabras porque el sintetizador lee mal un dígito— y **la comida, que sigue al reloj**: "es
 hora de comer" a la noche es cenar, y al mediodía almorzar. Si el modelo intenta cualquier
 otra cosa —agregar una palabra, sacarla, dar vuelta la frase— se descarta y se dice tal cual
-lo escribiste. Sin `LLM_API_KEY` tampoco cambia nada.
+lo escribiste. Sin clave tampoco cambia nada.
 
 ```
 antes:  Atención: Dentista, en diez minutos, en Consultorio.
 ahora:  Tenés turno con el dentista en diez minutos en el consultorio.
 ```
 
-Se saca una clave en [Google AI Studio](https://aistudio.google.com/apikey) y se pone en la
-configuración:
+**El proveedor se elige con `LLM_PROVIDER`**: `google` (default) o `anthropic`. El mismo vale
+para la redacción, el texto sin barra, `/preguntar`, la corrección de `/decir` y `/traducir`.
+
+Con Google, se saca una clave en [Google AI Studio](https://aistudio.google.com/apikey):
 
 ```ini
 LLM_API_KEY=              # sin clave, apagado: el texto sale tal cual
 LLM_MODEL=gemini-3.1-flash-lite
 ```
+
+Con Claude, una clave de la [consola de Anthropic](https://console.anthropic.com/):
+
+```ini
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=        # obligatoria con anthropic: sin ella el servicio no arranca
+ANTHROPIC_MODEL=claude-haiku-5-5
+```
+
+⚠️ **Las notas de voz se transcriben siempre con Google**, porque Claude no acepta audio. Con
+`LLM_PROVIDER=anthropic`, dejá también `LLM_API_KEY`: sin ella el texto anda y los audios
+contestan «No escucho audios».
 
 ⚠️ **No poner un modelo que razone.** Gemma 4 parece la opción natural por ser abierta, pero
 razona antes de cada respuesta y no se puede apagar: tarda **entre 40 y 79 segundos** en
@@ -373,6 +392,11 @@ curl -s -X POST \
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent" \
   -H "Content-Type: application/json" -H "x-goog-api-key: $LLM_API_KEY" \
   -d '{"contents":[{"parts":[{"text":"decí hola"}]}]}'
+
+curl -s https://api.anthropic.com/v1/messages \
+  -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -d '{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"decí hola"}]}'
 ```
 
 **Lo que el modelo no puede hacer.** Solo reescribe; no informa. La respuesta se descarta —y se
@@ -709,9 +733,13 @@ PVE_URL=https://192.168.68.60:8006  # API del Proxmox; sin URL, no se vigila
 PVE_TOKEN=                          # usuario@realm!id=secreto, de solo lectura
 PVE_CA_FILE=/etc/domotica/pve-ca.pem   # obligatoria con PVE_URL; tiene que existir
 PVE_DISK_ALERT=85                   # % de disco que avisa, de 1 a 99
-LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado
+LLM_PROVIDER=google            # quién escribe el texto: google o anthropic
+LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado. Las notas de voz la usan siempre
 LLM_MODEL=gemini-3.1-flash-lite
 ASK_MODEL=gemini-3.7-flash     # el que contesta /preguntar; NO hereda de LLM_MODEL
+ANTHROPIC_API_KEY=             # obligatoria con LLM_PROVIDER=anthropic
+ANTHROPIC_MODEL=claude-haiku-5-5
+ANTHROPIC_ASK_MODEL=claude-sonnet-5-5   # el que contesta /preguntar; NO hereda de ANTHROPIC_MODEL
 ECONOMY=on                     # dólar, riesgo país e inflación en el resumen
 VERSE=on                       # versículo del día (NTV) al final del resumen
 NEWS_RSS_INFOBAE=https://www.infobae.com/arc/outboundfeeds/rss/?outputType=xml
