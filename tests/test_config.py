@@ -569,3 +569,43 @@ def test_a_config_built_in_code_has_the_screen_defaults():
 
     assert cfg.screen_device == "comedor"
     assert "parlante" not in cfg.screen_devices
+
+
+# --- menú de la semana ---
+
+
+MENU_BASE = f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\n"
+
+
+def test_the_menu_hours_default_to_this_house(tmp_path):
+    """Sin clave en el env, el almuerzo se piensa a las 11:00 y la cena a las 17:30."""
+    cfg = Config.from_file(write_env(tmp_path, MENU_BASE))
+
+    assert cfg.menu_lunch_at == time(11, 0)
+    assert cfg.menu_dinner_at == time(17, 30)
+
+
+def test_the_menu_hours_are_read(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, MENU_BASE + "MENU_LUNCH_AT=10:30\nMENU_DINNER_AT=18:00\n"))
+
+    assert cfg.menu_lunch_at == time(10, 30)
+    assert cfg.menu_dinner_at == time(18, 0)
+
+
+@pytest.mark.parametrize("key", ["MENU_LUNCH_AT", "MENU_DINNER_AT"])
+def test_each_meal_can_be_turned_off(tmp_path, key):
+    cfg = Config.from_file(write_env(tmp_path, MENU_BASE + f"{key}=off\n"))
+
+    assert getattr(cfg, key.lower()) is None
+
+
+def test_a_broken_menu_hour_stops_the_service(tmp_path):
+    with pytest.raises(ConfigError, match="MENU_DINNER_AT"):
+        Config.from_file(write_env(tmp_path, MENU_BASE + "MENU_DINNER_AT=tarde\n"))
+
+
+def test_make_config_has_both_meals():
+    cfg = make_config()
+
+    assert cfg.menu_lunch_at == time(11, 0)
+    assert cfg.menu_dinner_at == time(17, 30)

@@ -60,6 +60,10 @@ CASES = (
     ("la basura la sacan Cin y Die una semana cada uno, es el 7", "turnos", "7 Cin, Die"),
     ("poné la pantalla en la tele de la recámara", "pantalla", "en recamara"),
     ("mostrame la agenda", "agenda", ""),
+    ("qué comemos esta semana", "menu", ""),
+    ("armá otro menú sin carne", "menu", "nuevo"),
+    ("pasá a compras lo del menú de la semana", "menu", "compras semana"),
+    ("agregá milanesas a compras", "agregar", "milanesas"),
 )
 
 

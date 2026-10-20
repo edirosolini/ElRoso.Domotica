@@ -35,6 +35,7 @@ class SpyCommands:
     devices = use = turn_off = screen = weather = agenda_command = _record
     status = silence = speak = ask = calculate = free_text = _record
     add_item = shopping = todo = remove_item = translate = postpone = pills = vacation = turns = press = _record
+    menu = _record
 
 
 class EditedUpdate:

@@ -39,3 +39,8 @@ def test_help_names_the_turns_and_how_to_cut_them():
     line = next(line for line in HELP.splitlines() if "/turnos 7 Cin, Die" in line)
 
     assert "/turnos 7 off" in line
+
+
+def test_help_names_the_meal_menu_and_its_shopping():
+    assert "/menu nuevo" in HELP
+    assert "/menu compras semana" in HELP

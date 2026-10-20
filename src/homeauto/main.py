@@ -48,6 +48,7 @@ from homeauto.voice.voicemail import Voicemail
 from homeauto.polish import TIMEOUT as POLISH_TIMEOUT, GoogleModel, Polisher, as_is
 from homeauto.translate import TRANSLATE_TIMEOUT, Translator
 from homeauto.lists import ListStore
+from homeauto.meals import MENU_TIMEOUT, MealPlanner, MealStore
 from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import AwayStore, Hush, HushStore, Vacation
 from homeauto.screen import ScreenPages, ScreenStore, Screens
@@ -167,6 +168,7 @@ SILENCE_COMMANDS = ("silencio", "siesta")
 SPEAK_COMMANDS = ("hablar",)
 VACATION_COMMANDS = ("vacaciones",)
 TURNS_COMMANDS = ("turnos",)
+MENU_COMMANDS = ("menu",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
@@ -175,7 +177,7 @@ ALL_COMMANDS = (
     + ASK_COMMANDS + CALC_COMMANDS
     + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
     + TRANSLATE_COMMANDS + POSTPONE_COMMANDS + PILLS_COMMANDS + VACATION_COMMANDS
-    + TURNS_COMMANDS
+    + TURNS_COMMANDS + MENU_COMMANDS
 )
 
 # Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
@@ -552,6 +554,13 @@ def build_transcriber(config: Config) -> Transcriber | None:
     )
 
 
+def build_meal_planner(config: Config) -> MealPlanner | None:
+    """Quién arma el menú de la semana, o None sin clave del proveedor de texto."""
+    if not config.polish_enabled:
+        return None
+    return MealPlanner(model=build_model(config, timeout=MENU_TIMEOUT))
+
+
 def build_voicemail(synth) -> Voicemail:
     """La misma síntesis que usa el parlante, codificada para el chat."""
     return Voicemail(synth)
@@ -745,6 +754,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
         (SPEAK_COMMANDS, commands.speak),
         (VACATION_COMMANDS, commands.vacation),
         (TURNS_COMMANDS, commands.turns),
+        (MENU_COMMANDS, commands.menu),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -1034,6 +1044,11 @@ def main() -> None:
         stock=stock,
         vacation=vacation,
         screens=screens,
+        meal_store=MealStore(db_path),
+        meal_planner=build_meal_planner(config),
+        tell_others=lambda chat_id, text: _tell_alert_chats(
+            notifier, config.allowed_chat_ids, chat_id, text
+        ),
         correct=build_corrector(config),
         # Solo para /llamar, que es texto nuestro; lo que escribe una persona
         # va por `correct`.

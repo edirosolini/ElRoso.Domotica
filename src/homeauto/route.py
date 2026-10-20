@@ -25,7 +25,7 @@ ROUTABLE = (
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
     "agregar", "compras", "pendientes", "sacar", "traducir", "posponer", "pastillas",
-    "vacaciones", "turnos", "pantalla",
+    "vacaciones", "turnos", "pantalla", "menu",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -79,6 +79,9 @@ Comandos y qué lleva cada uno:
 - pendientes: sin argumento, qué falta hacer
 - sacar: el número a sacar de una lista, o "todo" para vaciarla
 - traducir: el texto a traducir, con "al <idioma>" adelante si se nombra uno
+- menu: sin argumento, qué se come esta semana; "nuevo" y lo que se pida para volver a
+  armarlo, así: "nuevo sin carne"; "compras" para pasar a la lista lo de hoy y
+  "compras semana" lo de toda la semana. Sumar algo suelto a la lista es "agregar"
 - pastillas: sin argumento, cuántas quedan de cada remedio; para reponer, el remedio y
   la cantidad con "+", así: "enalapril +30"
 - vacaciones: hasta cuándo la casa no habla, con la fecha de vuelta, así: "hasta 25/10"
@@ -148,6 +151,22 @@ ARGUMENTO: 15 por 4
 Mensaje: agregá leche y pan a la lista de compras
 COMANDO: agregar
 ARGUMENTO: leche y pan
+
+Mensaje: qué comemos esta semana
+COMANDO: menu
+ARGUMENTO:
+
+Mensaje: armá otro menú sin carne
+COMANDO: menu
+ARGUMENTO: nuevo sin carne
+
+Mensaje: pasá a compras lo del menú de la semana
+COMANDO: menu
+ARGUMENTO: compras semana
+
+Mensaje: agregá milanesas a compras
+COMANDO: agregar
+ARGUMENTO: milanesas
 
 Mensaje: compré 30 de enalapril
 COMANDO: pastillas
