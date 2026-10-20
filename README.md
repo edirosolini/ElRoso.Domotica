@@ -292,7 +292,9 @@ Los comandos con barra siguen funcionando igual y no pasan por el intérprete.
 ## Preguntas (opcional)
 
 `/preguntar` manda la pregunta a un modelo con búsqueda, escribe la respuesta en el chat y
-dice un resumen por el parlante. Usa el mismo proveedor y la misma clave que la redacción.
+dice un resumen por el parlante. El proveedor sale de `ASK_PROVIDER` (`google` o
+`anthropic`); vacío, usa el mismo que la redacción. Así el texto puede ir con Gemini y las
+preguntas con Claude.
 
 ```
 /preguntar top 10 de los mejores goles de Messi
@@ -316,9 +318,15 @@ de cuatro** y contestó el resto de memoria — se inventó la temperatura del m
 entero buscó en las cuatro. Para pulir una frase el lite sobra; para contestar no alcanza.
 
 ```ini
+ASK_PROVIDER=anthropic                 # google o anthropic; vacío hereda LLM_PROVIDER
 ASK_MODEL=gemini-3.7-flash             # default; vacío usa este mismo
 ANTHROPIC_ASK_MODEL=claude-sonnet-5-5  # el de Claude; NO hereda de ANTHROPIC_MODEL
 ```
+
+`ASK_PROVIDER=anthropic` sin `ANTHROPIC_API_KEY`, o un valor que no sea `google` ni
+`anthropic`, y el servicio no arranca. `ASK_PROVIDER=google` sin `LLM_API_KEY` apaga solo
+`/preguntar`. Al arrancar, el log dice con qué va cada uno: «texto con google:
+gemini-3.1-flash-lite, y las preguntas con anthropic: claude-sonnet-5-5».
 
 Con Claude pasa lo mismo, más marcado: Haiku, el barato, **no tiene búsqueda web**. Por eso
 `/preguntar` va con Sonnet, que busca hasta tres veces por pregunta.
@@ -362,7 +370,8 @@ ahora:  Tenés turno con el dentista en diez minutos en el consultorio.
 ```
 
 **El proveedor se elige con `LLM_PROVIDER`**: `google` (default) o `anthropic`. El mismo vale
-para la redacción, el texto sin barra, `/preguntar`, la corrección de `/decir` y `/traducir`.
+para la redacción, el texto sin barra, la corrección de `/decir` y `/traducir`. `/preguntar`
+lo hereda salvo que `ASK_PROVIDER` diga otro (ver **Preguntas**).
 
 Con Google, se saca una clave en [Google AI Studio](https://aistudio.google.com/apikey):
 
@@ -742,8 +751,9 @@ PVE_DISK_ALERT=85                   # % de disco que avisa, de 1 a 99
 LLM_PROVIDER=google            # quién escribe el texto: google o anthropic
 LLM_API_KEY=                   # API de Google AI Studio; sin clave, apagado. Las notas de voz la usan siempre
 LLM_MODEL=gemini-3.1-flash-lite
+ASK_PROVIDER=                  # quién contesta /preguntar: google o anthropic; vacío hereda LLM_PROVIDER
 ASK_MODEL=gemini-3.7-flash     # el que contesta /preguntar; NO hereda de LLM_MODEL
-ANTHROPIC_API_KEY=             # obligatoria con LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=             # obligatoria si LLM_PROVIDER o ASK_PROVIDER es anthropic
 ANTHROPIC_MODEL=claude-haiku-5-5
 ANTHROPIC_ASK_MODEL=claude-sonnet-5-5   # el que contesta /preguntar; NO hereda de ANTHROPIC_MODEL
 ECONOMY=on                     # dólar, riesgo país e inflación en el resumen

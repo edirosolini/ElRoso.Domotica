@@ -80,8 +80,10 @@ existen ya saben rechazar un argumento malo.
   seis segundos y el caso sale como `RouteError`. Se vuelve a correr.
 - ⚠️ **La medición usa el proveedor y el modelo barato del env del CT**, por `build_model`, y
   los imprime al empezar. Con un modelo que la API no acepta, las cuarenta y dos llamadas
-  fallan y el resultado es cero: es el modelo, no el prompt. Con `LLM_PROVIDER=anthropic` el
-  prompt todavía no se midió.
+  fallan y el resultado es cero: es el modelo, no el prompt. Con `LLM_PROVIDER=anthropic` y
+  Claude Haiku 5.5, el mismo prompt dio treinta y nueve o cuarenta de cuarenta y dos
+  (2026-10-20): por eso el router sigue en Gemini. Ver **Proveedor del texto**, en
+  `.claude/rules/voz.md`.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
   `traducir → "hola al inglés"`, con el idioma **atrás**, y `split_language()` solo lo leía
   adelante: "traducí hola al francés" iba a traducir el texto *"hola al francés"* al inglés.

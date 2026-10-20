@@ -118,9 +118,13 @@ que la casa dice que no generó ella ni escribió una persona: viene de afuera.
   resto de memoria, incluida la temperatura de ahora, que se inventó. `gemini-3.7-flash` y
   `gemini-flash-latest` buscaron en las cuatro. Un lite es la elección correcta para pulir,
   donde no hay nada que buscar, y la incorrecta acá: **una respuesta vieja dicha con
-  seguridad es peor que ninguna.** Con `LLM_PROVIDER=anthropic` vale lo mismo para
-  `ANTHROPIC_ASK_MODEL`, que no hereda de `ANTHROPIC_MODEL` porque Haiku no tiene búsqueda.
-  Ver **Proveedor del texto**, en `.claude/rules/voz.md`.
+  seguridad es peor que ninguna.** Con Claude vale lo mismo para `ANTHROPIC_ASK_MODEL`, que
+  no hereda de `ANTHROPIC_MODEL` porque Haiku no tiene búsqueda.
+- **El proveedor de las preguntas es `ASK_PROVIDER`**, no `LLM_PROVIDER`; vacío, hereda ese.
+  `ASK_MODEL` o `ANTHROPIC_ASK_MODEL` se eligen por `ASK_PROVIDER` (`text_ask_model`), y
+  `build_asker()` devuelve None si ese proveedor no tiene clave (`ask_enabled`), aunque el
+  texto ande. En esta casa es `anthropic`: Sonnet contestó bien y con fuentes en unos diez
+  segundos. Ver **Proveedor del texto**, en `.claude/rules/voz.md`.
 - 🔴 **El prompt tiene que mandar a buscar primero, y decirle que su información está vieja.**
   Con "buscá en internet si hace falta" al final, el mismo modelo grande buscaba mucho menos:
   el formato rígido de dos secciones le corría la atención a formatear. Con la orden adelante,
