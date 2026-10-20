@@ -152,7 +152,8 @@ vacaciones. Qué equipos tienen pantalla se configura en `SCREEN_DEVICES`: a uno
 ahí le contesta que no tiene pantalla. Sin `API_TOKEN` no hay pantalla que mostrar.
 
 **Alarma en la tele.** Una alarma en un equipo de `SCREEN_DEVICES` prende la tele con la hora
-grande y el mensaje mientras suena. Cuando deja de sonar pasa sola al kiosco, y a los 15
+grande y el mensaje durante un minuto después de cada sonido, y entre una repetición y la
+siguiente muestra el kiosco. Cuando deja de sonar pasa sola al kiosco, y a los 15
 minutos se cierra, si nadie puso otra cosa. En descanso o de vacaciones no se prende.
 
 **Elegir equipo.** Cualquier comando acepta `en <equipo>` adelante y va solo a ese; `/usar`
@@ -164,8 +165,9 @@ qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
 
 **Alarma, recordatorio y timer suenan distinto.** La alarma es para despertarse: un despertador
 de ráfagas que suben de volumen, el parlante a 90 como mínimo, «🔕 Apagar» y «Posponer». Si
-nadie la apaga, vuelve a sonar un minuto después de terminar, con un despertador más largo, durante
-media hora; al chat escribe una de cada cinco veces y al final avisa «Dejé de sonar».
+nadie la apaga, vuelve a sonar cinco minutos después de terminar, con un despertador más largo, durante
+media hora: cinco repeticiones más. Cada una escribe «Sigue sonando» al chat, también en
+horario de descanso, y al final avisa «Dejé de sonar».
 «Apagar» funciona desde cualquier chat, corta lo que esté sonando y les avisa a los demás
 quién la apagó; posponer, `/cancelar` o borrarla también cortan la repetición. El recordatorio (`/recordar`) repite siempre en los días marcados —una
 medicación, salir al colegio— y el timer es de una sola vez; los dos suenan con un beep suave

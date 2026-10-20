@@ -66,8 +66,11 @@ consulta `/api/ringing/<id>` cada cinco segundos.
   `comedor,recamara,habitacion`. `model_name` no sirve para saberlo (ver **Gotchas**, en `.claude/rules/voz.md`).
 - **Mientras suena, lo que se restaura después de cada repetición es la vista de alarma**, no
   el kiosco: `ScreenStore.job_for()` dice qué alarma tiene esa tele.
-- **Cuando deja de sonar, la página pasa sola a `/pantalla?ver=1`**: el feed contesta
-  `ringing: false` y `alarm.js` cambia de dirección.
+- **La vista de alarma dura un minuto por sonido** (`VIEW_MS` en `alarm.js`, contado desde que
+  carga la página): después pasa sola a `/pantalla?ver=1` aunque siga sonando, y la próxima
+  repetición la vuelve a cargar al restaurar. Entre repeticiones hay cinco minutos de kiosco.
+- **Cuando deja de sonar, la página también pasa sola a `/pantalla?ver=1`**: el feed contesta
+  `ringing: false` y `alarm.js` cambia de dirección. Las dos reglas viven en `nextPage()`.
 - 🔴 **A los quince minutos de que deja de sonar se cierra DashCast** (`OFF_DELAY`), con el
   timer `screen-off:<equipo>`, y **solo si sigue abierto**, igual que `apagar`. Una alarma
   nueva en esa tele antes del cierre lo cancela.
