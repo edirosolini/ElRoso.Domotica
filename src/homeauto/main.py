@@ -464,8 +464,9 @@ def _announce(house: HouseVoice, text: str, written: str | None = None, others=S
 
 
 def build_model(config: Config, *, ask: bool = False, timeout: float = POLISH_TIMEOUT):
-    """El modelo de texto del proveedor configurado; con `ask`, el que busca en la web."""
-    if config.llm_provider == ANTHROPIC:
+    """El modelo barato del proveedor de texto; con `ask`, el que busca, del de preguntas."""
+    provider = config.ask_provider if ask else config.llm_provider
+    if provider == ANTHROPIC:
         return ClaudeModel(
             api_key=config.anthropic_api_key,
             model=config.anthropic_ask_model if ask else config.anthropic_model,
@@ -482,7 +483,7 @@ def build_model(config: Config, *, ask: bool = False, timeout: float = POLISH_TI
 
 
 def build_polisher(config: Config):
-    """El pulidor de lo que generamos, o None sin clave del proveedor de texto.
+    """El pulidor de lo que generamos, con el modelo del proveedor de texto.
 
     Por acá solo pasa texto que escribe este servicio. Lo que una persona tipeó
     en /decir va por `build_corrector`, que arregla la escritura y no toca las
@@ -505,11 +506,11 @@ def build_corrector(config: Config):
 
 
 def build_asker(config: Config) -> Asker | None:
-    """Quién contesta una pregunta, o None sin clave del proveedor de texto.
+    """Quién contesta una pregunta, o None sin clave del proveedor de preguntas.
 
     Con el modelo que busca en la web de ese proveedor y un timeout más largo.
     """
-    if not config.polish_enabled:
+    if not config.ask_enabled:
         return None
     return Asker(model=build_model(config, ask=True, timeout=ASK_TIMEOUT))
 
@@ -834,13 +835,22 @@ def main() -> None:
     config = Config.from_file(CONFIG_PATH)
     if config.polish_enabled:
         polish = build_polisher(config)
-        log.info(
-            "texto con %s: %s, y las preguntas con %s",
-            config.llm_provider, config.text_model, config.text_ask_model,
-        )
+        if config.ask_enabled:
+            log.info(
+                "texto con %s: %s, y las preguntas con %s: %s",
+                config.llm_provider, config.text_model,
+                config.ask_provider, config.text_ask_model,
+            )
+        else:
+            log.info(
+                "texto con %s: %s, y sin clave de %s no hay preguntas",
+                config.llm_provider, config.text_model, config.ask_provider,
+            )
     else:
         polish = as_is
         log.info("sin LLM_API_KEY: el texto generado va tal cual")
+        if config.ask_enabled:
+            log.info("preguntas con %s: %s", config.ask_provider, config.text_ask_model)
     if config.polish_enabled and not config.transcribe_enabled:
         log.info("sin LLM_API_KEY: las notas de voz no se transcriben")
     db_path = STATE_DIR / "jobs.db"

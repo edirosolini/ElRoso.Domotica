@@ -290,6 +290,88 @@ def test_a_config_built_in_code_uses_google():
     assert cfg.transcribe_enabled is False
 
 
+# --- el proveedor de las preguntas ---
+
+
+def test_without_ask_provider_the_questions_follow_the_text(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "LLM_API_KEY=k\n"))
+
+    assert cfg.ask_provider == "google"
+    assert cfg.ask_enabled is True
+    assert cfg.text_ask_model == cfg.ask_model
+
+
+def test_an_empty_ask_provider_inherits_anthropic(tmp_path):
+    cfg = Config.from_file(
+        write_env(tmp_path, BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\nASK_PROVIDER=\n")
+    )
+
+    assert cfg.ask_provider == "anthropic"
+    assert cfg.text_ask_model == "claude-sonnet-5-5"
+
+
+def test_the_questions_can_go_to_anthropic_while_the_text_stays_on_google(tmp_path):
+    cfg = Config.from_file(
+        write_env(
+            tmp_path,
+            BASE + "LLM_API_KEY=k\nASK_PROVIDER= Anthropic \nANTHROPIC_API_KEY=sk-x\n",
+        )
+    )
+
+    assert cfg.llm_provider == "google"
+    assert cfg.text_model == cfg.llm_model
+    assert cfg.ask_provider == "anthropic"
+    assert cfg.ask_enabled is True
+    assert cfg.text_ask_model == "claude-sonnet-5-5"
+
+
+def test_the_questions_can_go_to_google_while_the_text_is_on_anthropic(tmp_path):
+    cfg = Config.from_file(
+        write_env(
+            tmp_path,
+            BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n"
+            "ASK_PROVIDER=google\nLLM_API_KEY=k\nASK_MODEL=caro\n",
+        )
+    )
+
+    assert cfg.text_model == "claude-haiku-5-5"
+    assert cfg.ask_provider == "google"
+    assert cfg.ask_enabled is True
+    assert cfg.text_ask_model == "caro"
+
+
+def test_an_unknown_ask_provider_stops_the_service(tmp_path):
+    path = write_env(tmp_path, BASE + "LLM_API_KEY=k\nASK_PROVIDER=openai\n")
+
+    with pytest.raises(ConfigError, match="ASK_PROVIDER"):
+        Config.from_file(path)
+
+
+def test_asking_anthropic_without_its_key_stops_the_service(tmp_path):
+    path = write_env(tmp_path, BASE + "LLM_API_KEY=k\nASK_PROVIDER=anthropic\n")
+
+    with pytest.raises(ConfigError, match="ASK_PROVIDER=anthropic.*ANTHROPIC_API_KEY"):
+        Config.from_file(path)
+
+
+def test_asking_google_without_its_key_turns_only_the_questions_off(tmp_path):
+    cfg = Config.from_file(
+        write_env(
+            tmp_path, BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\nASK_PROVIDER=google\n"
+        )
+    )
+
+    assert cfg.polish_enabled is True
+    assert cfg.ask_enabled is False
+
+
+def test_a_config_built_in_code_asks_with_the_text_provider():
+    cfg = make_config(llm_provider="anthropic", anthropic_api_key="sk-x")
+
+    assert cfg.ask_provider == "anthropic"
+    assert cfg.ask_enabled is True
+
+
 # --- el resumen semanal ------------------------------------------------------
 
 
