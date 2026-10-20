@@ -837,6 +837,14 @@ def test_the_control_page_loads_its_script_and_its_manifest(app):
     assert 'href="/agenda"' in page
 
 
+def test_the_control_offers_the_meal_menu_next_to_the_lists(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    lists = page[page.index("<h2>🛒 Listas</h2>"):]
+    lists = lists[:lists.index("</section>")]
+    assert '<button type="button" class="cmd" data-verb="menu">Menú</button>' in lists
+
+
 def test_the_manifest_opens_the_control_standalone_with_both_icons(app):
     manifest = body_json(get(app, "/static/manifest.webmanifest"))
 

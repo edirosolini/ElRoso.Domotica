@@ -1834,3 +1834,76 @@ def test_without_allowed_chats_the_control_does_not_run_commands(wired, tmp_path
         body=json.dumps({"chat_id": 42, "data": "lista"}).encode("utf-8")))
 
     assert response.status == 403
+
+
+# --- menú de la semana ---
+
+
+def _week_reply(prompt):
+    """Contesta como el modelo: una semana válida, o un plato si se pide uno."""
+    if '"dias"' not in prompt:
+        return json.dumps({"plato": "Tarta de acelga", "ingredientes": ["acelga", "huevos"]})
+    days = [
+        {meal: {"plato": f"Plato {meal} {i}", "ingredientes": ["papas", "sal"]}
+         for meal in ("almuerzo", "cena")}
+        for i in range(7)
+    ]
+    return "```json\n" + json.dumps({"dias": days}) + "\n```"
+
+
+def _wired_commands(monkeypatch):
+    """Los kwargs y el `Commands` que arma `main()`."""
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen.update(kwargs, commands=self)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    return seen
+
+
+def test_without_a_key_the_menu_has_its_table_but_no_planner(wired, tmp_path, monkeypatch):
+    seen = _wired_commands(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, HOUSE))
+
+    assert seen["meal_planner"] is None
+    assert seen["meal_store"].db_path == tmp_path / "jobs.db"
+    assert "LLM_API_KEY" in seen["commands"].menu(42, "")
+
+
+def test_the_menu_planner_uses_the_cheap_model_with_its_own_timeout(wired, tmp_path, monkeypatch):
+    seen = _wired_commands(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, HOUSE + "LLM_API_KEY=k\nLLM_MODEL=barato\n"))
+
+    model = seen["meal_planner"].model
+    assert isinstance(model, polish.GoogleModel)
+    assert model.model == "barato"
+    assert model.search is False
+    assert model.timeout == main.MENU_TIMEOUT
+
+
+def test_the_wired_menu_is_made_saved_and_changed_on_the_one_database(wired, tmp_path, monkeypatch):
+    """🔴 El doble contesta JSON como el modelo y el menú llega a la tabla de verdad."""
+    import sqlite3
+
+    monkeypatch.setattr(main, "ChatNotifier", _FakeNotifier)
+    seen = _wired_commands(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, HOUSE + "LLM_API_KEY=k\n"))
+    seen["meal_planner"].model = _week_reply
+    commands = seen["commands"]
+    commands.clock = lambda: datetime(2026, 10, 20, 10, 0)
+
+    week = commands.menu(42, "")
+
+    assert "Plato almuerzo 0" in week
+    with sqlite3.connect(tmp_path / "jobs.db") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM meal_plans").fetchone()[0] == 14
+
+    commands.press(42, "menu otra 2026-10-21 cena", who="Eze")
+
+    assert seen["meal_store"].get(datetime(2026, 10, 21).date(), "cena").dish == "Tarta de acelga"
+    assert [(chat, text.split(":")[0]) for chat, text, _ in _FakeNotifier.sent] == [
+        (77, "🍽 Eze cambió la cena del miércoles 21/10")
+    ]

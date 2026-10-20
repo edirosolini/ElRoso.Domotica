@@ -53,6 +53,9 @@ DEFAULT_BRIEFING_AT = "08:00"
 DEFAULT_CLOSING_AT = "22:00"
 DEFAULT_WEEKLY_AT = "dom 19:00"
 DEFAULT_EVENT_LEAD = 10
+# Hora a la que se piensa cada comida del menú.
+DEFAULT_MENU_LUNCH_AT = "11:00"
+DEFAULT_MENU_DINNER_AT = "17:30"
 CALENDAR_PREFIX = "CALENDAR_URL_"
 
 # Vigilancia de servicios externos.
@@ -514,6 +517,9 @@ class Config:
     verse: bool = True
     screen_device: str = DEFAULT_SCREEN_DEVICE
     screen_devices: tuple[str, ...] = DEFAULT_SCREEN_DEVICES
+    # None saca esa comida del menú.
+    menu_lunch_at: clock_time | None = clock_time.fromisoformat(DEFAULT_MENU_LUNCH_AT)
+    menu_dinner_at: clock_time | None = clock_time.fromisoformat(DEFAULT_MENU_DINNER_AT)
 
     @classmethod
     def from_file(cls, path: Path | str) -> "Config":
@@ -592,6 +598,8 @@ class Config:
             verse=_parse_verse(pairs),
             screen_device=screen_device,
             screen_devices=screen_devices,
+            menu_lunch_at=_parse_daily_hour(pairs, "MENU_LUNCH_AT", DEFAULT_MENU_LUNCH_AT),
+            menu_dinner_at=_parse_daily_hour(pairs, "MENU_DINNER_AT", DEFAULT_MENU_DINNER_AT),
         )
 
     @property

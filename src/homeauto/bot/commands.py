@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Callable
 
 from homeauto.agenda.ical import CalendarError
@@ -22,6 +22,15 @@ from homeauto.calc import CalcError, evaluate
 from homeauto.aloud import strip_aloud
 from homeauto.config import Config
 from homeauto.listen import ListenError
+from homeauto.meals import (
+    DINNER,
+    WEEKDAYS,
+    MealError,
+    left_today,
+    served,
+    upcoming,
+    week_of,
+)
 from homeauto.lists import LISTS, SHOPPING, TODO, ListError, resolve, split_items
 from homeauto.voice.voicemail import VoicemailError
 from homeauto import slots, summon
@@ -91,6 +100,13 @@ TURNS_OFF = "off"
 TURNS_USAGE = (
     "Así: /turnos 7 Cin, Die turna el #7 por semana entre Cin y Die · /turnos 7 off lo corta"
 )
+
+MENU_USAGE = (
+    "Así: /menu la semana · /menu nuevo sin carne la vuelve a armar"
+    " · /menu compras pasa lo de hoy a compras · /menu compras semana, toda la semana"
+)
+MENU_SHOP = "🛒 Pasar a compras"
+MENU_OTHER = "🔄 Otra idea"
 
 
 # «apagar» adelante o atrás del equipo saca la pantalla.
@@ -204,6 +220,8 @@ HELP = """Hola. Manejo los equipos de casa.
 /agregar a pendientes llamar al plomero — a la otra lista
 /compras — qué falta comprar · /pendientes — qué falta hacer
 /traducir hola — al inglés · /traducir al francés hola — al que pidas
+/menu — qué se come esta semana · /menu nuevo sin carne — la vuelve a armar
+/menu compras — pasa a compras lo de hoy · /menu compras semana — lo de toda la semana
 /sacar 2 — saca ese número de la lista · /sacar todo la vacía
 /agenda — qué te queda hoy · /agenda mañana
 /estado — cómo están los servicios que vigilo
@@ -220,6 +238,22 @@ y sale por los equipos. /decir y /llamar suenan siempre, y las alarmas también.
 También me hablás sin barra: «creá una alarma» y te pregunto lo que falte.
 «olvidalo» deja lo que estábamos armando.
 Y me mandás una nota de voz: la escucho, hago lo que pidas y te contesto con otro audio."""
+
+
+def _meal_the(meal: str) -> str:
+    """La comida con su artículo: «el almuerzo», «la cena»."""
+    return f"{'la' if meal == DINNER else 'el'} {meal}"
+
+
+def _day_and_meal(text: str, meals: tuple[str, ...]) -> tuple[date, str] | None:
+    """«AAAA-MM-DD comida» de una comida del menú, o None si no se lee."""
+    raw_day, _, meal = text.strip().partition(" ")
+    meal = meal.strip().lower()
+    try:
+        day = date.fromisoformat(raw_day)
+    except ValueError:
+        return None
+    return (day, meal) if meal in meals else None
 
 
 def _cancel_button(job_id: int) -> tuple[str, str]:
@@ -258,6 +292,9 @@ class Commands:
         stock=None,
         vacation=None,
         screens=None,
+        meal_store=None,
+        meal_planner=None,
+        tell_others: Callable[[int, str], None] | None = None,
         correct=as_written,
         polish=as_is,
         clock: Callable[[], datetime] = datetime.now,
@@ -282,6 +319,10 @@ class Commands:
         self.vacation_notice = vacation
         # La pantalla de la casa en las teles; None sin API.
         self.screens = screens
+        self.meal_store = meal_store
+        self.meal_planner = meal_planner
+        # Escribe a todos los chats menos al que se le pasa.
+        self.tell_others = tell_others
         self.correct = correct
         self.polish = polish
         self.clock = clock
@@ -619,6 +660,141 @@ class Commands:
             return f"{translated}\n\n⚠️ Esto no lo digo: mi voz habla solo español."
         return translated
 
+    # --- menú -------------------------------------------------------------
+
+    def menu(self, chat_id: int, text: str = "") -> str:
+        """La semana de comidas, rearmarla, pasarla a compras o cambiar un plato."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.meal_planner is None or self.meal_store is None:
+            return (
+                "No tengo modelo para armar el menú. "
+                "Cargá LLM_API_KEY en el archivo de entorno."
+            )
+        meals = served(self.config.menu_lunch_at, self.config.menu_dinner_at)
+        if not meals:
+            return "El menú está apagado: MENU_LUNCH_AT y MENU_DINNER_AT están en off."
+
+        aloud, text = self._wanted_aloud(text)
+        head, _, rest = text.strip().partition(" ")
+        head, rest = head.lower(), rest.strip()
+        if not head:
+            answer = self._menu_week(meals)
+        elif head == "nuevo":
+            answer = self._menu_week(meals, again=True, request=rest)
+        elif head == "compras":
+            answer = self._menu_shopping(meals, rest)
+        elif head == "otra":
+            answer = self._menu_other(chat_id, meals, rest)
+        else:
+            answer = MENU_USAGE
+        if aloud:
+            return f"{answer}\n\n⚠️ Esto no lo digo: el menú se lee, no se escucha."
+        return answer
+
+    def _menu_start(self) -> date:
+        """El lunes de la semana a mostrar; el domingo ya es la que viene."""
+        today = self.clock().date()
+        return week_of(today + timedelta(days=1 if today.isoweekday() == 7 else 0))
+
+    def _menu_week(self, meals: tuple[str, ...], again: bool = False, request: str = "") -> str:
+        start = self._menu_start()
+        week = [] if again else self.meal_store.week(start)
+        if not week:
+            avoid = [m.dish for m in self.meal_store.week(start - timedelta(days=7))]
+            try:
+                week = self.meal_planner.plan(start, meals, request=request, avoid=avoid)
+            except MealError as exc:
+                log.warning("no pude armar el menú: %s", exc)
+                return f"No pude armar el menú: {exc}"
+            self.meal_store.save_week(start, week, request=request)
+
+        now = self.clock()
+        offer((MENU_SHOP, "menu compras semana"))
+        coming = upcoming(now, meals)
+        if coming and start <= coming[0] < start + timedelta(days=7):
+            day, meal = coming
+            offer((f"{MENU_OTHER} para {_meal_the(meal)}", f"menu otra {day.isoformat()} {meal}"))
+
+        lines = [f"🍽 Menú del {start:%d/%m} al {start + timedelta(days=6):%d/%m}"]
+        asked = self.meal_store.request(start)
+        if asked:
+            lines.append(f"Pedido: {asked}")
+        for offset in range(7):
+            day = start + timedelta(days=offset)
+            label = f"{WEEKDAYS[day.weekday()]} {day:%d/%m}"
+            lines.append(f"\n▶ {label} · hoy" if day == now.date() else f"\n{label}")
+            lines += [f"  {m.meal.capitalize()}: {m.dish}" for m in week if m.day == day]
+        lines.append("\nOtra idea: /menu otra <AAAA-MM-DD> <comida> · a compras: /menu compras")
+        return "\n".join(lines)
+
+    def _menu_shopping(self, meals: tuple[str, ...], rest: str) -> str:
+        if self.lists is None:
+            return self._no_lists()
+        now = self.clock()
+        if not rest:
+            left = left_today(now, meals)
+            if not left:
+                return "Hoy ya no queda ninguna comida. Para toda la semana: /menu compras semana"
+            chosen = [m for m in (self.meal_store.get(now.date(), meal) for meal in left) if m]
+            if not chosen:
+                return "No hay menú para hoy. Armalo con /menu"
+        elif rest.lower() == "semana":
+            chosen = self.meal_store.week(self._menu_start())
+            if not chosen:
+                return "No hay menú para esta semana. Armalo con /menu"
+        else:
+            wanted = _day_and_meal(rest, meals)
+            if wanted is None:
+                return MENU_USAGE
+            found = self.meal_store.get(*wanted)
+            if found is None:
+                return f"No hay {_meal_the(wanted[1])} del {wanted[0]:%d/%m} en el menú. Armalo con /menu"
+            chosen = [found]
+
+        wanted_items = list(dict.fromkeys(i for m in chosen for i in m.ingredients))
+        added = self.lists.add(SHOPPING, wanted_items)
+        repeated = [i for i in wanted_items if i not in added]
+        lines = []
+        if added:
+            lines.append(f"🛒 Agregado a compras: {', '.join(added)}")
+        if repeated:
+            lines.append(f"Ya estaba en compras: {', '.join(repeated)}")
+        return "\n".join(lines)
+
+    def _menu_other(self, chat_id: int, meals: tuple[str, ...], rest: str) -> str:
+        wanted = _day_and_meal(rest, meals)
+        if wanted is None:
+            return "Decime el día y la comida. Ej: /menu otra 2026-10-21 cena"
+        day, meal = wanted
+        current = self.meal_store.get(day, meal)
+        if current is None:
+            return f"No hay {_meal_the(meal)} del {day:%d/%m} en el menú. Armalo con /menu"
+
+        start = week_of(day)
+        avoid = [m.dish for m in self.meal_store.week(start - timedelta(days=7))]
+        avoid += [m.dish for m in self.meal_store.week(start)]
+        try:
+            dish = self.meal_planner.another(day, meal, avoid=avoid)
+        except MealError as exc:
+            log.warning("no pude cambiar el plato: %s", exc)
+            return f"No pude pensar otra idea: {exc}"
+        self.meal_store.replace(dish)
+
+        label = f"{WEEKDAYS[day.weekday()]} {day:%d/%m}"
+        who = _WHO.get() or "Alguien"
+        if self.tell_others is not None:
+            self.tell_others(chat_id, f"🍽 {who} cambió {_meal_the(meal)} del {label}: {dish.dish}")
+        offer(
+            (MENU_SHOP, f"menu compras {day.isoformat()} {meal}"),
+            (MENU_OTHER, f"menu otra {day.isoformat()} {meal}"),
+        )
+        return (
+            f"🔄 {meal.capitalize()} del {label}: {dish.dish}\n"
+            f"Ingredientes: {', '.join(dish.ingredients)}"
+        )
+
     # --- listas ------------------------------------------------------------
 
     def _no_lists(self) -> str:
@@ -893,6 +1069,7 @@ class Commands:
             "pendientes": self.todo,
             "sacar": self.remove_item,
             "traducir": self.translate,
+            "menu": self.menu,
             "posponer": self.postpone,
             "pastillas": self.pills,
             "vacaciones": self.vacation,

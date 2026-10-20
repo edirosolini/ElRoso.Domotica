@@ -343,3 +343,36 @@ def test_the_router_measurement_covers_the_screen_and_its_lookalike():
 
     assert ("poné la pantalla en la tele de la recámara", "pantalla", "en recamara") in CASES
     assert ("mostrame la agenda", "agenda", "") in CASES
+
+
+def test_the_meal_menu_is_routable():
+    assert "menu" in ROUTABLE
+
+
+def test_the_prompt_names_the_meal_menu_and_keeps_adding_apart():
+    from homeauto.route import PROMPT
+
+    assert "- menu:" in PROMPT
+    assert "Mensaje: qué comemos esta semana\nCOMANDO: menu\nARGUMENTO:\n" in PROMPT
+    assert "Mensaje: armá otro menú sin carne\nCOMANDO: menu\nARGUMENTO: nuevo sin carne" in PROMPT
+    assert (
+        "Mensaje: pasá a compras lo del menú de la semana\nCOMANDO: menu\nARGUMENTO: compras semana"
+    ) in PROMPT
+    assert "Mensaje: agregá milanesas a compras\nCOMANDO: agregar\nARGUMENTO: milanesas" in PROMPT
+
+
+def test_a_new_menu_is_routed_with_its_request():
+    router = Router(model_saying("COMANDO: menu\nARGUMENTO: nuevo sin carne"))
+
+    decision = router.route("armá otro menú sin carne")
+
+    assert (decision.command, decision.argument) == ("menu", "nuevo sin carne")
+
+
+def test_the_router_measurement_covers_the_meal_menu_and_its_lookalike():
+    from deploy.measure_router import CASES
+
+    assert ("qué comemos esta semana", "menu", "") in CASES
+    assert ("armá otro menú sin carne", "menu", "nuevo") in CASES
+    assert ("pasá a compras lo del menú de la semana", "menu", "compras semana") in CASES
+    assert ("agregá milanesas a compras", "agregar", "milanesas") in CASES
