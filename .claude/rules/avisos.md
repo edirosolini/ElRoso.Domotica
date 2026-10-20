@@ -43,7 +43,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
 | resumen semanal | todos, solo escrito |
 | alarmas, recordatorios y timers | todos, con posponer; la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
-| repetición de una alarma sin apagar | todos, una de cada cinco veces y solo con «🔕 Apagar»; «Dejé de sonar» al tope |
+| repetición de una alarma sin apagar | todos, en cada repetición y solo con «🔕 Apagar», también en descanso; «Dejé de sonar» al tope |
 | alarma apagada | los demás chats: «🔕 <nombre> apagó la alarma» |
 | re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |

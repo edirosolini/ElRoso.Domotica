@@ -23,7 +23,7 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 
 | | Repite | Sonido | Botones | Si nadie responde |
 | --- | --- | --- | --- | --- |
-| `/alarma` | una vez, diaria, por días o mensual | el despertador, a 90 | «🔕 Apagar» y posponer | vuelve a sonar cada minuto |
+| `/alarma` | una vez, diaria, por días o mensual | el despertador, a 90 | «🔕 Apagar» y posponer | vuelve a sonar cada cinco minutos |
 | `/recordar` | **siempre**, en los días marcados o un día de cada mes | un beep suave | «✅ Hecho» y posponer | re-avisa |
 | `/timer` | nunca | un beep suave | «✅ Hecho» y posponer | re-avisa |
 
@@ -67,15 +67,15 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 - 🔴 **`hecho` y `callar` son solo botones**, como `borrar`: están en `Commands.press()` y no en
   `_dispatch()`, así el router nunca los nombra y el test que ata las dos listas sigue en pie. El nombre de quien
   tocó sale de `main._who()` y entra a `press(who=...)`.
-- 🔴 **Una alarma suena hasta que alguien la apague.** Vuelve a sonar un minuto después de que
+- 🔴 **Una alarma suena hasta que alguien la apague.** Vuelve a sonar cinco minutos después de que
   termina el anuncio anterior (`RING_DELAY`), con la clave de timer `ring:<id>`, por lo mismo
-  que `nag:<id>`. Cada repetición sube el despertador (`wake1`, `wake2`, después `wake3`) y
-  suma uno a los re-avisos del historial.
-- 🔴 **Tope de media hora desde que sonó** (`RING_LIMIT`). Al llegar deja de sonar y escribe
+  que `nag:<id>`. Cada repetición sube el despertador (`wake1`, `wake2`, después `wake3`, que
+  llega hacia el minuto diez) y suma uno a los re-avisos del historial.
+- 🔴 **Tope de media hora desde que sonó** (`RING_LIMIT`): son cinco repeticiones, hacia los
+  cinco, diez, quince, veinte y veinticinco minutos. Al llegar deja de sonar y escribe
   una sola vez «⏰ Dejé de sonar: «…», nadie la apagó» a todos los chats.
-- **Al chat se escribe una repetición de cada cinco** (`RING_WRITE_EVERY`), como «⏰ Sigue
-  sonando» y solo con «🔕 Apagar»; las otras solo suenan. En descanso no se habla, así que
-  ese texto cada cinco es todo lo que sale.
+- **Cada repetición escribe al chat** «⏰ Sigue sonando», solo con «🔕 Apagar». En descanso no
+  se habla, así que ese texto es todo lo que sale, y sale igual en cada repetición.
 - 🔴 **«🔕 Apagar» manda `callar <id>`** y apaga desde cualquier chat, porque el aviso le llegó
   a todos. Corta el audio en curso (`Announcer.stop()`), olvida en `FiredStore` solo los chats
   cuyo último disparo fue esa alarma, cierra el historial como `off` con quién y avisa a los
@@ -93,9 +93,9 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   vuelve a sonar como recordatorio.
 - **En vacaciones una alarma no suena: se escribe una sola vez**, no repite y sale sin
   «🔕 Apagar». Activarlas corta las que estaban sonando. Ver **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`.
-- **Una alarma en un equipo con pantalla prende su vista en la tele** mientras suena, y la
-  cierra a los quince minutos de que deja de sonar. Solo `kind=alarm`; un recordatorio o un
-  timer no. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
+- **Una alarma en un equipo con pantalla prende su vista en la tele** durante un minuto
+  después de cada sonido, pasa al kiosco hasta la próxima repetición y cierra la tele a los
+  quince minutos de que deja de sonar. Solo `kind=alarm`; un recordatorio o un timer no. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
 - ⚠️ **Se tocó el prompt del router** para sumar `recordar` y el ejemplo "recordame mañana a
   las diez" → `timer`. Medido el 2026-09-28: treinta y cuatro de treinta y cuatro, después
   de acotar la regla de las duraciones (ver **Texto libre**, en `.claude/rules/router-y-conversacion.md`).

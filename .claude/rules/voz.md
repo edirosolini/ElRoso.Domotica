@@ -180,7 +180,8 @@ del wav de Piper. Hay tres:
 - 🔴 **El despertador tiene tres niveles**, `WAKE_LEVELS` (`wake1` a `wake3`): dos coma ocho,
   cuatro y cinco coma tres segundos, cada uno más fuerte. Son ráfagas de mil y mil quinientos
   hertz con la amplitud subiendo ráfaga a ráfaga. La alarma arranca con `wake1`, la primera
-  repetición suena `wake2` y de ahí en adelante `wake3` (`Announcer._sound(job, rings)`). El
+  repetición suena `wake2` y de ahí en adelante `wake3` (`Announcer._sound(job, rings)`), que
+  con una repetición cada cinco minutos llega hacia el minuto diez. El
   piso es 90 en todas. Ver **Alarma, recordatorio y timer**, en `.claude/rules/programado.md`.
 - **Ningún tono pasa de `MAX_AMPLITUDE` (0.9)**: `frames()` recorta lo que lo supere. Cada
   tono lleva su amplitud en la tupla `(hertz, segundos, amplitud)`.
@@ -308,7 +309,7 @@ del wav de Piper. Hay tres:
   Google TV** se anuncia como `Chromecast`, igual que uno viejo sin sistema operativo. No
   deducir capacidades de ese string: preguntarle al equipo o al dueño.
 - **Castear a un equipo con pantalla prende el televisor.** Con la vista de alarma es lo
-  buscado: una alarma en el comedor prende la tele y la deja mostrando la hora. Ver
+  buscado: una alarma en el comedor prende la tele y muestra la hora un minuto por sonido. Ver
   **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
 - **Un Speaker por equipo, pero síntesis y servidor HTTP compartidos.** Lo único distinto
   entre equipos es el Caster; duplicar lo demás sería sintetizar dos veces la misma frase.
