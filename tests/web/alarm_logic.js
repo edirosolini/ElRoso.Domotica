@@ -11,10 +11,12 @@ assert.strictEqual(alarm.jobFrom("?x=1&job=203"), 203);
 assert.strictEqual(alarm.jobFrom("?job=abc"), null);
 assert.strictEqual(alarm.jobFrom(""), null);
 
-// Mientras suena se queda; cuando deja de sonar vuelve al kiosco de solo lectura.
-assert.strictEqual(alarm.nextPage({ ringing: true, message: "arriba" }), null);
-assert.strictEqual(alarm.nextPage({ ringing: false, message: null }), "/pantalla?ver=1");
-assert.strictEqual(alarm.nextPage(null), "/pantalla?ver=1");
+// Mientras suena se queda un minuto; después, o cuando deja de sonar, vuelve al kiosco.
+assert.strictEqual(alarm.nextPage({ ringing: true, message: "arriba" }, 0), null);
+assert.strictEqual(alarm.nextPage({ ringing: true, message: "arriba" }, 59999), null);
+assert.strictEqual(alarm.nextPage({ ringing: true, message: "arriba" }, 60000), "/pantalla?ver=1");
+assert.strictEqual(alarm.nextPage({ ringing: false, message: null }, 0), "/pantalla?ver=1");
+assert.strictEqual(alarm.nextPage(null, 0), "/pantalla?ver=1");
 
 // La hora grande y la fecha.
 var morning = new Date(2026, 9, 15, 7, 5);

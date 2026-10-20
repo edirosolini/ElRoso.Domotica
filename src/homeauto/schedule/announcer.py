@@ -57,8 +57,8 @@ class Announcer:
         # Los chats que reciben el aviso; vacío es solo el que lo pidió.
         self.chat_ids = list(chat_ids)
 
-    def __call__(self, job: Job, rings: int = 0, write: bool = True) -> None:
-        """Dice el job y lo escribe; `rings` es la repetición y `write` si va al chat."""
+    def __call__(self, job: Job, rings: int = 0) -> None:
+        """Dice el job y lo escribe; `rings` es la repetición."""
         problem = None
         resting = self.quiet is not None and self.quiet.is_quiet(self.clock())
         turn = turn_in(job.message)
@@ -78,8 +78,6 @@ class Announcer:
                     log.warning("el job %s no sonó en %s: %s", job.id, alias, exc)
             problem = "; ".join(problems) if problems else None
 
-        if not write:
-            return
         if rings:
             text = self._ringing_text(job, problem, resting)
             actions = _numbered(self.ring_actions, job)

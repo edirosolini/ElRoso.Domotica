@@ -255,25 +255,17 @@ def ringing(quiet=False):
 def test_each_repetition_wakes_louder_with_the_alarm_floor(rings, level):
     announcer, speaker, _ = ringing()
 
-    announcer(JOB, rings=rings, write=False)
+    announcer(JOB, rings=rings)
 
     assert speaker.said == ["arriba"]
     assert speaker.chimes == [level]
     assert speaker.min_volumes == [ALARM_MIN_VOLUME]
 
 
-def test_a_repetition_that_does_not_write_leaves_the_chat_alone():
+def test_every_repetition_says_it_keeps_ringing_with_the_off_button():
     announcer, _, sent = ringing()
 
-    announcer(JOB, rings=1, write=False)
-
-    assert sent == []
-
-
-def test_a_repetition_that_writes_says_it_keeps_ringing_with_the_off_button():
-    announcer, _, sent = ringing()
-
-    announcer(JOB, rings=5, write=True)
+    announcer(JOB, rings=1)
 
     assert [chat for chat, *_ in sent] == [42, 99]
     _, text, actions = sent[0]
@@ -284,11 +276,11 @@ def test_a_repetition_that_writes_says_it_keeps_ringing_with_the_off_button():
 def test_in_the_quiet_hours_a_repetition_only_writes():
     announcer, speaker, sent = ringing(quiet=True)
 
-    announcer(JOB, rings=5, write=True)
-    announcer(JOB, rings=6, write=False)
+    announcer(JOB, rings=1)
+    announcer(JOB, rings=2)
 
     assert speaker.said == []
-    assert len(sent) == 2, "una por chat, solo la repetición que escribe"
+    assert len(sent) == 4, "una por chat en cada repetición"
     assert "Sigue sonando" in sent[0][1]
     assert "Horario de descanso" in sent[0][1]
 

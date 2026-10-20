@@ -1,8 +1,9 @@
-// Vista de alarma en la tele: hora grande, mensaje y fecha; al dejar de sonar vuelve al kiosco.
+// Vista de alarma en la tele: hora grande, mensaje y fecha; al minuto o al dejar de sonar vuelve al kiosco.
 (function () {
   "use strict";
 
   var POLL_MS = 5000;
+  var VIEW_MS = 60000;
   var KIOSK = "/pantalla?ver=1";
   var DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
   var MONTHS = [
@@ -16,9 +17,9 @@
     return match ? parseInt(match[1], 10) : null;
   }
 
-  // Adónde ir: null mientras suena, el kiosco cuando dejó de sonar.
-  function nextPage(data) {
-    return data && data.ringing ? null : KIOSK;
+  // Adónde ir: null mientras suena y no pasó VIEW_MS desde que se cargó, si no el kiosco.
+  function nextPage(data, shownMs) {
+    return data && data.ringing && shownMs < VIEW_MS ? null : KIOSK;
   }
 
   function pad(number) {
@@ -41,6 +42,7 @@
   }
 
   var offset = 0;
+  var loadedAt = Date.now();
   var job = jobFrom(location.search);
 
   function byId(id) {
@@ -62,7 +64,7 @@
     if (!isNaN(server)) {
       offset = server - (sentAt + receivedAt) / 2;
     }
-    if (nextPage(data)) {
+    if (nextPage(data, Date.now() - loadedAt)) {
       leave();
       return;
     }
