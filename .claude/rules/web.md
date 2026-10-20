@@ -296,6 +296,8 @@ sabe de HTTP; `WebApp._control()` la rutea.
   pospondría lo que no es.
 - **«Confirmar» solo si el chat elegido es de `ALERT_CHAT_IDS`**, que es a quien
   `Monitor.acknowledge()` deja confirmar. La caída se ve igual para todos.
+- **El panel «🛒 Listas» tiene «Menú»** al lado de «Compras» y «Pendientes»: corre `menu`
+  como `/menu` en Telegram, con sus botones. Ver **Menú semanal**, en `.claude/rules/consultas.md`.
 - **Un solo botón de silencio, según el estado**: «Cortar vacaciones» en vacaciones, «Hablar
   ya» con un silencio pedido y si no «Silenciar 1 h».
 - 🔴 **`/api/live` no manda el `detail` de los chequeos**, solo nombre y si está arriba: el

@@ -35,6 +35,7 @@ Domotica/
 │   ├── weekly.py        # balance de la semana sobre el historial, solo escrito
 │   ├── calc.py          # cuentas y conversión de unidades, sin modelo
 │   ├── lists.py         # las listas de compras y de pendientes
+│   ├── meals.py         # el menú de la semana: lo arma el modelo, se valida y se guarda
 │   ├── translate.py     # traducir, solo para leer
 │   ├── people.py        # el nombre visible de cada chat de la casa
 │   ├── screen.py        # la pantalla de la casa en las teles: kiosco y vista de alarma
@@ -103,7 +104,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con dieciocho tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con diecinueve tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -126,6 +127,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `schedule.StockStore` | cuántas dosis quedan de cada remedio y cuándo avisar (`pill_stock`) |
 | `quiet.AwayStore` | hasta cuándo dura el modo vacaciones (`away`) |
 | `screen.ScreenStore` | qué alarma prendió cada tele y cuándo se cierra (`screens`) |
+| `meals.MealStore` | el plato de cada día y comida del menú, ocho semanas (`meal_plans`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -139,7 +141,7 @@ un despliegue nuevo no necesita migración.
 - **argentinadatos** para los feriados, igual que para la inflación: sin cuenta, sin API key.
 - Servicios externos consultados: Telegram, Open-Meteo (clima y calidad del aire), Google
   Calendar (iCal), YouVersion, argentinadatos, dolarapi, los RSS de noticias, el modelo de
-  texto (pulido, router, corrección y traducción) en la API de Google o en la de Anthropic
+  texto (pulido, router, corrección, traducción y menú) en la API de Google o en la de Anthropic
   según `LLM_PROVIDER`, el de las preguntas según `ASK_PROVIDER` (sin él, el mismo), la API
   de Google para transcribir notas de voz **siempre**, y **Seq** (este último por el túnel
   WireGuard, no por internet).
@@ -196,7 +198,7 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son cuarenta y dos llamadas
+en el historial del shell, igual que el token de `domotica-say`. Son cuarenta y seis llamadas
 al modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
@@ -352,7 +354,7 @@ Se cargan solas al trabajar los archivos de su `paths:`. Son tan reglas del proy
 - `.claude/rules/clima.md` — aviso de lluvia y los otros avisos del cielo (calor, frío, UV, aire, viento, tormenta).
 - `.claude/rules/agenda.md` — Google Calendar por iCal.
 - `.claude/rules/router-y-conversacion.md` — texto libre, conversación, notas de voz, por dónde sale la respuesta, botones y comandos.
-- `.claude/rules/consultas.md` — preguntas con búsqueda, cuentas y unidades, listas y traducción.
+- `.claude/rules/consultas.md` — preguntas con búsqueda, cuentas y unidades, listas, menú semanal y traducción.
 - `.claude/rules/web.md` — API HTTP de la LAN y la pantalla web (agenda, kiosco, escritura, control).
 - `.claude/rules/pantalla-tv.md` — DashCast: `/pantalla`, restaurar tras un anuncio y la vista de alarma.
 - `.claude/rules/cableado.md` — el composition root `main()` y su test.

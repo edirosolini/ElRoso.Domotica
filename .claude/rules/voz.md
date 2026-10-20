@@ -119,11 +119,11 @@ alcanza y sobra.
 ### Proveedor del texto
 
 `LLM_PROVIDER` elige quién escribe el texto: `google` (default) o `anthropic`. Lo usan el
-pulido, el router, la corrección y la traducción. `ASK_PROVIDER` elige el de `/preguntar`;
+pulido, el router, la corrección, la traducción y el menú. `ASK_PROVIDER` elige el de `/preguntar`;
 vacío o ausente, hereda `LLM_PROVIDER`. A todos los arma `main.build_model()`: sin `ask`, el
 barato de `LLM_PROVIDER`; con `ask=True`, el que busca en la web, de `ASK_PROVIDER`.
 `ClaudeModel` (`claude.py`) tiene la misma forma de llamarlo que `GoogleModel`, así que
-ninguno de los cinco sabe con cuál habla. El log de arranque nombra los dos: «texto con
+ninguno de los seis sabe con cuál habla. El log de arranque nombra los dos: «texto con
 google: gemini-3.1-flash-lite, y las preguntas con anthropic: claude-sonnet-5-5».
 
 - 🔴 **En esta casa el texto va con Gemini y las preguntas con Claude Sonnet**

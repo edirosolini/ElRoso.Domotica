@@ -3,19 +3,22 @@ paths:
   - "src/homeauto/ask.py"
   - "src/homeauto/calc.py"
   - "src/homeauto/lists.py"
+  - "src/homeauto/meals.py"
   - "src/homeauto/translate.py"
   - "src/homeauto/main.py"
   - "tests/test_ask.py"
   - "tests/test_calc.py"
   - "tests/test_lists.py"
+  - "tests/test_meals.py"
   - "tests/test_translate.py"
   - "tests/bot/test_ask_command.py"
   - "tests/bot/test_calc_command.py"
   - "tests/bot/test_list_commands.py"
+  - "tests/bot/test_menu_command.py"
   - "tests/bot/test_translate_command.py"
 ---
 
-# Preguntas, cuentas, listas y traducir
+# Preguntas, cuentas, listas, menú y traducir
 
 ## Cuentas y unidades
 
@@ -60,6 +63,48 @@ con el mismo patrón que las otras siete.
   día, y ese va en palabras.
 - **`/compras` nombra a `/sacar`**, como `/lista` nombra a `/cancelar`: es la única entrada
   del menú que deja a otro comando sin puerta.
+
+## Menú semanal
+
+`/menu` muestra la semana de lunes a domingo con almuerzo y cena. `meals.MealPlanner` la pide
+al modelo barato de `LLM_PROVIDER` (`main.build_model()`, sin búsqueda, `MENU_TIMEOUT` de
+treinta segundos), la valida y `MealStore` la guarda en `meal_plans`. Sin la clave del
+proveedor de texto, `/menu` contesta que no hay modelo.
+
+- **Se arma la primera vez que se pide.** Si la semana no está guardada, `/menu` la arma;
+  `/menu nuevo [pedido]` la rearma entera con lo que se pida («sin carne») y el pedido queda
+  guardado y se muestra arriba. **El domingo ya muestra la semana que viene.**
+- **No repite la semana anterior**: sus platos van al prompt como lo que no se repite.
+  `/menu otra <AAAA-MM-DD> <comida>` cambia un solo plato y evita también los de esa semana.
+- 🔴 **Un menú inválido no guarda nada.** Siete días exactos, cada comida con un nombre de
+  hasta ochenta caracteres y entre uno y cuarenta ingredientes; un ingrediente con un dígito
+  trae cantidades y tira todo con `MealError`. `save_week()` corre recién con la semana entera
+  validada, así que un error deja la semana anterior como estaba.
+- 🔴 **La alacena se saca en código, no se confía en el prompt.** El prompt pide ingredientes
+  sin sal, aceite, pimienta, agua ni condimentos, y `_is_pantry()` igual los saca —por la
+  primera palabra, o si dicen «condimento»— antes de guardar. Si no, `/menu compras` llenaría la
+  lista de cosas que hay en cualquier casa. Los repetidos se sacan sin mirar acentos.
+  ⚠️ Un condimento con nombre propio pasa: en una corrida real, «orégano» llegó a los
+  ingredientes.
+- **`/menu compras` pasa lo que queda de hoy** (`left_today()`): el almuerzo hasta las quince
+  —el mismo corte de `correct.MEALS`— y la cena hasta las veintidós. `/menu compras semana`
+  pasa toda la semana y `/menu compras <AAAA-MM-DD> <comida>`, un plato. Va por `ListStore.add()`,
+  así que lo que ya estaba en compras se avisa y no se repite.
+- **Los botones**: «🛒 Pasar a compras» (la semana) y «🔄 Otra idea» para la próxima comida
+  (`upcoming()`), si cae en la semana que se muestra. Después de `otra`, los dos del plato nuevo.
+  La fecha va en ISO porque la arma el botón.
+- **Cambiar un plato avisa a los demás chats** de `ALLOWED_CHAT_IDS`: «🍽 <nombre> cambió la
+  cena del miércoles 21/10: …». Ver **A quién le llega cada aviso**, en `.claude/rules/avisos.md`.
+- 🔴 **El menú se lee, no se escucha**, como las listas: «por el parlante» contesta escrito y
+  avisa que el menú no se dice.
+- **`MENU_LUNCH_AT` y `MENU_DINNER_AT` deciden qué comidas tiene el menú**: `off` saca esa
+  comida y con las dos en `off` el menú está apagado. ⚠️ **La hora todavía no dispara nada**:
+  hoy solo cuenta si es `off` o no. El default de la cena es 17:30 porque en esta casa se cena
+  a las 19:30.
+- **Ocho semanas de historia** (`KEEP_WEEKS`): `save_week()` poda lo anterior. `replace()`
+  conserva el pedido de la semana del plato.
+- **Fuera del menú de Telegram y en `HELP`**; entra también por el router. Ver **Comandos y
+  alias**, en `.claude/rules/router-y-conversacion.md`.
 
 ## Traducir
 
