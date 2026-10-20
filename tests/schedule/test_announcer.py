@@ -359,3 +359,81 @@ def test_in_the_quiet_hours_the_alarm_keeps_its_off_button():
     announcer(JOB)
 
     assert sent[0][2] == (("🔕 Apagar", "callar 7"), ("Posponer 10 min", "posponer 10m"))
+
+
+# --- nombre entre corchetes ------------------------------------------------
+
+
+class KeptPolish:
+    def __init__(self):
+        self.kept = []
+
+    def __call__(self, text, must_keep=()):
+        self.kept.append(tuple(must_keep))
+        return text
+
+
+def named(message):
+    speaker = FakeSpeaker("parlante")
+    sent = []
+    polish = KeptPolish()
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=speaker),
+        notify=lambda chat_id, text: sent.append(text),
+        fallback="parlante",
+        polish=polish,
+    )
+    announcer(Job(id=7, chat_id=42, when=JOB.when, message=message))
+    return speaker, sent, polish
+
+
+@pytest.mark.parametrize(
+    "message, said",
+    [
+        ("[Papá] tomar medicación", "Papá, tomar medicación"),
+        ("[Cin] Hora de levantarse.", "Cin, Hora de levantarse."),
+        ("[Tía Ana]   regar", "Tía Ana, regar"),
+    ],
+)
+def test_a_name_in_brackets_is_said_as_a_call(message, said):
+    speaker, _, _ = named(message)
+
+    assert speaker.said == [said]
+
+
+def test_the_name_in_brackets_must_survive_the_polish():
+    _, _, polish = named("[Papá] tomar medicación")
+
+    assert polish.kept == [("Papá",)]
+
+
+def test_the_chat_copy_says_the_same_as_the_speaker():
+    _, sent, _ = named("[Papá] tomar medicación")
+
+    assert "Papá, tomar medicación" in sent[0]
+    assert "[Papá]" not in sent[0]
+
+
+def test_the_name_in_brackets_lives_with_the_turn_prefix():
+    speaker, _, polish = named("Le toca a Cin: [Papá] tomar medicación")
+
+    assert speaker.said == ["Le toca a Cin: Papá, tomar medicación"]
+    assert polish.kept == [("Cin", "Papá")]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "tomar [la] pastilla",
+        "[Papá2] tomar",
+        "[] tomar",
+        "[Papá tomar",
+        " [Papá] tomar",
+        "[Papá, Cin] tomar",
+    ],
+)
+def test_any_other_bracket_stays_as_written(message):
+    speaker, _, polish = named(message)
+
+    assert speaker.said == [message]
+    assert polish.kept == [()]

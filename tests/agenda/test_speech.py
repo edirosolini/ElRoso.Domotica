@@ -27,13 +27,59 @@ def test_an_empty_day_says_so():
     assert "nada" in text.lower()
 
 
-def test_one_event_reads_in_singular():
-    # 🔴 Decía "tenés 1 cosa" y el sintetizador leía el dígito como "uno cosa".
-    text = describe([event(10, 0, "Reunión con el equipo")], label="hoy")
+def test_an_empty_day_keeps_its_sentence():
+    assert describe([], label="mañana") == "No tenés nada agendado mañana."
 
-    assert "una cosa" in text.lower()
-    assert "1 cosa" not in text
-    assert "Reunión con el equipo" in text
+
+def test_one_event_is_a_single_sentence():
+    text = describe([event(9, 0, "Reunión equipo semanal")], label="mañana")
+
+    assert text == "Mañana a las nueve de la mañana tenés Reunión equipo semanal."
+
+
+def test_one_event_with_its_place():
+    text = describe([event(10, 0, "Dentista", location="Sanatorio X")], label="hoy")
+
+    assert text == "Hoy a las diez de la mañana tenés Dentista, en Sanatorio X."
+
+
+def test_one_all_day_event():
+    text = describe([event(0, 0, "Feria", all_day=True)], label="hoy")
+
+    assert text == "Hoy todo el día tenés Feria."
+
+
+def test_two_events_are_one_sentence():
+    text = describe([event(10, 0, "Reunión"), event(15, 0, "Dentista")], label="hoy")
+
+    assert text == (
+        "Hoy tenés dos cosas: a las diez de la mañana, Reunión; "
+        "y a las tres de la tarde, Dentista."
+    )
+
+
+def test_three_events_put_all_day_first_and_join_the_last_with_y():
+    text = describe(
+        [event(11, 0, "Médico"), event(0, 0, "Feria", all_day=True), event(9, 0, "Reunión")],
+        label="hoy",
+    )
+
+    assert text == (
+        "Hoy tenés tres cosas: todo el día, Feria; a las nueve de la mañana, Reunión; "
+        "y a las once de la mañana, Médico."
+    )
+
+
+def test_several_events_carry_their_place():
+    text = describe(
+        [event(9, 0, "Dentista", location="Sanatorio X"), event(11, 0, "Médico")],
+        label="mañana",
+    )
+
+    assert text == (
+        "Mañana tenés dos cosas: a las nueve de la mañana, Dentista, en Sanatorio X; "
+        "y a las once de la mañana, Médico."
+    )
 
 
 def test_several_events_read_in_plural():
@@ -111,3 +157,9 @@ def test_the_summary_leaves_the_place_out():
     assert "Sanatorio" not in describe(events, label="hoy", place=False)
     assert "Dentista" in describe(events, label="hoy", place=False)
     assert "diez de la mañana" in describe(events, label="hoy", place=False)
+
+
+def test_without_a_label_the_sentence_still_starts_well():
+    assert describe([event(9, 0, "Reunión")], label="") == (
+        "A las nueve de la mañana tenés Reunión."
+    )

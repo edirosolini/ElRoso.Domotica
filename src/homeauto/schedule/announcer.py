@@ -8,12 +8,13 @@ querés que suene el teléfono.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Callable, Iterable
 
 from homeauto.polish import as_is
 from homeauto.quiet import away_of, reason_of
-from homeauto.schedule.rota import turn_in
+from homeauto.schedule.rota import turn_in, with_turn
 from homeauto.schedule.spec import ringing_label
 from homeauto.schedule.store import Job
 from homeauto.voice import chime
@@ -25,6 +26,8 @@ from homeauto.voice.tts import TtsError
 log = logging.getLogger(__name__)
 
 DEVICE_ERRORS = (CastError, TtsError, UnknownDevice)
+
+_CALLED = re.compile(r"\[([^\W\d_]+(?: [^\W\d_]+)*)\]\s*")
 
 
 class Announcer:
@@ -62,7 +65,8 @@ class Announcer:
         problem = None
         resting = self.quiet is not None and self.quiet.is_quiet(self.clock())
         turn = turn_in(job.message)
-        message = self.polish(job.message, must_keep=(turn,) if turn else ())
+        called, name = _called(job.message, turn)
+        message = self.polish(called, must_keep=tuple(word for word in (turn, name) if word))
 
         if resting:
             log.info("job %s cae en horario de descanso: solo va al chat", job.id)
@@ -140,6 +144,16 @@ class Announcer:
         elif problem:
             text += f"\n\nNo pude decirlo en voz alta: {problem}"
         return text
+
+
+def _called(message: str, turn: str | None) -> tuple[str, str | None]:
+    """El mensaje con el «[Nombre]» tras el turno dicho como «Nombre,», y ese nombre."""
+    prefix = with_turn("", turn) if turn else ""
+    match = _CALLED.match(message, len(prefix))
+    if not match:
+        return message, None
+    name, rest = match.group(1), message[match.end():]
+    return (f"{prefix}{name}, {rest}" if rest else f"{prefix}{name}"), name
 
 
 def _numbered(actions: tuple[tuple[str, str], ...], job: Job) -> tuple[tuple[str, str], ...]:

@@ -11,16 +11,25 @@ def _clock(event: Event) -> str:
     return f"a {clock(event.start.hour, event.start.minute)}"
 
 
-def _one(event: Event, place: bool = True) -> str:
-    when = "todo el día" if event.all_day else _clock(event)
-    text = f"{when.capitalize()}, {event.summary}"
+def _when(event: Event) -> str:
+    return "todo el día" if event.all_day else _clock(event)
+
+
+def _what(event: Event, place: bool) -> str:
+    """El título literal, con el lugar si va y lo tiene."""
     if place and event.location:
-        text += f", en {event.location}"
-    return text + "."
+        return f"{event.summary}, en {event.location}"
+    return event.summary
+
+
+def _sentence(*parts: str) -> str:
+    """Une las partes no vacías con mayúscula inicial y punto final."""
+    text = " ".join(part for part in parts if part)
+    return text[:1].upper() + text[1:] + "."
 
 
 def describe(events: list[Event], label: str, place: bool = True) -> str:
-    """Una o dos oraciones, escritas para escucharse y no para leerse.
+    """Una sola oración, escrita para escucharse y no para leerse.
 
     `place` va apagado en el resumen de la mañana y encendido en /agenda, que
     se pide a propósito.
@@ -31,8 +40,12 @@ def describe(events: list[Event], label: str, place: bool = True) -> str:
     # Lo de día completo enmarca el día, así que va primero sin importar la hora.
     ordered = sorted(events, key=lambda event: (not event.all_day, event.start))
 
-    count = len(ordered)
-    # "cosa" es femenino, así que el número concuerda con él.
-    things = "cosa" if count == 1 else "cosas"
-    heading = f"{label.capitalize()} tenés {number(count, FEMININE)} {things}."
-    return " ".join([heading] + [_one(event, place) for event in ordered])
+    if len(ordered) == 1:
+        event = ordered[0]
+        return _sentence(label, _when(event), "tenés", _what(event, place))
+
+    items = [f"{_when(event)}, {_what(event, place)}" for event in ordered]
+    items[-1] = f"y {items[-1]}"
+    # El número va en femenino, para concordar con «cosas».
+    heading = f"tenés {number(len(ordered), FEMININE)} cosas:"
+    return _sentence(label, heading, "; ".join(items))
