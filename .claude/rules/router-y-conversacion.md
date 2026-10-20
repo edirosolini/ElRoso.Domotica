@@ -78,8 +78,10 @@ existen ya saben rechazar un argumento malo.
   llevar una tupla de comandos válidos.
 - ⚠️ **Un `Read timed out` de la API en la medición no es el prompt**: el router corta a los
   seis segundos y el caso sale como `RouteError`. Se vuelve a correr.
-- ⚠️ **La medición usa el `LLM_MODEL` del env del CT.** Con un modelo que la API no acepta, las
-  cuarenta y dos llamadas dan `400` y el resultado es cero: es el modelo, no el prompt.
+- ⚠️ **La medición usa el proveedor y el modelo barato del env del CT**, por `build_model`, y
+  los imprime al empezar. Con un modelo que la API no acepta, las cuarenta y dos llamadas
+  fallan y el resultado es cero: es el modelo, no el prompt. Con `LLM_PROVIDER=anthropic` el
+  prompt todavía no se midió.
 - 🔴 **La medición encontró lo que los tests no podían.** El router contesta
   `traducir → "hola al inglés"`, con el idioma **atrás**, y `split_language()` solo lo leía
   adelante: "traducí hola al francés" iba a traducir el texto *"hola al francés"* al inglés.
@@ -113,8 +115,8 @@ existen ya saben rechazar un argumento malo.
   nombra un comando, y nombrar no es transporte. Hay test en las dos direcciones — que todo
   lo que el router puede pedir se pueda ejecutar, y que no haya nada ejecutable que el router
   nunca nombre. Sin eso, agregar un comando lo deja mudo al texto libre y nadie se entera.
-- ⚠️ Sin `LLM_API_KEY` no hay intérprete: un mensaje suelto contesta que los comandos están
-  en `/ayuda`.
+- ⚠️ Sin la clave del proveedor de texto no hay intérprete: un mensaje suelto contesta que
+  los comandos están en `/ayuda`.
 
 ## Notas de voz
 
@@ -128,7 +130,10 @@ suelto: router, dato que falta, ejecución. `listen.py` es lo único nuevo.
   viajaba texto generado. Decisión del dueño, tomada contra la alternativa local —
   faster-whisper entra por poco en los 512 MB del CT y tarda entre cinco y quince segundos
   en un vCPU, con riesgo de OOM justo cuando alguien habla.
-- **El que escucha es el modelo barato**, `LLM_MODEL`, sin búsqueda, como el router.
+- **El que escucha es el modelo barato de Google**, `LLM_MODEL`, sin búsqueda, como el router.
+- ⚠️ **Las notas de voz necesitan `LLM_API_KEY` aunque `LLM_PROVIDER` sea `anthropic`**: Claude
+  no acepta audio. Sin esa clave el texto anda con Claude, una nota de voz contesta «No escucho
+  audios» y el arranque lo deja en el log.
 - **Se contesta qué se escuchó y qué se entendió**: `🎤 «...»` y abajo el `Entendí: /...`. Con
   audio hay dos lugares donde se puede errar, no uno, así que los dos quedan a la vista.
 - **Un audio de más de un minuto se rechaza sin bajarlo** (`MAX_VOICE_SECONDS`). Un comando

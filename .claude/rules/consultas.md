@@ -104,8 +104,8 @@ que la casa dice que no generó ella ni escribió una persona: viene de afuera.
   lo generado se pule. Ya es prosa de un modelo: pulirla sumaría otros seis segundos a un
   camino que ya es lento y la validación la descartaría igual, porque cambia los números
   respecto del original por diseño.
-- **`GoogleModel` es el mismo cliente que el del pulido, configurado al revés**: `search=True`
-  y `ASK_TIMEOUT` de **sesenta** segundos, contra los seis del pulido. Pulir no tiene nada que
+- **El modelo es el mismo cliente que el del pulido, configurado al revés**:
+  `main.build_model(ask=True)`, con búsqueda y `ASK_TIMEOUT` de **sesenta** segundos, contra los seis del pulido. Pulir no tiene nada que
   buscar y nadie espera una reescritura; una pregunta sí y alguien está mirando el chat.
   Medido contra la API real, un flash tardó **entre ocho y cuarenta segundos**: treinta
   hubiera cortado las más lentas.
@@ -118,7 +118,9 @@ que la casa dice que no generó ella ni escribió una persona: viene de afuera.
   resto de memoria, incluida la temperatura de ahora, que se inventó. `gemini-3.7-flash` y
   `gemini-flash-latest` buscaron en las cuatro. Un lite es la elección correcta para pulir,
   donde no hay nada que buscar, y la incorrecta acá: **una respuesta vieja dicha con
-  seguridad es peor que ninguna.**
+  seguridad es peor que ninguna.** Con `LLM_PROVIDER=anthropic` vale lo mismo para
+  `ANTHROPIC_ASK_MODEL`, que no hereda de `ANTHROPIC_MODEL` porque Haiku no tiene búsqueda.
+  Ver **Proveedor del texto**, en `.claude/rules/voz.md`.
 - 🔴 **El prompt tiene que mandar a buscar primero, y decirle que su información está vieja.**
   Con "buscá en internet si hace falta" al final, el mismo modelo grande buscaba mucho menos:
   el formato rígido de dos secciones le corría la atención a formatear. Con la orden adelante,
