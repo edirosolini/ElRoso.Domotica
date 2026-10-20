@@ -122,10 +122,9 @@ def _post(url: str, **kwargs):
 
 
 class GoogleModel:
-    """Gemma por la API de Gemini: gratis y con un POST simple.
+    """Un modelo de Google por la API de Gemini, con un POST simple.
 
-    Los modelos Gemma no aceptan system instruction, así que el prompt entero
-    viaja como único turno de usuario.
+    `system` viaja como systemInstruction; con Gemma, pegado adelante del prompt.
     """
 
     def __init__(
@@ -153,13 +152,21 @@ class GoogleModel:
         búsqueda necesita el razonamiento para decidir qué buscar."""
         return self.search or self.model.startswith("gemma")
 
-    def __call__(self, prompt: str, audio: bytes | None = None, mime: str = "") -> str:
+    def __call__(
+        self, prompt: str, audio: bytes | None = None, mime: str = "", system: str = ""
+    ) -> str:
+        gemma = self.model.startswith("gemma")
+        # Gemma no acepta system instruction: va adelante del turno de usuario.
+        if system and gemma:
+            prompt = f"{system}\n\n{prompt}"
         parts = [{"text": prompt}]
         if audio:
             parts.append(
                 {"inline_data": {"mime_type": mime, "data": base64.b64encode(audio).decode("ascii")}}
             )
         body = {"contents": [{"parts": parts}]}
+        if system and not gemma:
+            body["systemInstruction"] = {"parts": [{"text": system}]}
         if self.search:
             body["tools"] = [{"google_search": {}}]
         # Gemma contesta 400 a este switch en vez de ignorarlo.

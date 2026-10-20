@@ -174,6 +174,122 @@ def test_the_asking_model_can_be_changed_on_its_own(tmp_path):
     assert cfg.ask_model == "otro"
 
 
+# --- el proveedor del texto: Google o Anthropic ---
+
+BASE = f"TELEGRAM_TOKEN=123:ABC\nCAST_UUID={VALID_UUID}\n"
+
+
+def test_the_text_provider_is_google_by_default(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "LLM_API_KEY=k\n"))
+
+    assert cfg.llm_provider == "google"
+    assert cfg.text_model == cfg.llm_model
+    assert cfg.text_ask_model == cfg.ask_model
+
+
+def test_anthropic_reads_its_own_key_and_models(tmp_path):
+    cfg = Config.from_file(
+        write_env(tmp_path, BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n")
+    )
+
+    assert cfg.llm_provider == "anthropic"
+    assert cfg.anthropic_api_key == "sk-x"
+    assert cfg.anthropic_model == "claude-haiku-5-5"
+    assert cfg.anthropic_ask_model == "claude-sonnet-5-5"
+    assert cfg.text_model == "claude-haiku-5-5"
+    assert cfg.text_ask_model == "claude-sonnet-5-5"
+
+
+def test_the_provider_name_ignores_case_and_spaces(tmp_path):
+    cfg = Config.from_file(
+        write_env(tmp_path, BASE + "LLM_PROVIDER= Anthropic \nANTHROPIC_API_KEY=sk-x\n")
+    )
+
+    assert cfg.llm_provider == "anthropic"
+
+
+def test_the_anthropic_models_can_be_changed(tmp_path):
+    cfg = Config.from_file(
+        write_env(
+            tmp_path,
+            BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n"
+            "ANTHROPIC_MODEL=uno\nANTHROPIC_ASK_MODEL=otro\n",
+        )
+    )
+
+    assert cfg.anthropic_model == "uno"
+    assert cfg.anthropic_ask_model == "otro"
+
+
+def test_changing_the_anthropic_model_does_not_drag_the_asking_one(tmp_path):
+    """Haiku no busca en la web: el que pregunta no hereda el modelo barato."""
+    cfg = Config.from_file(
+        write_env(
+            tmp_path,
+            BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\nANTHROPIC_MODEL=uno\n",
+        )
+    )
+
+    assert cfg.anthropic_ask_model == "claude-sonnet-5-5"
+
+
+def test_anthropic_without_its_key_stops_the_service(tmp_path):
+    path = write_env(tmp_path, BASE + "LLM_PROVIDER=anthropic\nLLM_API_KEY=k\n")
+
+    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY"):
+        Config.from_file(path)
+
+
+def test_an_unknown_provider_stops_the_service(tmp_path):
+    path = write_env(tmp_path, BASE + "LLM_PROVIDER=openai\n")
+
+    with pytest.raises(ConfigError, match="LLM_PROVIDER"):
+        Config.from_file(path)
+
+
+def test_with_anthropic_the_text_is_on_without_a_google_key(tmp_path):
+    """El texto depende de la clave de su proveedor; la transcripción, de la de Google."""
+    cfg = Config.from_file(
+        write_env(tmp_path, BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n")
+    )
+
+    assert cfg.polish_enabled is True
+    assert cfg.transcribe_enabled is False
+
+
+def test_with_anthropic_and_a_google_key_voice_notes_are_still_heard(tmp_path):
+    cfg = Config.from_file(
+        write_env(
+            tmp_path,
+            BASE + "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\nLLM_API_KEY=k\n",
+        )
+    )
+
+    assert cfg.polish_enabled is True
+    assert cfg.transcribe_enabled is True
+
+
+def test_with_google_an_anthropic_key_alone_does_not_turn_the_text_on(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "ANTHROPIC_API_KEY=sk-x\n"))
+
+    assert cfg.polish_enabled is False
+    assert cfg.transcribe_enabled is False
+
+
+def test_the_anthropic_key_is_not_in_the_repr():
+    cfg = make_config(llm_provider="anthropic", anthropic_api_key="sk-secreta")
+
+    assert "sk-secreta" not in repr(cfg)
+
+
+def test_a_config_built_in_code_uses_google():
+    cfg = make_config()
+
+    assert cfg.llm_provider == "google"
+    assert cfg.polish_enabled is False
+    assert cfg.transcribe_enabled is False
+
+
 # --- el resumen semanal ------------------------------------------------------
 
 

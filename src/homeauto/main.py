@@ -39,12 +39,13 @@ from homeauto.weekly import Weekly
 from homeauto.economy import EconomyClient
 from homeauto.holidays import HolidayClient, HolidayStore, refresh as refresh_holidays
 from homeauto.news import NewsClient
-from homeauto.config import Config
+from homeauto.claude import ClaudeModel
+from homeauto.config import ANTHROPIC, Config
 from homeauto.correct import as_written
 from homeauto.correct import build as build_correction
 from homeauto.listen import TIMEOUT as LISTEN_TIMEOUT, Transcriber
 from homeauto.voice.voicemail import Voicemail
-from homeauto.polish import GoogleModel, Polisher, as_is
+from homeauto.polish import TIMEOUT as POLISH_TIMEOUT, GoogleModel, Polisher, as_is
 from homeauto.translate import TRANSLATE_TIMEOUT, Translator
 from homeauto.lists import ListStore
 from homeauto.pending import Conversation, PendingStore
@@ -462,8 +463,26 @@ def _announce(house: HouseVoice, text: str, written: str | None = None, others=S
         house.tell(f"🔔 {written or text}", others)
 
 
+def build_model(config: Config, *, ask: bool = False, timeout: float = POLISH_TIMEOUT):
+    """El modelo de texto del proveedor configurado; con `ask`, el que busca en la web."""
+    if config.llm_provider == ANTHROPIC:
+        return ClaudeModel(
+            api_key=config.anthropic_api_key,
+            model=config.anthropic_ask_model if ask else config.anthropic_model,
+            timeout=timeout,
+            effort="medium" if ask else "low",
+            search=ask,
+        )
+    return GoogleModel(
+        api_key=config.llm_api_key,
+        model=config.ask_model if ask else config.llm_model,
+        timeout=timeout,
+        search=ask,
+    )
+
+
 def build_polisher(config: Config):
-    """El pulidor de lo que generamos, o None si no hay clave.
+    """El pulidor de lo que generamos, o None sin clave del proveedor de texto.
 
     Por acá solo pasa texto que escribe este servicio. Lo que una persona tipeó
     en /decir va por `build_corrector`, que arregla la escritura y no toca las
@@ -471,77 +490,57 @@ def build_polisher(config: Config):
     """
     # El método atado, no el objeto: aguas abajo se lo llama como al default
     # `as_is`, y un Polisher no es invocable por sí solo.
-    return Polisher(
-        model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
-    ).polish
+    return Polisher(model=build_model(config)).polish
 
 
 def build_corrector(config: Config):
-    """El corrector de lo que tipeó una persona, o la identidad si no hay clave.
+    """El corrector de lo que tipeó una persona, o la identidad sin clave del proveedor de texto.
 
     No es el pulidor: este no puede cambiar una palabra. Recibe el reloj porque
     una comida sigue a la hora.
     """
     if not config.polish_enabled:
         return as_written
-    return build_correction(
-        model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
-    )
+    return build_correction(model=build_model(config))
 
 
 def build_asker(config: Config) -> Asker | None:
-    """Quién contesta una pregunta, o None si no hay clave.
+    """Quién contesta una pregunta, o None sin clave del proveedor de texto.
 
-    El mismo cliente que el del pulido, configurado al revés: con búsqueda en
-    Google y con un timeout mucho más largo.
+    Con el modelo que busca en la web de ese proveedor y un timeout más largo.
     """
     if not config.polish_enabled:
         return None
-    return Asker(
-        model=GoogleModel(
-            api_key=config.llm_api_key,
-            model=config.ask_model,
-            search=True,
-            timeout=ASK_TIMEOUT,
-        )
-    )
+    return Asker(model=build_model(config, ask=True, timeout=ASK_TIMEOUT))
 
 
 def build_translator(config: Config) -> Translator | None:
-    """Quién traduce, o None si no hay clave.
+    """Quién traduce, o None sin clave del proveedor de texto.
 
     El modelo barato y sin búsqueda: traducir tampoco es averiguar.
     """
     if not config.polish_enabled:
         return None
-    return Translator(
-        model=GoogleModel(
-            api_key=config.llm_api_key,
-            model=config.llm_model,
-            timeout=TRANSLATE_TIMEOUT,
-        )
-    )
+    return Translator(model=build_model(config, timeout=TRANSLATE_TIMEOUT))
 
 
 def build_router(config: Config) -> Router | None:
-    """Quién lee un mensaje sin barra, o None si no hay clave.
+    """Quién lee un mensaje sin barra, o None sin clave del proveedor de texto.
 
     El modelo barato y sin búsqueda: cada mensaje suelto paga esta llamada.
     """
     if not config.polish_enabled:
         return None
-    return Router(
-        model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model)
-    )
+    return Router(model=build_model(config))
 
 
 def build_transcriber(config: Config) -> Transcriber | None:
-    """Quién convierte una nota de voz en palabras, o None si no hay clave.
+    """Quién convierte una nota de voz en palabras con Gemini, o None sin LLM_API_KEY.
 
     El modelo barato y sin búsqueda, como el router: transcribir tampoco es
     averiguar.
     """
-    if not config.polish_enabled:
+    if not config.transcribe_enabled:
         return None
     return Transcriber(
         model=GoogleModel(
@@ -835,10 +834,15 @@ def main() -> None:
     config = Config.from_file(CONFIG_PATH)
     if config.polish_enabled:
         polish = build_polisher(config)
-        log.info("pulido de la redacción con %s", config.llm_model)
+        log.info(
+            "texto con %s: %s, y las preguntas con %s",
+            config.llm_provider, config.text_model, config.text_ask_model,
+        )
     else:
         polish = as_is
         log.info("sin LLM_API_KEY: el texto generado va tal cual")
+    if config.polish_enabled and not config.transcribe_enabled:
+        log.info("sin LLM_API_KEY: las notas de voz no se transcriben")
     db_path = STATE_DIR / "jobs.db"
     # El silencio que todos consultan: las horas fijas más lo que haya pedido
     # /silencio. Se arma antes que sus usuarios, como el resto del archivo.
