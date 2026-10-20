@@ -731,6 +731,121 @@ def test_with_google_every_text_builder_stays_on_gemini(wired, tmp_path, monkeyp
     assert isinstance(seen["transcribe"].model, polish.GoogleModel)
 
 
+def _text_models(seen):
+    """Los modelos del pulido, el router, la traducción y la corrección."""
+    return {
+        "pulido": seen["polish"].__self__.model,
+        "router": seen["router"].model,
+        "traducción": seen["translator"].model,
+        "corrección": seen["correct"].__self__.model,
+    }
+
+
+def test_the_questions_go_to_claude_while_the_text_stays_on_gemini(
+    wired, tmp_path, monkeypatch
+):
+    from homeauto.claude import ClaudeModel
+
+    seen = _commands_kwargs(monkeypatch)
+    path = config_file(
+        tmp_path,
+        "LLM_API_KEY=k\nLLM_MODEL=barato\nASK_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n",
+    )
+    run_main(monkeypatch, path)
+
+    for name, model in _text_models(seen).items():
+        assert isinstance(model, polish.GoogleModel), name
+        assert model.model == "barato", name
+    asker = seen["asker"].model
+    assert isinstance(asker, ClaudeModel)
+    assert asker.model == "claude-sonnet-5-5"
+    assert asker.search is True
+    assert asker.effort == "medium"
+    assert asker.timeout == main.ASK_TIMEOUT
+
+
+def test_the_questions_go_to_gemini_while_the_text_is_on_claude(wired, tmp_path, monkeypatch):
+    from homeauto.claude import ClaudeModel
+
+    seen = _commands_kwargs(monkeypatch)
+    path = config_file(
+        tmp_path, ANTHROPIC_ENV + "ASK_PROVIDER=google\nLLM_API_KEY=k\nASK_MODEL=caro\n"
+    )
+    run_main(monkeypatch, path)
+
+    for name, model in _text_models(seen).items():
+        assert isinstance(model, ClaudeModel), name
+        assert model.model == "claude-haiku-5-5", name
+    asker = seen["asker"].model
+    assert isinstance(asker, polish.GoogleModel)
+    assert asker.model == "caro"
+    assert asker.search is True
+    assert asker.timeout == main.ASK_TIMEOUT
+
+
+def test_asking_google_without_its_key_leaves_only_the_questions_off(
+    wired, tmp_path, monkeypatch
+):
+    seen = _commands_kwargs(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, ANTHROPIC_ENV + "ASK_PROVIDER=google\n"))
+
+    assert seen["asker"] is None
+    assert seen["router"] is not None
+    assert seen["polish"] is not polish.as_is
+
+
+def test_without_a_google_key_the_questions_still_go_to_claude(
+    wired, tmp_path, monkeypatch, caplog
+):
+    caplog.set_level("INFO", logger="homeauto")
+    seen = _commands_kwargs(monkeypatch)
+    path = config_file(tmp_path, "ASK_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n")
+    run_main(monkeypatch, path)
+
+    assert seen["polish"] is polish.as_is
+    assert seen["router"] is None
+    assert seen["asker"] is not None
+    assert "preguntas con anthropic: claude-sonnet-5-5" in caplog.text
+
+
+def test_the_wired_claude_asker_is_usable(wired, tmp_path, monkeypatch):
+    """El doble del SDK contesta como el real y la respuesta llega a quien pregunta."""
+    from types import SimpleNamespace
+
+    from homeauto import claude
+
+    class FakeClient:
+        def __init__(self):
+            self.messages = self
+
+        def create(self, **kwargs):
+            text = "RESPUESTA: Son las 15.\nVOZ: Son las quince."
+            block = SimpleNamespace(type="text", text=text)
+            return SimpleNamespace(content=[block], stop_reason="end_turn")
+
+    seen = _commands_kwargs(monkeypatch)
+    path = config_file(tmp_path, "LLM_API_KEY=k\nASK_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n")
+    run_main(monkeypatch, path)
+
+    model = seen["asker"].model
+    assert model.make_client is claude.anthropic_client
+    model.make_client = lambda api_key, timeout: FakeClient()
+    answer = seen["asker"].ask("¿Qué hora es?")
+    assert answer.written == "Son las 15."
+    assert answer.spoken == "Son las quince."
+
+
+def test_the_startup_log_names_both_providers(wired, tmp_path, monkeypatch, caplog):
+    caplog.set_level("INFO", logger="homeauto")
+    path = config_file(tmp_path, "LLM_API_KEY=k\nASK_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n")
+    run_main(monkeypatch, path)
+
+    text = caplog.text
+    assert "texto con google: gemini-3.1-flash-lite" in text
+    assert "preguntas con anthropic: claude-sonnet-5-5" in text
+    assert "sk-x" not in text
+
+
 def test_the_startup_log_names_the_provider_and_not_the_key(
     wired, tmp_path, monkeypatch, caplog
 ):

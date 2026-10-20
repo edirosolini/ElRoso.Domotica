@@ -80,7 +80,7 @@ DEFAULT_LLM_MODEL = "gemini-3.1-flash-lite"
 # Preguntar no es pulir: pide un modelo que busque de verdad, no el barato.
 DEFAULT_ASK_MODEL = "gemini-3.7-flash"
 
-# Quién escribe el texto: pulido, router, preguntas, corrección y traducción.
+# Proveedores del texto (LLM_PROVIDER) y de las preguntas (ASK_PROVIDER).
 GOOGLE = "google"
 ANTHROPIC = "anthropic"
 LLM_PROVIDERS = (GOOGLE, ANTHROPIC)
@@ -335,6 +335,18 @@ def _parse_llm_provider(pairs: dict[str, str]) -> tuple[str, str]:
     return provider, key
 
 
+def _parse_ask_provider(pairs: dict[str, str], anthropic_api_key: str) -> str:
+    """Proveedor de las preguntas, vacío si hereda el del texto; falla si no existe o sin clave."""
+    provider = pairs.get("ASK_PROVIDER", "").strip().lower()
+    if provider and provider not in LLM_PROVIDERS:
+        raise ConfigError(
+            f"ASK_PROVIDER tiene que ser {' o '.join(LLM_PROVIDERS)}, no '{provider}'"
+        )
+    if provider == ANTHROPIC and not anthropic_api_key:
+        raise ConfigError("ASK_PROVIDER=anthropic necesita ANTHROPIC_API_KEY")
+    return provider
+
+
 def _parse_pve(pairs: dict[str, str]) -> tuple[str, str, str, int]:
     """URL, token, CA y umbral de disco del Proxmox; todo vacío si no se vigila."""
     url = pairs.get("PVE_URL", "").strip().rstrip("/")
@@ -494,6 +506,8 @@ class Config:
     anthropic_model: str = DEFAULT_ANTHROPIC_MODEL
     # Nunca hereda de ANTHROPIC_MODEL: Haiku no busca en la web.
     anthropic_ask_model: str = DEFAULT_ANTHROPIC_ASK_MODEL
+    # Vacío hereda LLM_PROVIDER.
+    ask_llm_provider: str = ""
     news_feeds: dict[str, str] = field(default_factory=dict)
     news_count: int = DEFAULT_NEWS_COUNT
     economy: bool = True
@@ -571,6 +585,7 @@ class Config:
             anthropic_ask_model=(
                 pairs.get("ANTHROPIC_ASK_MODEL", "").strip() or DEFAULT_ANTHROPIC_ASK_MODEL
             ),
+            ask_llm_provider=_parse_ask_provider(pairs, anthropic_api_key),
             news_feeds=_parse_news(pairs),
             news_count=_parse_news_count(pairs),
             economy=_parse_economy(pairs),
@@ -594,8 +609,22 @@ class Config:
 
     @property
     def polish_enabled(self) -> bool:
-        """Si hay clave del proveedor de texto: pulido, router, preguntas, corrección y traducción."""
-        if self.llm_provider == ANTHROPIC:
+        """Si hay clave del proveedor de texto: pulido, router, corrección y traducción."""
+        return self._has_key(self.llm_provider)
+
+    @property
+    def ask_provider(self) -> str:
+        """El proveedor de las preguntas: ASK_PROVIDER o, sin él, el del texto."""
+        return self.ask_llm_provider or self.llm_provider
+
+    @property
+    def ask_enabled(self) -> bool:
+        """Si hay clave del proveedor de las preguntas."""
+        return self._has_key(self.ask_provider)
+
+    def _has_key(self, provider: str) -> bool:
+        """Si el proveedor dado tiene su clave."""
+        if provider == ANTHROPIC:
             return bool(self.anthropic_api_key)
         return bool(self.llm_api_key)
 
@@ -611,8 +640,8 @@ class Config:
 
     @property
     def text_ask_model(self) -> str:
-        """El modelo que busca, del proveedor de texto."""
-        return self.anthropic_ask_model if self.llm_provider == ANTHROPIC else self.ask_model
+        """El modelo que busca, del proveedor de las preguntas."""
+        return self.anthropic_ask_model if self.ask_provider == ANTHROPIC else self.ask_model
 
     @property
     def news_enabled(self) -> bool:
