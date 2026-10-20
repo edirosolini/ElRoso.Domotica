@@ -21,6 +21,11 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /turnos 7 Cin, Die              el #7 le toca a uno por semana
 /turnos 7 off                   lo corta
 /turnos                         lo que se turna y a quién le toca
+/menu                           qué se come esta semana, almuerzo y cena
+/menu nuevo sin carne           la vuelve a armar con ese pedido
+/menu compras                   pasa a compras lo que queda de hoy
+/menu compras semana            lo de toda la semana
+/menu otra 2026-10-21 cena      cambia ese plato
 /alarma 7:30 arriba             para despertarse, una vez
 /alarma diaria 7:30 arriba      para despertarse, todos los días
 /alarma lun-vie 5:30 arriba     para despertarse, solo esos días
@@ -103,6 +108,19 @@ rango que se puede decir, suena en palabras cuando lo pedís por el parlante.
 **Listas.** `/agregar leche, pan` suma a la lista de compras y `/agregar a pendientes llamar
 al plomero` a la otra. `/compras` y `/pendientes` las muestran numeradas, `/sacar 2` saca una
 y `/sacar todo` la vacía. El cierre del día dice cuántas cosas quedan por comprar.
+
+**Menú de la semana.** `/menu` muestra de lunes a domingo el almuerzo y la cena; si la semana
+no está armada, la arma el modelo de texto (ver **Redacción más natural**) sin repetir los
+platos de la semana anterior. El domingo ya muestra la semana siguiente. `/menu nuevo sin
+carne` la rearma entera con ese pedido, y `/menu otra 2026-10-21 cena` cambia un plato y les
+escribe a los demás «🍽 <nombre> cambió la cena del miércoles 21/10: …». `/menu compras` pasa
+a la lista de compras los ingredientes de lo que queda de hoy, `/menu compras semana` los de
+toda la semana y `/menu compras 2026-10-21 cena` los de un plato; lo que ya estaba no se
+repite. Los ingredientes van sin cantidades, y la sal, el aceite, la pimienta y el agua no se
+pasan; otro condimento con nombre propio, como el orégano, puede llegar a compras. Si lo que arma el modelo no sirve, no se guarda nada. Se lee y nunca
+suena: pedido «por el parlante», contesta escrito y avisa por qué. `MENU_LUNCH_AT=off` o
+`MENU_DINNER_AT=off` saca esa comida del menú; por ahora la hora no cambia nada más. No está en el menú de Telegram: se escribe, se
+pide sin barra o se toca «Menú» en el control.
 
 **Traducir.** `/traducir hola` va de español a inglés y al revés; `/traducir al francés hola`
 al idioma que pidas. Vuelve escrito y nunca por el parlante: la voz de la casa habla español
@@ -251,6 +269,8 @@ nos vamos de vacaciones hasta el 25 de octubre  →  /vacaciones hasta 25/10
 cuánto mide el Aconcagua                  →  /preguntar cuánto mide el Aconcagua
 compré 30 de enalapril                    →  /pastillas enalapril +30
 la basura la sacan Cin y Die una semana cada uno, es el 7  →  /turnos 7 Cin, Die
+armá otro menú sin carne                  →  /menu nuevo sin carne
+pasá a compras lo del menú de la semana   →  /menu compras semana
 llamá a todos a cenar                     →  /llamar en todos a cenar
 poné la pantalla en la tele de la recámara  →  /pantalla en recamara
 ```
@@ -370,7 +390,7 @@ ahora:  Tenés turno con el dentista en diez minutos en el consultorio.
 ```
 
 **El proveedor se elige con `LLM_PROVIDER`**: `google` (default) o `anthropic`. El mismo vale
-para la redacción, el texto sin barra, la corrección de `/decir` y `/traducir`. `/preguntar`
+para la redacción, el texto sin barra, la corrección de `/decir`, `/traducir` y `/menu`. `/preguntar`
 lo hereda salvo que `ASK_PROVIDER` diga otro (ver **Preguntas**).
 
 Con Google, se saca una clave en [Google AI Studio](https://aistudio.google.com/apikey):
@@ -763,6 +783,8 @@ NEWS_RSS_AMBITO=https://www.ambito.com/rss/pages/home.xml   # una clave por medi
 NEWS_COUNT=5                   # cuántos titulares, hasta diez
 SCREEN_DEVICE=comedor          # dónde muestra /pantalla sin equipo
 SCREEN_DEVICES=comedor,recamara,habitacion   # qué equipos tienen pantalla, por coma
+MENU_LUNCH_AT=11:00            # el almuerzo entra en /menu; "off" lo saca
+MENU_DINNER_AT=17:30           # la cena entra en /menu; "off" la saca
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un

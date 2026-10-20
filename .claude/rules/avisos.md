@@ -49,6 +49,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
 | algo programado que un feriado saltea | todos, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
 | corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
+| plato del menú cambiado con `/menu otra` | los demás chats, solo escrito: «🍽 <nombre> cambió la cena del miércoles 21/10: …» |
 | vacaciones activadas o cortadas | los demás chats: «🧳 <nombre> activó vacaciones hasta el …» / «… cortó las vacaciones» |
 | fin de las vacaciones | todos: «🧳 Terminó el modo vacaciones, vuelvo a hablar.» |
 | agenda, clima, lluvia, API | todos |
