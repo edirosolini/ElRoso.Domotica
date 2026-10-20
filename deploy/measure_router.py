@@ -9,10 +9,10 @@ import time
 sys.path.insert(0, "/opt/domotica/src")
 
 from homeauto.config import Config
-from homeauto.polish import GoogleModel
+from homeauto.main import build_model
 from homeauto.route import Router
 
-# Entre llamada y llamada, para no chocar con el límite por minuto del free tier.
+# Pausa entre llamadas, por el límite de pedidos por minuto del proveedor.
 PAUSE = 4
 
 # mensaje, comando esperado, fragmento que tiene que estar en el argumento.
@@ -65,8 +65,8 @@ CASES = (
 
 def main() -> int:
     config = Config.from_file("/etc/domotica/domotica.env")
-    router = Router(model=GoogleModel(api_key=config.llm_api_key, model=config.llm_model))
-    print(f"modelo: {config.llm_model}\n")
+    router = Router(model=build_model(config))
+    print(f"proveedor: {config.llm_provider}, modelo: {config.text_model}\n")
 
     good = 0
     payload_checks = 0

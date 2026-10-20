@@ -615,6 +615,134 @@ def test_the_transcriber_is_wired_with_the_cheap_model(wired, tmp_path, monkeypa
     assert transcribe.model.timeout == main.LISTEN_TIMEOUT > polish.TIMEOUT
 
 
+# --- el proveedor del texto ---
+
+ANTHROPIC_ENV = "LLM_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-x\n"
+
+
+def _commands_kwargs(monkeypatch):
+    seen = {}
+    original = main.Commands.__init__
+
+    def spy(self, *args, **kwargs):
+        seen.update(kwargs)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.Commands, "__init__", spy)
+    return seen
+
+
+def test_with_anthropic_the_text_goes_to_claude(wired, tmp_path, monkeypatch):
+    """Pulido, router, corrección y traducción con el barato; preguntas con el que busca."""
+    from homeauto.claude import ClaudeModel
+
+    seen = _commands_kwargs(monkeypatch)
+    path = config_file(
+        tmp_path,
+        ANTHROPIC_ENV + "ANTHROPIC_MODEL=barato\nANTHROPIC_ASK_MODEL=caro\nLLM_API_KEY=k\n",
+    )
+    run_main(monkeypatch, path)
+
+    cheap = {
+        "pulido": seen["polish"].__self__.model,
+        "router": seen["router"].model,
+        "traducción": seen["translator"].model,
+        "corrección": seen["correct"].__self__.model,
+    }
+    for name, model in cheap.items():
+        assert isinstance(model, ClaudeModel), name
+        assert model.model == "barato", name
+        assert model.search is False, name
+        assert model.effort == "low", name
+
+    asker = seen["asker"].model
+    assert isinstance(asker, ClaudeModel)
+    assert asker.model == "caro"
+    assert asker.search is True
+    assert asker.effort == "medium"
+    assert asker.timeout == main.ASK_TIMEOUT
+
+
+def test_with_anthropic_the_voice_notes_stay_on_gemini(wired, tmp_path, monkeypatch):
+    """Claude no acepta audio: transcribir sigue en Google."""
+    seen = _commands_kwargs(monkeypatch)
+    path = config_file(tmp_path, ANTHROPIC_ENV + "LLM_API_KEY=k\nLLM_MODEL=gemini-barato\n")
+    run_main(monkeypatch, path)
+
+    transcribe = seen["transcribe"]
+    assert isinstance(transcribe.model, polish.GoogleModel)
+    assert transcribe.model.model == "gemini-barato"
+    assert transcribe.model.timeout == main.LISTEN_TIMEOUT
+
+
+def test_with_anthropic_and_no_google_key_only_the_voice_notes_are_off(
+    wired, tmp_path, monkeypatch
+):
+    seen = _commands_kwargs(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, ANTHROPIC_ENV))
+
+    assert seen["transcribe"] is None
+    assert seen["router"] is not None
+    assert seen["asker"] is not None
+    assert seen["translator"] is not None
+    assert seen["polish"] is not polish.as_is
+
+
+def test_the_wired_claude_model_is_usable(wired, tmp_path, monkeypatch):
+    """El doble del SDK contesta como el real y la respuesta llega al pulidor."""
+    from types import SimpleNamespace
+
+    from homeauto import claude
+
+    class FakeClient:
+        def __init__(self):
+            self.messages = self
+
+        def create(self, **kwargs):
+            block = SimpleNamespace(type="text", text="Hoy tenés dos cosas, che.")
+            return SimpleNamespace(content=[block], stop_reason="end_turn")
+
+    seen = _commands_kwargs(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, ANTHROPIC_ENV))
+
+    model = seen["polish"].__self__.model
+    assert model.make_client is claude.anthropic_client
+    model.make_client = lambda api_key, timeout: FakeClient()
+    assert seen["polish"]("Hoy tenés dos cosas.") == "Hoy tenés dos cosas, che."
+
+
+def test_with_google_every_text_builder_stays_on_gemini(wired, tmp_path, monkeypatch):
+    seen = _commands_kwargs(monkeypatch)
+    path = config_file(tmp_path, "LLM_API_KEY=k\nLLM_MODEL=barato\nASK_MODEL=caro\n")
+    run_main(monkeypatch, path)
+
+    for model in (
+        seen["polish"].__self__.model,
+        seen["router"].model,
+        seen["translator"].model,
+        seen["correct"].__self__.model,
+    ):
+        assert isinstance(model, polish.GoogleModel)
+        assert model.model == "barato"
+        assert model.search is False
+        assert model.timeout in (polish.TIMEOUT, main.TRANSLATE_TIMEOUT)
+    assert isinstance(seen["asker"].model, polish.GoogleModel)
+    assert seen["asker"].model.model == "caro"
+    assert isinstance(seen["transcribe"].model, polish.GoogleModel)
+
+
+def test_the_startup_log_names_the_provider_and_not_the_key(
+    wired, tmp_path, monkeypatch, caplog
+):
+    caplog.set_level("INFO", logger="homeauto")
+    run_main(monkeypatch, config_file(tmp_path, ANTHROPIC_ENV))
+
+    text = caplog.text
+    assert "anthropic" in text
+    assert "claude-haiku-5-5" in text
+    assert "sk-x" not in text
+
+
 def test_a_voice_note_has_a_handler(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=una-clave\n"))
 

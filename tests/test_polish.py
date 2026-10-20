@@ -358,3 +358,51 @@ def test_the_audio_is_base64_and_not_raw_bytes():
     data = calls[0]["json"]["contents"][0]["parts"][1]["inline_data"]["data"]
 
     assert base64.b64decode(data) == b"\x00\x01binario"
+
+
+# --- el system del prompt, para Gemini y para Gemma ---
+
+
+def _sent_body(**model_kwargs):
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(kwargs)
+        return FakeResponse(answer("ok"))
+
+    model = GoogleModel(api_key="k", post=post, **model_kwargs)
+    return model, calls
+
+
+def test_without_system_the_body_is_the_same_as_before():
+    model, calls = _sent_body()
+
+    model("prompt")
+
+    assert calls[0]["json"] == {
+        "contents": [{"parts": [{"text": "prompt"}]}],
+        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}},
+    }
+
+
+def test_gemini_gets_the_system_as_a_system_instruction():
+    model, calls = _sent_body()
+
+    model("prompt", system="sos un parlante")
+
+    body = calls[0]["json"]
+    assert body["systemInstruction"] == {"parts": [{"text": "sos un parlante"}]}
+    assert body["contents"][0]["parts"][0]["text"] == "prompt"
+
+
+def test_gemma_gets_the_system_in_front_of_the_prompt():
+    """Gemma no acepta system instruction: va pegado adelante del turno de usuario."""
+    model, calls = _sent_body(model="gemma-4-26b-a4b-it")
+
+    model("prompt", system="sos un parlante")
+
+    body = calls[0]["json"]
+    assert "systemInstruction" not in body
+    text = body["contents"][0]["parts"][0]["text"]
+    assert text.startswith("sos un parlante")
+    assert text.endswith("prompt")

@@ -7,12 +7,13 @@ from homeauto.config import Config
 NEST_UUID = uuid.UUID("d17e8311-d82e-5116-8f58-6292603bbc1b")
 
 
-def make_config(allowed=(), devices=None, default="parlante", token="123:ABC"):
+def make_config(allowed=(), devices=None, default="parlante", token="123:ABC", **fields):
     return Config(
         telegram_token=token,
         devices=devices or {"parlante": NEST_UUID},
         default_device=default,
         allowed_chat_ids=frozenset(allowed),
+        **fields,
     )
 
 
