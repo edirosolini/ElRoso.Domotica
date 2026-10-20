@@ -196,6 +196,12 @@ cualquier chat. Volver a correr `/turnos` sobre el mismo número arranca la cuen
 esta semana; `/turnos 7 off` lo corta y `/lista` muestra los nombres. No se puede cambiar el
 turno a mano ni saltear una semana.
 
+**Llamar a alguien en el aviso.** Un mensaje que empieza con el nombre entre corchetes,
+`/recordar diaria 9:00 [Papá] tomar medicación`, suena y se escribe «Papá, tomar medicación».
+El nombre va solo con letras y espacios, al principio; cualquier otro corchete queda como se
+escribió. Los re-avisos («Sigue sonando», «Sigue pendiente») y `/lista` lo siguen mostrando
+entre corchetes.
+
 Los timers, las alarmas y los recordatorios se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.
 

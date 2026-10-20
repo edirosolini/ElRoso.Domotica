@@ -26,3 +26,10 @@ aparecer; si algún día hace falta que sea inmediato, ahí sí hay que migrar a
 - **Un aviso que falla no se marca como hecho**, para que se reintente en la vuelta siguiente.
 - **Nunca se anuncian eventos que ya empezaron.** Tras un reinicio eso sería ruido.
 - Un calendario roto no tapa a los otros: se registra en `last_problems` y sigue.
+- 🔴 **`speech.describe()` arma una sola oración**, sea uno o varios eventos: «Mañana a las
+  nueve de la mañana tenés Reunión», «Hoy todo el día tenés Feria», «Hoy tenés tres cosas:
+  todo el día, Feria; a las nueve de la mañana, X; y a las once de la mañana, Y». El lugar va
+  después del título («tenés Dentista, en Sanatorio X»). El formato anterior, un encabezado
+  «tenés una cosa.» y una oración por evento, sonaba robótico cada vez que el pulidor no lo
+  reescribía. Lo de día completo va primero; el día vacío sigue diciendo «No tenés nada
+  agendado».
