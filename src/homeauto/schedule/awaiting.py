@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from homeauto.schedule.store import NOBODY, pack_chats, unpack_chats
+
 # Pasado esto, un «Hecho» ya no encuentra nada que cerrar.
 KEEP = timedelta(days=1)
 
@@ -17,7 +19,10 @@ CREATE TABLE IF NOT EXISTS awaiting_done (
     fired_at TEXT    NOT NULL,
     nags     INTEGER NOT NULL DEFAULT 0,
     next_nag TEXT,
-    stock_id INTEGER
+    stock_id INTEGER,
+    assignee TEXT    NOT NULL DEFAULT 'none',
+    assignee_id INTEGER,
+    audience TEXT
 );
 """
 
@@ -30,6 +35,10 @@ class Waiting:
     nags: int = 0
     next_nag: datetime | None = None
     stock_id: int | None = None
+    # Para quién era y a qué chats llegó; `audience` None es todos.
+    assignee: str = NOBODY
+    assignee_id: int | None = None
+    audience: tuple[int, ...] | None = None
 
 
 def _row_to_waiting(row: sqlite3.Row) -> Waiting:
@@ -40,6 +49,9 @@ def _row_to_waiting(row: sqlite3.Row) -> Waiting:
         nags=row["nags"],
         next_nag=datetime.fromisoformat(row["next_nag"]) if row["next_nag"] else None,
         stock_id=row["stock_id"],
+        assignee=row["assignee"],
+        assignee_id=row["assignee_id"],
+        audience=unpack_chats(row["audience"]),
     )
 
 
@@ -53,7 +65,7 @@ class AwaitingStore:
 
     @staticmethod
     def _add_missing_columns(conn: sqlite3.Connection) -> None:
-        """Agrega las columnas del re-aviso y del stock si la tabla no las tiene."""
+        """Agrega las columnas del re-aviso, del stock y de la asignación si la tabla no las tiene."""
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(awaiting_done)")}
         if "nags" not in existing:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN nags INTEGER NOT NULL DEFAULT 0")
@@ -61,6 +73,14 @@ class AwaitingStore:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN next_nag TEXT")
         if "stock_id" not in existing:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN stock_id INTEGER")
+        if "assignee" not in existing:
+            conn.execute(
+                f"ALTER TABLE awaiting_done ADD COLUMN assignee TEXT NOT NULL DEFAULT '{NOBODY}'"
+            )
+        if "assignee_id" not in existing:
+            conn.execute("ALTER TABLE awaiting_done ADD COLUMN assignee_id INTEGER")
+        if "audience" not in existing:
+            conn.execute("ALTER TABLE awaiting_done ADD COLUMN audience TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -74,18 +94,22 @@ class AwaitingStore:
         at: datetime,
         next_nag: datetime | None = None,
         stock_id: int | None = None,
+        assignee: str = NOBODY,
+        assignee_id: int | None = None,
+        audience: tuple[int, ...] | None = None,
     ) -> None:
         """Deja el job esperando su «Hecho» y borra lo que venció."""
         with self._connect() as conn:
             conn.execute("DELETE FROM awaiting_done WHERE fired_at < ?", ((at - KEEP).isoformat(),))
             conn.execute(
-                "INSERT INTO awaiting_done (job_id, message, fired_at, nags, next_nag, stock_id)"
-                " VALUES (?, ?, ?, 0, ?, ?) "
+                "INSERT INTO awaiting_done (job_id, message, fired_at, nags, next_nag, stock_id,"
+                " assignee, assignee_id, audience) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(job_id) DO UPDATE SET message = excluded.message, "
                 "fired_at = excluded.fired_at, nags = 0, next_nag = excluded.next_nag, "
-                "stock_id = excluded.stock_id",
+                "stock_id = excluded.stock_id, assignee = excluded.assignee, "
+                "assignee_id = excluded.assignee_id, audience = excluded.audience",
                 (job_id, message, at.isoformat(), next_nag.isoformat() if next_nag else None,
-                 stock_id),
+                 stock_id, assignee, assignee_id, pack_chats(audience)),
             )
 
     def get(self, job_id: int) -> Waiting | None:

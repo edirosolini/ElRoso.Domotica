@@ -2234,3 +2234,35 @@ def test_the_cleaner_cleans_the_audio_cache_the_lists_and_the_history_of_the_hou
     assert not wav.exists()
     assert main.ListStore(tmp_path / "jobs.db").items("compras") == []
     assert history.count_before(main.datetime.now()) == 0
+
+
+def test_the_alarms_read_the_padron_and_a_removed_person_leaves_her_jobs_to_nobody(
+    wired, tmp_path, monkeypatch
+):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+    household = web.control.household
+
+    china = household.add("China", 77)
+    assert reminders["resolve"](china.id) == china
+    assert reminders["find"]("china") == china
+
+    store = reminders["store"]
+    job = store.add(
+        42, main.datetime(2026, 10, 21, 8, 0), "regar", assignee="person", assignee_id=china.id
+    )
+    household.remove(china.id)
+
+    assert (store.get(job.id).assignee, store.get(job.id).assignee_id) == ("none", None)
+    assert reminders["resolve"](china.id) is None
+
+
+def test_the_cleaner_reads_the_same_padron(wired, tmp_path, monkeypatch):
+    cleaner = _spy_init(monkeypatch, main.Cleaner)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+
+    china = web.control.household.add("China", 77)
+    roster = cleaner["roster"]()
+
+    assert roster.person_ids == frozenset({china.id})
+    assert roster.chats == frozenset({42, 77})

@@ -17,6 +17,7 @@ from homeauto.cleanup import (
     IGNORED_IN_A_ROW,
     JOBS,
     NOT_A_SCREEN,
+    ORPHAN,
     OUTSIDER,
     OVERDUE,
     PLAN_TTL,
@@ -30,6 +31,7 @@ from homeauto.cleanup import (
     tele_reason,
 )
 from homeauto.lists import SHOPPING, TODO, ListStore
+from homeauto.people import Roster
 from homeauto.schedule.awaiting import KEEP, AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import DONE, OFF, SNOOZE, HistoryStore
@@ -802,3 +804,52 @@ def test_the_overview_counts_the_new_categories(house):
 
     assert (overview.history, overview.cache, overview.lists) == (1, 1, 1)
 
+
+
+# --- el padrón ---
+
+
+def test_an_author_of_the_padron_is_not_an_outsider_even_with_a_chat_off_the_list():
+    job = Job(7, STRANGER, NOW + timedelta(hours=1), "x", repeat=DAILY, author_id=3)
+
+    assert job_reasons(job, NOW, Roster(frozenset({3}), frozenset({OWNER})), {"parlante"}, []) == ()
+
+
+def test_an_author_gone_from_the_padron_with_a_chat_off_the_list_is_an_outsider():
+    job = Job(7, STRANGER, NOW + timedelta(hours=1), "x", repeat=DAILY, author_id=9)
+
+    assert job_reasons(
+        job, NOW, Roster(frozenset({3}), frozenset({OWNER})), {"parlante"}, []
+    ) == (OUTSIDER,)
+
+
+def test_a_job_for_someone_gone_from_the_padron_is_proposed():
+    job = Job(
+        7, OWNER, NOW + timedelta(hours=1), "x", repeat=DAILY, assignee="person", assignee_id=9
+    )
+
+    assert job_reasons(
+        job, NOW, Roster(frozenset({3}), frozenset({OWNER})), {"parlante"}, []
+    ) == (ORPHAN,)
+
+
+def test_a_job_for_someone_in_the_padron_stays():
+    job = Job(
+        7, OWNER, NOW + timedelta(hours=1), "x", repeat=DAILY, assignee="person", assignee_id=3
+    )
+
+    assert job_reasons(job, NOW, Roster(frozenset({3}), frozenset({OWNER})), {"parlante"}, []) == ()
+
+
+def test_the_cleaner_reads_the_padron_when_it_has_one(house):
+    hers = house["reminders"].add(
+        OWNER, NOW + timedelta(hours=2), "regar", repeat=DAILY, assignee="person", assignee_id=9,
+    )
+    cleaner = Cleaner(
+        config=make_config(allowed=(OWNER, OTHER)), reminders=house["reminders"],
+        clock=house["clock"], roster=lambda: Roster(frozenset({3}), frozenset({OWNER, OTHER})),
+    )
+
+    jobs = cleaner.preview(OWNER, JOBS).jobs
+
+    assert [(c.job.id, c.reasons) for c in jobs] == [(hers.id, (ORPHAN,))]

@@ -65,7 +65,7 @@ class Announcer:
         problem = None
         resting = self.quiet is not None and self.quiet.is_quiet(self.clock())
         turn = turn_in(job.message)
-        called, name = _called(job.message, turn)
+        called, name = _called(job.message, turn, job.addressee)
         message = self.polish(called, must_keep=tuple(word for word in (turn, name) if word))
 
         if resting:
@@ -92,7 +92,7 @@ class Announcer:
                 # En vacaciones saca los botones de apagar la alarma.
                 off = _numbered(self.ring_actions, job)
                 actions = tuple(action for action in actions if action not in off)
-        for chat_id in self.chat_ids or [job.chat_id]:
+        for chat_id in self._chats(job):
             try:
                 if actions:
                     self.notify(chat_id, text, actions)
@@ -109,6 +109,12 @@ class Announcer:
                 self.speakers.get(alias).stop()
             except Exception:
                 log.exception("could not stop %s", alias)
+
+    def _chats(self, job: Job) -> list[int]:
+        """Los chats del job; sin audiencia propia, todos los de la casa o el que lo pidió."""
+        if job.audience is not None:
+            return list(job.audience)
+        return self.chat_ids or [job.chat_id]
 
     @staticmethod
     def _sound(job: Job, rings: int = 0) -> str:
@@ -146,14 +152,21 @@ class Announcer:
         return text
 
 
-def _called(message: str, turn: str | None) -> tuple[str, str | None]:
-    """El mensaje con el «[Nombre]» tras el turno dicho como «Nombre,», y ese nombre."""
+def _called(
+    message: str, turn: str | None, addressee: str | None = None
+) -> tuple[str, str | None]:
+    """El mensaje dicho como llamado y a quién llama.
+
+    Gana el «[Nombre]» tras el turno; sin corchete ni turno, llama a `addressee`.
+    """
     prefix = with_turn("", turn) if turn else ""
     match = _CALLED.match(message, len(prefix))
-    if not match:
-        return message, None
-    name, rest = match.group(1), message[match.end():]
-    return (f"{prefix}{name}, {rest}" if rest else f"{prefix}{name}"), name
+    if match:
+        name, rest = match.group(1), message[match.end():]
+        return (f"{prefix}{name}, {rest}" if rest else f"{prefix}{name}"), name
+    if addressee and not turn:
+        return f"{addressee}, {message}", addressee
+    return message, None
 
 
 def _numbered(actions: tuple[tuple[str, str], ...], job: Job) -> tuple[tuple[str, str], ...]:

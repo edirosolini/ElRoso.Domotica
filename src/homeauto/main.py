@@ -956,6 +956,12 @@ def main() -> None:
             fallback=config.default_device,
         )
     store = Store(db_path)
+    # Quien sale del padrón deja sus avisos para «nadie».
+    household = Household(
+        PersonStore(db_path),
+        config.allowed_chat_ids,
+        before_remove=lambda person: store.reassign(person.id),
+    )
     history = HistoryStore(db_path)
     holidays = HolidayStore(db_path)
     stock = StockStore(db_path)
@@ -990,6 +996,8 @@ def main() -> None:
         lists=ListStore(db_path),
         quiet=hush,
         screen=screens,
+        resolve=household.get,
+        find=household.by_name,
     )
     vacation = Vacation(
         hush=hush,
@@ -1100,6 +1108,7 @@ def main() -> None:
         lists=ListStore(db_path),
         cache_dir=Path(CACHE_DIR),
         clock=datetime.now,
+        roster=household.roster,
     )
 
     commands = Commands(
@@ -1134,7 +1143,6 @@ def main() -> None:
         clock=datetime.now,
     )
     people = PeopleStore(db_path)
-    household = Household(PersonStore(db_path), config.allowed_chat_ids)
     register(
         app,
         commands,

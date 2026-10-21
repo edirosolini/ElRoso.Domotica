@@ -245,3 +245,41 @@ def test_delete_before_leaves_a_row_closed_after_it_was_shown(history):
 
     assert history.delete_before(NOW - timedelta(days=30), NOW) == 0
     assert len(history.between(NOW - timedelta(days=50), NOW)) == 1
+
+
+def test_a_row_keeps_the_assignment_and_who_it_reached(history):
+    history.record(
+        7, OWNER, REMINDER, "daily", "la pastilla", NOW,
+        assignee="person", assignee_id=3, audience=(OWNER,),
+    )
+
+    [entry] = history.between(NOW, NOW + timedelta(minutes=1))
+    assert (entry.assignee, entry.assignee_id, entry.audience) == ("person", 3, (OWNER,))
+
+
+def test_by_default_a_row_is_for_nobody_and_reached_everyone(history):
+    record(history)
+
+    [entry] = history.between(NOW, NOW + timedelta(minutes=1))
+    assert (entry.assignee, entry.assignee_id, entry.audience) == ("none", None, None)
+
+
+def test_an_old_table_gets_the_assignment_columns(tmp_path):
+    path = tmp_path / "jobs.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE fired_history (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id INTEGER,"
+            " chat_id INTEGER, kind TEXT NOT NULL, repeat TEXT NOT NULL DEFAULT 'once',"
+            " message TEXT NOT NULL, fired_at TEXT NOT NULL, announced INTEGER NOT NULL DEFAULT 0,"
+            " done_at TEXT, done_by TEXT, nags INTEGER NOT NULL DEFAULT 0, snoozed_at TEXT,"
+            " closed TEXT, closed_at TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO fired_history (job_id, chat_id, kind, message, fired_at)"
+            " VALUES (7, ?, 'reminder', 'la pastilla', ?)",
+            (OWNER, NOW.isoformat()),
+        )
+
+    [entry] = HistoryStore(path).between(NOW, NOW + timedelta(minutes=1))
+
+    assert (entry.assignee, entry.assignee_id, entry.audience) == ("none", None, None)
