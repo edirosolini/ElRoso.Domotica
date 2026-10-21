@@ -351,7 +351,7 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - 🔴 **Una persona sin Telegram solo apaga una alarma o marca «Hecho»**
   (`Commands.press_without_chat()`, `CHATLESS_BUTTONS`). Cualquier otro botón o texto es un
   403 que lo explica. Como no hay chat que lo tocó, **el aviso de que apagó o marcó hecho
-  llega a todos los chats**. Su `/api/live` no trae posponer, ni «Confirmar», ni el botón de
+  llega a todos los chats del aviso**. Su `/api/live` no trae posponer, ni «Confirmar», ni el botón de
   silencio.
 - **Comparte el estado con Telegram por `chat_id`**: el `PendingStore` —una pregunta hecha en
   el chat se puede contestar desde la web y al revés— y el equipo de `usar`. Una persona sin
@@ -415,4 +415,8 @@ Telegram. Se carga desde la tarjeta «👪 Personas» de `/control`.
   dispositivo sigue apuntando a la misma persona.
 - **Con el padrón vacío, todo cae a los chats**, como antes de que existiera.
 - **Altas, cambios y bajas no avisan a los chats.**
-- ⚠️ **Todavía no se asigna un aviso a una persona**: el padrón solo dice quién toca qué.
+- 🔴 **La baja pasa los avisos asignados a esa persona a «nadie»** antes de borrarla
+  (`before_remove` → `Store.reassign()`); si eso falla, no se borra. Ver **Para quién suena**,
+  en `.claude/rules/programado.md`.
+- ⚠️ **La pantalla todavía no asigna ni muestra para quién es un aviso.** Lo asignado solo
+  cambia a qué chats llega y cómo se lo llama al sonar.

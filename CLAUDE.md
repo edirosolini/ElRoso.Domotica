@@ -100,7 +100,8 @@ sin que nada de esto se entere.
 `HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat, salvo
 `speak_only()`, que es solo parlante (ver **Caída de internet**, en `.claude/rules/vigilancia.md`).
 Las alarmas son la excepción: pasan por `Announcer`, que aplica la misma regla de descanso
-y escribe en todos los chats de `ALLOWED_CHAT_IDS`, no solo en el que la pidió.
+y escribe en los chats del aviso: todos los de `ALLOWED_CHAT_IDS`, o solo el de la persona
+asignada (ver **Para quién suena**, en `.claude/rules/programado.md`).
 
 `Speaker` es la unidad de "decir algo en un equipo": sintetiza, publica el wav por HTTP y le
 pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda un archivo.
