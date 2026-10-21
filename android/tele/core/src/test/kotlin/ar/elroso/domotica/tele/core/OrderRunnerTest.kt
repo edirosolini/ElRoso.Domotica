@@ -92,7 +92,7 @@ class OrderRunnerTest {
 
         assertEquals(listOf("5 received", "5 done"), acks)
         assertEquals(
-            listOf("wake@0", "volume 23", "play http://casa/a.wav@4000", "volume 2"),
+            listOf("wake@0", "volume 23", "play http://casa/a.wav@21000", "volume 2"),
             device.calls,
         )
     }
@@ -111,7 +111,7 @@ class OrderRunnerTest {
 
         runner.run(play)
 
-        assertEquals(listOf("wake@0", "play http://casa/a.wav@4000"), device.calls)
+        assertEquals(listOf("wake@0", "play http://casa/a.wav@21000"), device.calls)
     }
 
     @Test
@@ -129,7 +129,7 @@ class OrderRunnerTest {
 
         runner.run(play)
 
-        assertEquals("play http://casa/a.wav@13000", device.calls[2])
+        assertEquals("play http://casa/a.wav@30000", device.calls[2])
         assertEquals(listOf("5 received", "5 done"), acks)
     }
 

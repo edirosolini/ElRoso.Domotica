@@ -37,7 +37,7 @@ class OrderRunner(
     private val sleep: (Long) -> Unit = Thread::sleep,
     private val now: () -> Long = System::currentTimeMillis,
     private val wakeTimeoutMs: Long = 10_000,
-    private val settleMs: Long = 3_000,
+    private val settleMs: Long = 20_000,
     private val pollMs: Long = 250,
     private val keep: Int = 64,
 ) {
