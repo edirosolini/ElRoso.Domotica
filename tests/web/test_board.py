@@ -1,7 +1,7 @@
 """El tablero de la pantalla: eventos por rango, clima, listas y descanso."""
 
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -9,6 +9,7 @@ import pytest
 from homeauto.agenda.ical import CalendarClient
 from homeauto.holidays import BRIDGE, MOVABLE, Holiday, HolidayStore
 from homeauto.lists import ListStore
+from homeauto.meals import DINNER, LUNCH, Meal, MealStore
 from homeauto.quiet import Hush, HushStore, QuietHours
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.store import DAILY, REMINDER, WEEKLY, Store
@@ -785,3 +786,78 @@ def test_the_alarm_view_reads_the_alarm_that_rings(parts, tmp_path):
 
 def test_without_a_ringing_store_nothing_rings(parts):
     assert board(parts).ringing(17)["ringing"] is False
+
+
+# --- la idea del menú ---
+
+
+def meal_board(parts, tmp_path, hour, minute=0, served=None, store=True):
+    """Un tablero con el menú de hoy y de mañana guardado, a esa hora del 21/10."""
+    meals = None
+    if store:
+        meals = MealStore(tmp_path / "jobs.db")
+        for day, lunch, dinner in (
+            (date(2026, 10, 21), "Milanesas con puré", "Tarta de acelga"),
+            (date(2026, 10, 22), "Ñoquis con tuco", "Pizza casera"),
+        ):
+            meals.replace(Meal(day, LUNCH, lunch, ("carne",)))
+            meals.replace(Meal(day, DINNER, dinner, ("acelga",)))
+    extra = {} if served is None else {"served": served}
+    return Board(store=parts["store"], history=parts["history"],
+                 clock=Clock(datetime(2026, 10, 21, hour, minute)), timezone=TZ,
+                 meals=meals, **extra)
+
+
+def test_before_three_the_screen_shows_todays_lunch_next(parts, tmp_path):
+    assert meal_board(parts, tmp_path, 10).screen()["meal"] == {
+        "day": "2026-10-21",
+        "tomorrow": False,
+        "items": [
+            {"meal": "almuerzo", "label": "Almuerzo", "dish": "Milanesas con puré", "state": "next"},
+            {"meal": "cena", "label": "Cena", "dish": "Tarta de acelga", "state": "later"},
+        ],
+    }
+
+
+def test_after_three_the_lunch_is_past_and_the_dinner_next(parts, tmp_path):
+    meal = meal_board(parts, tmp_path, 16).screen()["meal"]
+
+    assert meal["day"] == "2026-10-21"
+    assert meal["tomorrow"] is False
+    assert [(item["meal"], item["state"]) for item in meal["items"]] == [
+        ("almuerzo", "past"), ("cena", "next"),
+    ]
+
+
+def test_after_ten_at_night_the_screen_shows_tomorrow(parts, tmp_path):
+    assert meal_board(parts, tmp_path, 23, 30).screen()["meal"] == {
+        "day": "2026-10-22",
+        "tomorrow": True,
+        "items": [
+            {"meal": "almuerzo", "label": "Almuerzo", "dish": "Ñoquis con tuco", "state": "next"},
+            {"meal": "cena", "label": "Cena", "dish": "Pizza casera", "state": "later"},
+        ],
+    }
+
+
+def test_without_a_menu_for_that_day_there_is_no_meal(parts, tmp_path):
+    empty = Board(store=parts["store"], history=parts["history"], clock=Clock(), timezone=TZ,
+                  meals=MealStore(tmp_path / "jobs.db"))
+
+    assert empty.screen()["meal"] is None
+
+
+def test_only_the_configured_meals_are_shown(parts, tmp_path):
+    meal = meal_board(parts, tmp_path, 10, served=("cena",)).screen()["meal"]
+
+    assert meal["items"] == [
+        {"meal": "cena", "label": "Cena", "dish": "Tarta de acelga", "state": "next"},
+    ]
+
+
+def test_with_every_meal_off_there_is_no_meal(parts, tmp_path):
+    assert meal_board(parts, tmp_path, 10, served=()).screen()["meal"] is None
+
+
+def test_without_a_meal_store_there_is_no_meal(parts, tmp_path):
+    assert meal_board(parts, tmp_path, 10, store=False).screen()["meal"] is None

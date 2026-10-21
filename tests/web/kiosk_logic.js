@@ -66,4 +66,28 @@ assert.strictEqual(kiosk.readOnly(""), false);
 assert.strictEqual(kiosk.readOnly("?ver=0"), false);
 assert.strictEqual(kiosk.readOnly("?ver=10"), false);
 
+// La tarjeta del menú: el título según el día y una fila por comida con su clase.
+assert.deepStrictEqual(
+  kiosk.mealView({ day: "2026-10-21", tomorrow: false, items: [
+    { meal: "almuerzo", label: "Almuerzo", dish: "Milanesas con puré", state: "past" },
+    { meal: "cena", label: "Cena", dish: "Tarta de acelga", state: "next" },
+  ] }),
+  { title: "🍽 Idea para hoy", rows: [
+    { text: "Almuerzo · Milanesas con puré", className: "past" },
+    { text: "Cena · Tarta de acelga", className: "on" },
+  ] }
+);
+assert.deepStrictEqual(
+  kiosk.mealView({ day: "2026-10-22", tomorrow: true, items: [
+    { meal: "almuerzo", label: "Almuerzo", dish: "Ñoquis", state: "next" },
+    { meal: "cena", label: "Cena", dish: "Pizza", state: "later" },
+  ] }),
+  { title: "🍽 Idea para mañana", rows: [
+    { text: "Almuerzo · Ñoquis", className: "on" },
+    { text: "Cena · Pizza", className: "" },
+  ] }
+);
+assert.strictEqual(kiosk.mealView(null), null);
+assert.strictEqual(kiosk.mealView({ day: "2026-10-21", tomorrow: false, items: [] }), null);
+
 console.log("ok");

@@ -1,10 +1,11 @@
-// Kiosco de la casa: reloj con la hora del servidor, clima, lo próximo, listas para tachar y descanso.
+// Kiosco de la casa: reloj con la hora del servidor, clima, lo próximo, idea del menú, listas para tachar y descanso.
 (function () {
   "use strict";
 
   var POLL_MS = 60000;
   var MINUTE_MS = 60000;
   var KEEP_PAST = 2;
+  var MEAL_CLASSES = { next: "on", past: "past" };
   var DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
   var MONTHS = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -88,6 +89,22 @@
     return text;
   }
 
+  // El título y las filas de la tarjeta del menú; null si no hay nada que mostrar.
+  function mealView(meal) {
+    if (!meal || !meal.items || meal.items.length === 0) {
+      return null;
+    }
+    return {
+      title: meal.tomorrow ? "🍽 Idea para mañana" : "🍽 Idea para hoy",
+      rows: meal.items.map(function (item) {
+        return {
+          text: item.label + " · " + item.dish,
+          className: MEAL_CLASSES[item.state] || "",
+        };
+      }),
+    };
+  }
+
   // Si la dirección pide solo lectura con «ver=1», como la tele.
   function readOnly(search) {
     return /[?&]ver=1(?:&|$)/.test(search || "");
@@ -95,7 +112,7 @@
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { untilText: untilText, nextMeta: nextMeta, nowIndex: nowIndex, skyLine: skyLine,
-      trimPast: trimPast, awayText: awayText, readOnly: readOnly };
+      trimPast: trimPast, awayText: awayText, readOnly: readOnly, mealView: mealView };
   }
   if (typeof document === "undefined") {
     return;
@@ -314,6 +331,26 @@
     box.hidden = false;
   }
 
+  function showMeal(meal) {
+    var card = byId("meal-card");
+    var list = byId("meal-items");
+    var view = mealView(meal);
+    clear(list);
+    card.hidden = !view;
+    if (!view) {
+      byId("board").classList.remove("has-meal");
+      return;
+    }
+    byId("board").classList.add("has-meal");
+    byId("meal-title").textContent = view.title;
+    view.rows.forEach(function (row) {
+      var item = document.createElement("li");
+      item.className = row.className;
+      item.textContent = row.text;
+      list.appendChild(item);
+    });
+  }
+
   function render(data, sentAt, receivedAt) {
     var server = Date.parse(data.now);
     if (!isNaN(server)) {
@@ -330,6 +367,7 @@
     showWeather(data.weather);
     upcoming = data.next || null;
     fillToday(data.today);
+    showMeal(data.meal);
     var lists = data.lists || {};
     fillList("compras", lists.compras);
     fillList("pendientes", lists.pendientes);

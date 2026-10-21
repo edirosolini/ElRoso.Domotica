@@ -1129,6 +1129,8 @@ def main() -> None:
                     quiet=hush,
                     holidays=holidays,
                     ringing=ringing,
+                    meals=meal_store,
+                    served=served(config.menu_lunch_at, config.menu_dinner_at),
                 ),
                 jobs=JobsService(
                     reminders=reminders,

@@ -8,6 +8,7 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Callable
 
 from homeauto.lists import LISTS
+from homeauto.meals import DINNER, LUNCH, MEAL_ENDS, upcoming
 from homeauto.schedule.month import (
     ALARM_ITEM,
     REMINDER_ITEM,
@@ -152,6 +153,8 @@ class Board:
         quiet=None,
         holidays=None,
         ringing=None,
+        meals=None,
+        served: tuple[str, ...] = (LUNCH, DINNER),
     ):
         self.store = store
         self.history = history
@@ -165,6 +168,9 @@ class Board:
         self.holidays = holidays
         # Las alarmas que suenan, para la vista de alarma de la tele.
         self.ringing_store = ringing
+        # El menú guardado y las comidas que no están en `off`.
+        self.meals = meals
+        self.served = served
         self._lock = threading.Lock()
         self._calendar_cache: dict[tuple[datetime, datetime], tuple[datetime, list, list]] = {}
         self._weather_cache: tuple[datetime, dict] | None = None
@@ -316,6 +322,7 @@ class Board:
             "weather": weather,
             "next": self._next(now),
             "lists": self._lists(),
+            "meal": self._meal(now),
             "problems": problems,
         }
 
@@ -326,6 +333,30 @@ class Board:
             return None
         ends = away_until(self._naive(now))
         return ends.isoformat() if ends is not None else None
+
+    def _meal(self, now: datetime) -> dict | None:
+        """Los platos del día de la próxima comida y en qué punto está cada uno, o None."""
+        if self.meals is None:
+            return None
+        local = self._naive(now)
+        found = upcoming(local, self.served)
+        if found is None:
+            return None
+        day, coming = found
+        order = [meal for meal, _end in MEAL_ENDS if meal in self.served]
+        items = []
+        for meal in order:
+            dish = self.meals.get(day, meal)
+            if dish is None:
+                continue
+            position = order.index(meal) - order.index(coming)
+            state = "next" if position == 0 else "past" if position < 0 else "later"
+            items.append(
+                {"meal": meal, "label": meal.capitalize(), "dish": dish.dish, "state": state}
+            )
+        if not items:
+            return None
+        return {"day": day.isoformat(), "tomorrow": day > local.date(), "items": items}
 
     def _lists(self) -> dict:
         """Cada lista con el id de sus ítems, para poder tacharlos."""
