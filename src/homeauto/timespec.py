@@ -20,6 +20,10 @@ from datetime import datetime, timedelta
 
 TOMORROW_WORDS = {"mañana", "manana"}
 MONTHLY_WORDS = ("mensual",)
+# Palabras que nombran un cuándo aunque el parser no las lea: no pueden ser el nombre de alguien.
+TIME_WORDS = frozenset({
+    "hoy", "pasado", "dentro", "ahora", "madrugada", "mediodía", "mediodia", "tarde", "noche",
+}) | TOMORROW_WORDS
 
 # "5.30" es como la gente escribe la hora tanto como "5:30"; significan lo mismo.
 _CLOCK_RE = re.compile(r"(\d{1,2})[:.](\d{2})")
@@ -125,6 +129,12 @@ def _expand_range(start: str, end: str) -> tuple[int, ...] | None:
     # "vie-lun" da la vuelta por el fin de semana: se cuenta hacia adelante.
     length = (last - first) % 7 + 1
     return tuple((first - 1 + step) % 7 + 1 for step in range(length))
+
+
+def is_time_word(word: str) -> bool:
+    """Si la palabra habla de tiempo: un cuándo, un momento del día o días de la semana."""
+    word = word.lower()
+    return word in TIME_WORDS or word in WEEKDAYS or bool(parse_weekdays(word))
 
 
 def parse_weekdays(token: str) -> tuple[int, ...] | None:

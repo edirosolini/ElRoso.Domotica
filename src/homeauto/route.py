@@ -103,6 +103,9 @@ Reglas:
   formato de arriba: "diez minutos" es "10m", "las siete y media" es "7:30". En decir y
   llamar no: ahí los números quedan escritos como los escribió la persona.
 - La fecha de vuelta de vacaciones convertila a dd/mm: "el 25 de octubre" es "25/10".
+- Si un timer, una alarma o un recordar es para alguien de la casa ("recordale a China",
+  "despertá a Papá") o para todos, poné "para <nombre>" o "para todos" adelante, después
+  del equipo si lo hay. "para mañana" o "para las ocho" no son una persona.
 
 Ejemplos:
 
@@ -141,6 +144,14 @@ ARGUMENTO: mensual 10 9:00 pagar la luz
 Mensaje: recordame mañana a las diez llamar al médico
 COMANDO: timer
 ARGUMENTO: mañana 10:00 llamar al médico
+
+Mensaje: recordale a China tomar la pastilla todos los días a las ocho
+COMANDO: recordar
+ARGUMENTO: para China diaria 8:00 tomar la pastilla
+
+Mensaje: recordale a Papá en media hora sacar la ropa
+COMANDO: timer
+ARGUMENTO: para Papá 30m sacar la ropa
 
 Mensaje: cuántos goles hizo Messi
 COMANDO: preguntar

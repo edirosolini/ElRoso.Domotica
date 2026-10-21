@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from homeauto.bot.commands import HELP, Commands, with_actions
+from homeauto.people import Household, PersonStore
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import ALARM, ONCE, REMINDER, WEEKLY, Store
 
@@ -175,3 +176,39 @@ def test_the_router_can_reach_it(cmd):
 def test_help_explains_the_turns():
     assert "/turnos 7 Cin, Die" in HELP
     assert "/turnos 7 off" in HELP
+
+
+@pytest.fixture
+def house_cmd(tmp_path):
+    path = tmp_path / "jobs.db"
+    reminders = Reminders(
+        store=Store(path), timer=FakeTimer(), announce=lambda job: None, clock=lambda: NOW
+    )
+    return Commands(
+        config=make_config(allowed={OWNER, OTHER}),
+        speakers=StubRegistry(parlante=FakeSpeaker()),
+        reminders=reminders,
+        household=Household(PersonStore(path), {OWNER, OTHER}),
+        clock=lambda: NOW,
+    )
+
+
+def test_the_names_outside_the_roster_are_pointed_out(house_cmd):
+    house_cmd.household.add("Cin", OWNER)
+    job = trash(house_cmd)
+
+    reply = house_cmd.turns(OWNER, f"{job.id} cin, Die")
+
+    assert house_cmd.reminders.get(job.id).turns == ["cin", "Die"]
+    warning = next(line for line in reply.splitlines() if "padrón" in line)
+    assert "Die" in warning and "cin" not in warning.lower()
+
+
+def test_with_everyone_in_the_roster_there_is_no_warning(house_cmd):
+    house_cmd.household.add("Cin", OWNER)
+    house_cmd.household.add("Die")
+    job = trash(house_cmd)
+
+    reply = house_cmd.turns(OWNER, f"{job.id} Cin, Die")
+
+    assert "padrón" not in reply

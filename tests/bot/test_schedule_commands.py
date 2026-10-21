@@ -3,8 +3,9 @@ from datetime import datetime, timedelta
 import pytest
 
 from homeauto.bot.commands import Commands
+from homeauto.people import Household, PersonStore
 from homeauto.schedule.reminders import Reminders
-from homeauto.schedule.store import Store
+from homeauto.schedule.store import EVERYONE, NOBODY, PERSON, Store
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
 
@@ -28,12 +29,14 @@ class FakeTimer:
 def cmd(tmp_path):
     reminders = Reminders(store=Store(tmp_path / "jobs.db"), timer=FakeTimer(), announce=lambda job: None)
     config = make_config(allowed={OWNER})
-    return Commands(
+    commands = Commands(
         config=config,
         speakers=StubRegistry(parlante=FakeSpeaker()),
         reminders=reminders,
+        household=Household(PersonStore(tmp_path / "jobs.db"), {OWNER}),
         clock=lambda: NOW,
     )
+    return commands
 
 
 def test_timer_schedules_and_confirms(cmd):
@@ -291,3 +294,214 @@ def test_the_working_days_example_of_the_help_really_skips_holidays(cmd):
 
     [job] = cmd.reminders.list(OWNER)
     assert (job.repeat, job.skip_holidays, job.message) == ("weekly", True, "arriba")
+
+
+# --- para quién ------------------------------------------------------------
+
+
+def test_a_timer_for_someone_of_the_house(cmd):
+    china = cmd.household.add("China")
+
+    reply = cmd.timer(OWNER, "para China 10m sacá la pizza")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (PERSON, china.id)
+    assert job.message == "sacá la pizza"
+    assert job.when == NOW + timedelta(minutes=10)
+    assert "para China" in reply
+
+
+def test_the_person_goes_after_the_device(cmd):
+    china = cmd.household.add("China")
+
+    cmd.timer(OWNER, "en parlante para China 10m sacá la pizza")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.device == "parlante"
+    assert (job.assignee, job.assignee_id) == (PERSON, china.id)
+    assert job.message == "sacá la pizza"
+
+
+def test_the_name_ignores_case(cmd):
+    china = cmd.household.add("China")
+
+    cmd.timer(OWNER, "PARA china 10m sacá la pizza")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (PERSON, china.id)
+
+
+def test_a_name_of_two_words(cmd):
+    rosa = cmd.household.add("Tía Rosa")
+
+    cmd.timer(OWNER, "para tía rosa 10m regar")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (PERSON, rosa.id)
+    assert job.message == "regar"
+
+
+def test_an_alarm_for_everyone(cmd):
+    reply = cmd.alarm(OWNER, "para todos diaria 7:30 arriba")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.assignee == EVERYONE
+    assert job.repeat == "daily"
+    assert job.message == "arriba"
+    assert "para todos" in reply
+
+
+def test_an_alarm_for_nobody_after_the_device(cmd):
+    cmd.alarm(OWNER, "en parlante para nadie 7:30 arriba")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (NOBODY, None)
+    assert job.device == "parlante"
+    assert job.message == "arriba"
+
+
+def test_an_alarm_for_someone_on_some_days(cmd):
+    china = cmd.household.add("China")
+
+    cmd.alarm(OWNER, "en parlante para China lun-vie 6:30 arriba")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (PERSON, china.id)
+    assert job.weekdays == [1, 2, 3, 4, 5]
+    assert job.message == "arriba"
+
+
+def test_a_monthly_alarm_for_someone(cmd):
+    china = cmd.household.add("China")
+
+    cmd.alarm(OWNER, "para China mensual 10 9:00 pagar la luz")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (PERSON, china.id)
+    assert job.monthday == 10
+
+
+def test_without_para_it_is_for_nobody(cmd):
+    cmd.household.add("China")
+
+    cmd.timer(OWNER, "10m sacá la pizza para China")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (NOBODY, None)
+    assert job.message == "sacá la pizza para China"
+
+
+UNKNOWN_PEDRO = (
+    "«Pedro» no está en el padrón: cargalo en Personas, en /control, o usá «para todos»."
+)
+
+
+def test_a_name_outside_the_roster_says_so(cmd):
+    cmd.household.add("China")
+
+    reply = cmd.timer(OWNER, "para Pedro 10m sacá la pizza")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert reply == UNKNOWN_PEDRO
+
+
+def test_a_name_outside_an_empty_roster_says_so(cmd):
+    reply = cmd.timer(OWNER, "en parlante para Pedro 10m sacá la pizza")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert reply == UNKNOWN_PEDRO
+
+
+@pytest.mark.parametrize(
+    "text", ["para Pedro diaria 7:30 arriba", "para Pedro lun-vie 7:30 arriba",
+             "para Pedro mensual 10 9:00 pagar la luz", "para Pedro 7:30 arriba"],
+)
+def test_an_alarm_for_a_name_outside_the_roster_says_so(cmd, text):
+    reply = cmd.alarm(OWNER, text)
+
+    assert cmd.reminders.list(OWNER) == []
+    assert reply == UNKNOWN_PEDRO
+
+
+def test_a_name_of_two_words_outside_the_roster_says_so(cmd):
+    reply = cmd.timer(OWNER, "para Tía Rosa 10m regar")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert reply.startswith("«Tía Rosa» no está en el padrón")
+
+
+def test_para_the_hour_is_not_a_person(cmd):
+    reply = cmd.alarm(OWNER, "para las ocho arriba")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "padrón" not in reply
+
+
+def test_para_tomorrow_is_not_a_person(cmd):
+    reply = cmd.alarm(OWNER, "para mañana 7:30 arriba")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "No entiendo" in reply
+    assert "padrón" not in reply
+
+
+def test_the_author_is_the_person_of_the_chat(cmd):
+    eze = cmd.household.add("Eze", OWNER)
+
+    cmd.timer(OWNER, "10m sacá la pizza")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.author_id == eze.id
+
+
+def test_a_chat_outside_the_roster_has_no_author(cmd):
+    cmd.timer(OWNER, "10m sacá la pizza")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.author_id is None
+
+
+def test_without_a_roster_everyone_and_nobody_still_work(tmp_path):
+    reminders = Reminders(store=Store(tmp_path / "jobs.db"), timer=FakeTimer(), announce=lambda job: None)
+    commands = Commands(
+        config=make_config(allowed={OWNER}),
+        speakers=StubRegistry(parlante=FakeSpeaker()),
+        reminders=reminders,
+        clock=lambda: NOW,
+    )
+
+    commands.timer(OWNER, "para todos 10m sacá la pizza")
+
+    [job] = commands.reminders.list(OWNER)
+    assert (job.assignee, job.message) == (EVERYONE, "sacá la pizza")
+
+
+def test_list_says_who_each_one_is_for(cmd):
+    cmd.household.add("China")
+    cmd.timer(OWNER, "para China 10m pizza")
+    cmd.alarm(OWNER, "para todos diaria 7:30 arriba")
+    cmd.alarm(OWNER, "diaria 8:00 desayuno")
+
+    lines = cmd.list(OWNER).splitlines()
+
+    assert "· para China" in next(line for line in lines if "pizza" in line)
+    assert "· para todos" in next(line for line in lines if "arriba" in line)
+    assert "· para" not in next(line for line in lines if "desayuno" in line)
+
+
+@pytest.mark.parametrize(
+    "command, text",
+    [
+        ("alarma", "para las 8:00 arriba"),
+        ("alarma", "para el lunes 8:00 arriba"),
+        ("timer", "para las 10:00 llamar al médico"),
+        ("alarma", "para hoy 22:00 arriba"),
+        ("timer", "para dentro de 10m pizza"),
+        ("timer", "para la tarde 15:00 algo"),
+    ],
+)
+def test_a_time_after_para_is_not_blamed_on_the_roster(cmd, command, text):
+    reply = cmd._dispatch()[command](OWNER, text)
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "padrón" not in reply

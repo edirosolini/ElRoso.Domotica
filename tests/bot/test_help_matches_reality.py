@@ -44,3 +44,10 @@ def test_help_names_the_turns_and_how_to_cut_them():
 def test_help_names_the_meal_menu_and_its_shopping():
     assert "/menu nuevo" in HELP
     assert "/menu compras semana" in HELP
+
+
+def test_help_says_who_a_scheduled_one_is_for_and_where_it_goes():
+    line = next(line for line in HELP.splitlines() if "/recordar para China" in line)
+
+    assert "«para todos»" in line
+    assert "después de «en <equipo>»" in HELP

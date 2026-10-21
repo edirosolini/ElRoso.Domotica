@@ -12,6 +12,7 @@ from homeauto import slots
 from homeauto.ask import Answer
 from homeauto.bot.commands import Commands
 from homeauto.pending import Conversation, PendingStore
+from homeauto.people import Household, PersonStore
 from homeauto.route import Decision, RouteError
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
@@ -37,10 +38,13 @@ class ScriptedRouter:
 class FakeReminders:
     def __init__(self):
         self.added = []
+        self.assigned = []
 
     def add(self, chat_id, when, message, repeat="once", device="", days=None, kind="alarm",
-            monthday=None, skip_holidays=False):
+            monthday=None, skip_holidays=False, assignee="none", assignee_id=None,
+            author_id=None):
         self.added.append((chat_id, when, message, repeat, days))
+        self.assigned.append((assignee, assignee_id))
 
         class Job:
             id = len(self.added)
@@ -62,7 +66,7 @@ class FakeWeather:
         return "Ahora hay catorce grados."
 
 
-def build(tmp_path, router, conversation=True):
+def build(tmp_path, router, conversation=True, household=None):
     speakers = {"parlante": FakeSpeaker("parlante")}
     talk = None
     if conversation:
@@ -75,6 +79,7 @@ def build(tmp_path, router, conversation=True):
         asker=FakeAsker(),
         router=router,
         conversation=talk,
+        household=household,
         clock=lambda: NOW,
     )
     return commands, speakers, talk
@@ -278,3 +283,76 @@ def test_a_model_that_falls_over_with_nothing_pending_says_so(tmp_path):
 
     assert "/ayuda" in reply
     assert cmd.asker.asked == []
+
+
+def house(tmp_path):
+    household = Household(PersonStore(tmp_path / "jobs.db"), {OWNER})
+    return household, household.add("China")
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "para China diaria 8:00 tomar la pastilla",
+        "en parlante para China diaria 8:00 tomar la pastilla",
+        "para china diaria 8:00 tomar la pastilla",
+    ],
+)
+def test_a_complete_reminder_for_someone_runs_without_asking(tmp_path, argument):
+    household, china = house(tmp_path)
+    cmd, _, talk = build(tmp_path, ScriptedRouter(Decision("recordar", argument)), household=household)
+
+    reply = cmd.free_text(OWNER, "recordale a China tomar la pastilla todos los días a las ocho")
+
+    assert reply.startswith("Entendí: /recordar")
+    assert cmd.reminders.assigned == [("person", china.id)]
+    assert talk.get(OWNER) is None
+
+
+def test_the_person_is_never_asked(tmp_path):
+    household, _ = house(tmp_path)
+    router = ScriptedRouter(Decision("recordar", "para China 8:00 tomar la pastilla"))
+    cmd, _, talk = build(tmp_path, router, household=household)
+
+    reply = cmd.free_text(OWNER, "recordale a China tomar la pastilla a las ocho")
+
+    assert reply == slots.DAYS.question
+    assert talk.get(OWNER).asked == (slots.DAYS.name,)
+
+
+def test_an_alarm_for_everyone_still_asks_how_it_repeats(tmp_path):
+    household, _ = house(tmp_path)
+    router = ScriptedRouter(Decision("alarma", "para todos 7:30 arriba"))
+    cmd, _, _ = build(tmp_path, router, household=household)
+
+    reply = cmd.free_text(OWNER, "alarma para todos a las siete y media, arriba")
+
+    assert reply == slots.REPEAT.question
+
+
+def test_a_complete_command_for_someone_interrupts_what_was_pending(tmp_path):
+    household, china = house(tmp_path)
+    router = ScriptedRouter(
+        Decision("alarma", ""),
+        Decision("timer", "para China 10m sacá la pizza"),
+    )
+    cmd, _, talk = build(tmp_path, router, household=household)
+    cmd.free_text(OWNER, "creá una alarma")
+
+    reply = cmd.free_text(OWNER, "recordale a China en diez minutos sacar la pizza")
+
+    assert "Dejo a medio armar el /alarma" in reply
+    assert cmd.reminders.assigned == [("person", china.id)]
+    assert talk.get(OWNER) is None
+
+
+def test_a_name_outside_the_roster_is_answered_not_asked(tmp_path):
+    household, _ = house(tmp_path)
+    router = ScriptedRouter(Decision("recordar", "para Pedro diaria 8:00 tomar la pastilla"))
+    cmd, _, talk = build(tmp_path, router, household=household)
+
+    reply = cmd.free_text(OWNER, "recordale a Pedro tomar la pastilla todos los días a las ocho")
+
+    assert "«Pedro» no está en el padrón" in reply
+    assert cmd.reminders.added == []
+    assert talk.get(OWNER) is None

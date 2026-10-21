@@ -2266,3 +2266,24 @@ def test_the_cleaner_reads_the_same_padron(wired, tmp_path, monkeypatch):
 
     assert roster.person_ids == frozenset({china.id})
     assert roster.chats == frozenset({42, 77})
+
+
+def test_the_commands_assign_with_the_people_of_the_house(wired, tmp_path, monkeypatch):
+    """«para China» se resuelve contra el mismo padrón que usa la pantalla."""
+    registered = {}
+    original = main.register
+
+    def spy(app, commands, strangers=None, people=None, household=None):
+        registered.update(commands=commands, household=household)
+        return original(app, commands, strangers, people, household)
+
+    monkeypatch.setattr(main, "register", spy)
+    run_main(monkeypatch, config_file(tmp_path, HOUSE))
+    commands, household = registered["commands"], registered["household"]
+    china = household.add("China", 77)
+    eze = household.add("Eze", 42)
+
+    commands.timer(42, "para China 10m sacá la pizza")
+
+    [job] = commands.reminders.list(42)
+    assert (job.assignee, job.assignee_id, job.author_id) == ("person", china.id, eze.id)
