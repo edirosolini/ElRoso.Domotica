@@ -37,7 +37,7 @@ Domotica/
 │   ├── lists.py         # las listas de compras y de pendientes
 │   ├── meals.py         # el menú de la semana: lo arma el modelo, se valida y se guarda
 │   ├── translate.py     # traducir, solo para leer
-│   ├── people.py        # el nombre visible de cada chat de la casa
+│   ├── people.py        # el nombre visible de cada chat y el padrón de las personas
 │   ├── screen.py        # la pantalla de la casa en las teles: kiosco y vista de alarma
 │   ├── cleanup.py       # el depurador: teles viejas y avisos que ya no sirven
 │   ├── tele.py          # las teles con la app de la casa: registro, versión y latido
@@ -108,7 +108,7 @@ Con la API, cada tele de `SCREEN_DEVICES` usa un `TeleCaster`: prueba la app si 
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con veinte tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con veintiuna tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -126,6 +126,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `strangers.StrangerStore` | los chats fuera de la lista de los que ya se avisó al dueño |
 | `schedule.HistoryStore` | todo lo que sonó y cómo terminó, doce meses (`fired_history`) |
 | `people.PeopleStore` | el nombre visible de cada chat de la casa, para la pantalla |
+| `people.PersonStore` | el padrón: cada persona de la casa, con su chat o sin Telegram (`persons`) |
 | `schedule.RingingStore` | las alarmas que siguen sonando, con sus repeticiones (`ringing`) |
 | `holidays.HolidayStore` | los feriados del año, y desde noviembre los del siguiente (`holidays`) |
 | `schedule.StockStore` | cuántas dosis quedan de cada remedio y cuándo avisar (`pill_stock`) |

@@ -11,6 +11,7 @@ paths:
   - "tests/test_api_server.py"
   - "tests/test_api_service.py"
   - "tests/test_people.py"
+  - "tests/test_persons.py"
 ---
 
 # API y pantalla de la casa
@@ -49,13 +50,15 @@ separada del transporte HTTP y se prueba sin red.
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
 | `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima, `meal` y listas como `[{id, text}]` |
-| `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre y los equipos |
+| `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre, los equipos, el padrón (`persons`) y los chats con el nombre visto en Telegram (`chats`, `seen`) |
+| `POST /api/persons` | suma una persona al padrón. Ver **Padrón de la casa** |
+| `PUT`/`DELETE /api/persons/<id>` | cambia el nombre o el chat de una persona, o la saca del padrón |
 | `POST /api/jobs` | crea un aviso de la casa |
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
 | `POST /api/lists/<lista>` | suma a compras o pendientes lo escrito, partido como en el chat |
 | `POST /api/lists/<lista>/<id>/done` | tacha un ítem de compras o pendientes |
-| `GET /api/live?chat=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat |
-| `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` |
+| `GET /api/live?chat=<id>` o `?person=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat o esa persona |
+| `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` o de `person_id` |
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 | `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader o con un explorador de archivos con acceso a la red. Ver **App de la tele** |
 | `GET /app/tele.json` | la versión del APK publicado, para que la app de la tele sepa si hay una nueva. Ver **App de la tele** |
@@ -334,13 +337,25 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **Todo `_dispatch()` y los botones de solo-botón (`hecho`, `callar`, `confirmar`, `borrar`)
   desde el día uno**, decisión del dueño. La respuesta vuelve con sus botones como
   `[{label, data}]`, y tocarlos vuelve a `/api/command`.
-- **Se elige quién sos** de un desplegable con `/api/people`, y la elección queda en el
-  `localStorage` del dispositivo. Sin `ALLOWED_CHAT_IDS`, o con un chat que no está en la
-  lista, `/api/live` y `/api/command` contestan 403.
-- 🔴 **El `who` es «<nombre> (pantalla)»**, con el nombre de `PeopleStore`, decisión del
-  dueño: los avisos a los demás chats dicen que vino de la web.
+- **Se elige quién sos en «Soy»**, con `/api/people`: las personas del padrón, y con el padrón
+  vacío, los chats de `ALLOWED_CHAT_IDS`. Una persona sin chat sale «(sin Telegram)». La
+  elección queda en el `localStorage` del dispositivo como `p:<id>` o `c:<chat>`; una vieja,
+  solo el número de chat, pasa a la persona de ese chat.
+- **`ControlService._caller()` resuelve a nombre de quién se corre.** `chat_id` y `person_id`
+  juntos es un 400. Sin `ALLOWED_CHAT_IDS`, con un chat fuera de la lista o con una persona que
+  no existe, `/api/live` y `/api/command` contestan 403 «Elegí quién sos.». Una persona con
+  chat corre como ese chat.
+- 🔴 **El `who` es «<persona> (pantalla)»**, decisión del dueño: los avisos a los demás chats
+  dicen que vino de la web. Un chat sin persona en el padrón firma con el nombre visto en
+  Telegram (`PeopleStore`).
+- 🔴 **Una persona sin Telegram solo apaga una alarma o marca «Hecho»**
+  (`Commands.press_without_chat()`, `CHATLESS_BUTTONS`). Cualquier otro botón o texto es un
+  403 que lo explica. Como no hay chat que lo tocó, **el aviso de que apagó o marcó hecho
+  llega a todos los chats**. Su `/api/live` no trae posponer, ni «Confirmar», ni el botón de
+  silencio.
 - **Comparte el estado con Telegram por `chat_id`**: el `PendingStore` —una pregunta hecha en
-  el chat se puede contestar desde la web y al revés— y el equipo de `usar`.
+  el chat se puede contestar desde la web y al revés— y el equipo de `usar`. Una persona sin
+  chat no tiene ninguno de los dos.
 - 🔴 **Un error del comando se contesta con el motivo**, como en Telegram:
   «🔴 No pude procesar la solicitud: <qué pasó>», con 200 y sin botones. Un error de la
   pantalla misma es un 500 genérico.
@@ -376,3 +391,28 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - ⚠️ **La parte DOM de `control.js` no tiene test automático.** `control_logic.js` cubre la
   lógica pura —el comando con los equipos, a quién elegir, el cuerpo del POST, el orden de lo
   urgente—; lo demás se prueba a mano en el navegador.
+
+## Padrón de la casa
+
+`people.Household` sobre `PersonStore` (tabla `persons`) es quién vive en la casa, tenga o no
+Telegram. `PeopleStore` (`people`) sigue siendo otra cosa: el nombre que el chat muestra en
+Telegram. Se carga desde la tarjeta «👪 Personas» de `/control`.
+
+- **Escribir exige pantalla escribible**: `POST /api/persons` y `PUT`/`DELETE
+  /api/persons/<id>` pasan por `_refuse_write` y sin `ALLOWED_CHAT_IDS` son 403. Otro método es
+  405; un nombre o chat que no vale, 400 con el motivo; una persona que no existe, 404. Sin
+  `JobsService`, `/api/persons` es 404. La tarjeta aparece solo si la pantalla escribe.
+- 🔴 **El nombre se tiene que poder decir**: `SAYABLE_NAME`, ahora en `people.py` y compartido
+  con `/turnos` —letras y espacios, sin dígitos ni guiones—, hasta cuarenta caracteres
+  (`MAX_NAME`) y con los espacios ordenados.
+- **Único sin distinguir mayúsculas**: se compara con `casefold()`. ⚠️ Los acentos sí
+  distinguen: «José» y «Jose» entran los dos. «todos» y «nadie» están reservados (`RESERVED`).
+- **El chat tiene que ser de `ALLOWED_CHAT_IDS` y no de otra persona.** Sin chat es «sin
+  Telegram». El desplegable ofrece solo los chats libres y el propio.
+- **Un chat que salió de `ALLOWED_CHAT_IDS` cuenta como sin Telegram** (`Household._live()`):
+  la fila lo guarda, pero no se usa.
+- **El id es estable**: renombrar o cambiar el chat no lo cambia, así que lo guardado en un
+  dispositivo sigue apuntando a la misma persona.
+- **Con el padrón vacío, todo cae a los chats**, como antes de que existiera.
+- **Altas, cambios y bajas no avisan a los chats.**
+- ⚠️ **Todavía no se asigna un aviso a una persona**: el padrón solo dice quién toca qué.
