@@ -45,6 +45,12 @@ class AndroidDevice(private val context: Context) : TeleDevice {
 
     override fun wake() {
         wakeLock.acquire(WAKE_HOLD_MS)
+        // En Android 14 el wake lock no prende la pantalla: la prende la actividad con turnScreenOn.
+        if (!power.isInteractive) {
+            val intent = Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            context.startActivity(intent)
+        }
     }
 
     override fun setVolume(index: Int) {

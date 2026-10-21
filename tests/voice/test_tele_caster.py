@@ -121,8 +121,8 @@ def test_a_live_app_that_confirms_plays_it_and_cast_is_not_used(link, cast):
     ]
 
 
-def test_the_app_gets_thirteen_seconds_to_wake_the_tele():
-    assert APP_WAKE_MARGIN == 13
+def test_the_app_gets_thirty_seconds_to_wake_the_tele():
+    assert APP_WAKE_MARGIN == 30
 
 
 @pytest.mark.parametrize(

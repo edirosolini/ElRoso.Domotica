@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 # Cuánto se espera a que la app diga que recibió una orden.
 ACK_TIMEOUT = 10
 # Segundos que la app puede tardar en sonar: `wakeTimeoutMs` más `settleMs` de `OrderRunner`.
-APP_WAKE_MARGIN = 13
+APP_WAKE_MARGIN = 30
 
 
 class TeleCaster:
