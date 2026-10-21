@@ -50,7 +50,7 @@ Domotica/
 │   ├── web/             # pantalla de la casa: agenda, kiosco, control, sus feeds JSON y el APK de la tele
 │   └── main.py          # cableado y ciclo de vida del proceso
 ├── android/tele/        # la app Android de la tele, en Kotlin
-├── deploy/              # unit de systemd, despliegue, CLI, la medición del router y la subida del APK de la tele
+├── deploy/              # unit de systemd, despliegue, CLI, medición del router, subida del APK y capturas de la web
 ├── tests/
 └── requirements*.txt
 ```

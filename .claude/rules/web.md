@@ -7,6 +7,7 @@ paths:
   - "deploy/domotica-say"
   - "deploy/push-apk.sh"
   - "deploy/tele-version.sh"
+  - "deploy/capture-ui.sh"
   - "tests/web/**"
   - "tests/test_api_server.py"
   - "tests/test_api_service.py"
@@ -41,7 +42,9 @@ separada del transporte HTTP y se prueba sin red.
 `homeauto/web/` sirve cuatro páginas y sus datos en el mismo `ApiServer` de la API (puerto
 `API_PORT`, 8099), y **existe solo si la API arrancó**, o sea con `API_TOKEN`.
 
-- 🔴 **El CSS de cada página va bajo la clase de su `body`** (`.alarm-view`, y así con las demás).
+- 🔴 **El CSS de cada página va bajo la clase de su `body`**: `.kiosk` en `/pantalla`,
+  `.kiosk.alarm-view` en `/alarma`, `.agenda` y `.control`. Suelto queda solo lo compartido
+  (tokens, tarjetas, botones, barra) y la piel de FullCalendar bajo `.fc`.
   Una regla suelta pisa las clases que `/api/events` les pone a los eventos de FullCalendar
   (`casa`, `alarm`, `reminder`, `timer`, `past`, `google`, `feriado`, `ev`): el `.alarm` de la
   vista de alarma estiraba cada alarma del calendario a `100vh` y la agenda las escondía detrás
@@ -150,6 +153,18 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
 anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y enlaces a `/pantalla` y
 `/control`.
 
+- **La vista con que abre la decide `startView()`**: con `?m=` siempre el mes; si no, la
+  última que se tocó en ese dispositivo (`localStorage`, `casa.agenda.vista`); sin guardada,
+  mes en ancho (≥720 px) y «Lista» en angosto.
+- **En el celular (≤640 px) la barra va en grilla**: título y enlaces, después flechas y
+  vistas, y «Ver» en una tercera fila si hay padrón. En tablet (641 a 1100 px), una fila con
+  el título más chico.
+- **En el celular «Nuevo aviso» queda en un círculo con el «+»**: el texto se esconde y el
+  botón conserva el nombre por `aria-label`.
+- **Un calendario que no se pudo leer queda marcado en la leyenda** con «⚠» y fondo de
+  error (`brokenCalendars()`). ⚠️ **Depende del texto exacto «No pude leer el calendario
+  X.»** que arma `board.py`: si cambia, la marca desaparece sin que nada falle.
+
 - **Cada evento es un bloque** (`display: "block"`, también los de hora) con la clase `ev`
   y su color en `--ev`, que `eventDidMount` le pasa: fondo suave con `color-mix()` y un
   borde del color pleno. ⚠️ Sin `color-mix()` el fondo cae a `--card-2` y el color queda
@@ -161,7 +176,30 @@ anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y enlaces a `/p
   pidiendo `confirm()`**: es un toque sin deshacer y borra la serie entera.
 
 **Temas.** Los colores son variables en `:root` de `app.css`, una sola hoja para todas las
-páginas.
+páginas. Los tres temas —claro, oscuro y noche— declaran los mismos tokens, y `test_app.py`
+lo sostiene.
+
+- **Tokens compartidos**: `--space-1` a `--space-5` (cuatro a veinticuatro píxeles), `--tap`
+  (44 px, el mínimo táctil de botones, campos y selects), `--on-accent` (el texto sobre el
+  acento lleno), `--accent-ink` (el texto sobre el acento suave), `--faint` (lo vacío y lo
+  tachado) y `--danger`.
+- 🔴 **Contraste medido**: en claro y oscuro, `--on-accent` sobre `--accent` y `--accent-ink`
+  sobre `--accent-soft` dan al menos 4,5; en los tres temas, `--faint` sobre `--card` da al
+  menos 3. Hay test que lo calcula. ⚠️ En el tema noche `--on-accent` sobre `--accent` da 3,9:
+  ese tema es el del kiosco de noche, sin botones que se usen.
+- **El foco siempre se ve**: `:focus-visible` con borde de tres píxeles y `:focus` de
+  respaldo para el navegador que no conoce `:focus-visible`. Hace falta en la tele, donde se
+  navega con el control remoto.
+- **Tres niveles de botón**: `.btn.primary` (acento lleno, `--on-accent`), `.btn.secondary`
+  (acento suave, `--accent-ink`) y `.btn.danger` (texto rojo, sin fondo). `.ghost`, la
+  píldora, es solo para los enlaces de la barra; un enlace que hace de acción va como
+  `.btn.secondary`.
+- **El kiosco y la alarma miden en `vh`; el control y la agenda, en píxeles.** Lo primero se
+  mira de lejos y escala con la pantalla; lo segundo se lee de cerca y no cambia de tamaño
+  con el alto de la ventana. Hay test de las dos cosas.
+- ⚠️ **Sin `:has()`, `aspect-ratio`, `subgrid` ni container queries**: no andan en el
+  navegador viejo de un dispositivo reciclado ni en el receptor de Cast. `min()` se usa solo
+  con un valor de respaldo antes, como la hora de la alarma.
 
 - **Claro u oscuro según el dispositivo**, con `prefers-color-scheme`. Las páginas declaran
   `<meta name="color-scheme" content="light dark">` para que los controles del formulario
@@ -174,6 +212,12 @@ páginas.
 **El kiosco** (`kiosk.js`) pide `/api/board` cada sesenta segundos y lo arma en tarjetas:
 reloj, clima, «Lo próximo», «Hoy», la idea del menú y las dos listas. Apaisado en tres
 columnas; vertical, en dos.
+
+- **En tablet o tele de 720 líneas** (apaisado de hasta 1100 px de ancho u 800 de alto) las
+  dos listas van lado a lado debajo de la fila de arriba, para que no se corten abajo. Las
+  listas se reparten el alto que queda con `minmax(0, 1fr)`.
+- **Por debajo de 600 px el kiosco se desplaza** en una sola columna en vez de apretar las
+  tarjetas, y el enlace de la esquina deja de ser fijo.
 
 - 🔴 **El reloj corre con la hora del servidor.** Calcula el offset entre `now` y el punto
   medio de la ida y vuelta, así un dispositivo con la hora mal igual muestra la de la casa.
@@ -192,7 +236,8 @@ columnas; vertical, en dos.
   `label` —el ícono del tipo y el mensaje—, `mark`, cómo terminó, que se muestra solo si
   ya pasó, y `for`, que suma «· para <nombre>» (`todayLabel()`). «Lo próximo» lo trae en el
   título del evento.
-- **Cada tarjeta de lista y la de «Hoy» llevan un contador** de lo que tienen.
+- **Cada tarjeta de lista lleva un contador** de lo que tiene; **el de «Hoy» cuenta lo que
+  queda**, sin lo que ya pasó (`leftToday()`).
 - **La tarjeta «🍽 Idea para hoy» (o «para mañana») muestra los platos del día de la próxima
   comida** (`#meal-card`). `/api/board` trae `meal` como `{day, tomorrow, items}`, cada ítem
   `{meal, label, dish, state}`, armado por `Board._meal()` sobre `meals.upcoming()`: hasta
@@ -413,6 +458,19 @@ sabe de HTTP; `WebApp._control()` la rutea.
   `Monitor.acknowledge()` deja confirmar. La caída se ve igual para todos.
 - **El panel «🛒 Listas» tiene «Menú»** al lado de «Compras» y «Pendientes»: corre `menu`
   como `/menu` en Telegram, con sus botones. Ver **Menú semanal**, en `.claude/rules/consultas.md`.
+- **Los paneles van en tres columnas armadas a mano** (`.panel-col`): Casa; Consultas y
+  Listas; Programado y Personas. Cada columna apila sus tarjetas sin estirarlas al alto de la
+  vecina. Cada fila campo y botón es una grilla, y por debajo de 400 px el botón baja a lo
+  ancho.
+- 🔴 **«Pastillas» y «Turnos» son un solo formulario cada uno, sin `data-need`**: vacío
+  consulta (`pastillas`, `turnos`), con texto carga. `formCommand()` decide; sin dato
+  obligatorio vacío devuelve `null` y no se manda nada.
+- **Lo que explica un campo va en su `title`**; el placeholder queda corto.
+- **«Ahora» se compacta en calma** (`isCalm()`): si lo único es el silencio, la tarjeta pasa
+  a una fila.
+- **Los equipos de «Casa» son chips con estado**: el tildado se marca con la clase `on`.
+- **En «👪 Personas», un chat que todavía no le escribió al bot se lista «Todavía no escribió
+  (·NNNN)»**, con los últimos cuatro dígitos (`chatLabel()`). Borrar es un botón de peligro.
 - **El panel «⏰ Programado» tiene «🧹 Depurar»**: corre `depurar`, el mismo comando, con sus botones. Se ve para todos; quién
   puede usarlo lo decide `Commands`, no la página. Ver `.claude/rules/depurador.md`.
 - **Un solo botón de silencio, según el estado**: «Cortar vacaciones» en vacaciones, «Hablar
@@ -429,7 +487,12 @@ sabe de HTTP; `WebApp._control()` la rutea.
   lo que se castea sigue siendo `/pantalla?ver=1`.
 - ⚠️ **La parte DOM de `control.js` no tiene test automático.** `control_logic.js` cubre la
   lógica pura —el comando con los equipos, a quién elegir, el cuerpo del POST, el orden de lo
-  urgente—; lo demás se prueba a mano en el navegador.
+  urgente—; lo demás se prueba a mano en el navegador, o con las capturas.
+
+**Capturas de la web.** `deploy/capture-ui.sh` saca las páginas con un Chrome o Chromium
+headless, en cinco tamaños (celular, tablet, PC, tele 1080p y tele 720p), en tema claro y
+oscuro, y las largas enteras. Solo hace GET: no escribe nada en la casa. Uso y variables en
+**Desarrollo**, en el `README.md`.
 
 ## Padrón de la casa
 

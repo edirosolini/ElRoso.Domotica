@@ -28,6 +28,8 @@ paths:
   app no confirma, por DashCast. Ver **Órdenes**, en `.claude/rules/app-tele.md`.
 - 🔴 **Lo que se castea es siempre `/pantalla?ver=1`**, el kiosco de solo lectura. Ver
   **Pantalla de la casa**, en `.claude/rules/web.md`.
+- **El kiosco que se castea escala con el alto de la tele**, en 1080p y en 720p; en 720 líneas
+  las listas van lado a lado. Ver **El kiosco**, en `.claude/rules/web.md`.
 - **Tres piezas.** `ScreenPages` decide qué URL va en cada tele y le pregunta a `Hush`;
   `Screens` prende, apaga y agenda el cierre; `ScreenStore` (`screens`) guarda qué alarma
   prendió cada tele y cuándo se cierra. `main()` arma el `Hush` y `ScreenPages` **antes** de
@@ -63,9 +65,14 @@ desaloja.
 **Vista de alarma.** `/alarma?job=<id>` muestra la hora grande, el mensaje y la fecha, y
 consulta `/api/ringing/<id>` cada cinco segundos.
 
+- **Se lee de lejos**: el `body` es `kiosk alarm-view` y todo mide en `vh`. La hora va en
+  `min(32vh, 28vw)`, con `22vh` antes como respaldo para el navegador sin `min()`, así entra
+  también en una pantalla vertical. Las capturas `tele` (1920×1080) y `tele720` (1280×720) de
+  `deploy/capture-ui.sh` la muestran. Ver **Temas**, en `.claude/rules/web.md`.
 - **Si la alarma es de alguien, abajo del mensaje dice «Para <nombre>»** o «Para todos», con
-  el `for` del feed, que sale de la foto de lo que sonó (`forText()`). De nadie, o de una
-  persona que ya no está, no muestra la línea. El kiosco de la tele suma «· para <nombre>» en
+  el `for` del feed, que sale de la foto de lo que sonó (`forText()`). Va en `.alarm-for`, una
+  píldora del acento más grande que el rótulo de arriba, no como `.eyebrow`. De nadie, o de
+  una persona que ya no está, no muestra la línea. El kiosco de la tele suma «· para <nombre>» en
   «Hoy» y en «Lo próximo». Ver **Pantalla de la casa**, en `.claude/rules/web.md`.
 
 - **Una alarma cuyo equipo está en `SCREEN_DEVICES` prende la vista en esa tele al sonar**

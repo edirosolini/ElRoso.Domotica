@@ -656,8 +656,8 @@ El mismo servidor de la API sirve tres páginas para abrir desde el navegador, e
 dispositivo de la casa, y una cuarta para la tele:
 
 ```
-http://192.168.68.10:8099/agenda              # la agenda, en el mes actual
-http://192.168.68.10:8099/agenda?m=2026-11    # abre en otro mes
+http://192.168.68.10:8099/agenda              # la agenda, en la última vista elegida
+http://192.168.68.10:8099/agenda?m=2026-11    # abre en ese mes
 http://192.168.68.10:8099/pantalla            # el kiosco, para dejar fijo en una pantalla
 http://192.168.68.10:8099/pantalla?ver=1      # el kiosco solo para mirar, como va a la tele
 http://192.168.68.10:8099/alarma?job=7        # la alarma #7 mientras suena; después, el kiosco
@@ -672,7 +672,9 @@ quién lo marcó, 🔔 los re-avisos o las repeticiones, 💤 pospuesto, ✖️ 
 quién, ⚠️ no sonó, 🏖 feriado. Los feriados aparecen como eventos de todo el día, y lo que
 un feriado va a saltear dice «🏖 feriado, no suena». Lo que viene se
 calcula igual que cuando suena. Un toque sobre un evento muestra el detalle. Si un calendario
-no se pudo leer, lo dice arriba por su nombre. En una computadora el mes entra entero en la
+no se pudo leer, lo dice arriba por su nombre y lo marca con ⚠ en la leyenda. Cada
+dispositivo recuerda la última vista que se tocó; la primera vez abre en Mes en la
+computadora y en Lista en el teléfono. Un enlace con `?m=` abre siempre en el mes. En una computadora el mes entra entero en la
 ventana y cada día muestra lo que cabe; en el teléfono, hasta cinco eventos por día. El resto
 queda en «+N más», y lo que ya pasó hoy se pliega bajo un «…» que lo despliega. Semana y Día
 abren una hora antes de la actual. Se ve clara u oscura según el tema del dispositivo. Se
@@ -680,7 +682,7 @@ actualiza sola cada minuto: lo agregado desde Telegram o desde otra pantalla apa
 recargar; lo nuevo de Google puede tardar hasta cinco minutos más.
 
 **Crear, editar y borrar desde la agenda.** Tocando un día, o con el botón «+ Nuevo aviso» de
-abajo a la derecha, se abre un panel: tipo (alarma, recordatorio o timer), mensaje, fecha y
+abajo a la derecha (en el teléfono, solo el «+»), se abre un panel: tipo (alarma, recordatorio o timer), mensaje, fecha y
 hora, repetición, para quién, equipo y a nombre de quién. Valen las mismas reglas que en Telegram: un
 timer suena una vez, un recordatorio repite, «Algunos días» pide los días —y ofrece la casilla
 «No suena en feriados»— y «Todos los meses» repite el día del mes de la fecha elegida. Tocando un aviso de
@@ -715,8 +717,8 @@ puede editar, borrar, agregar ni tachar.
   mínima y la chance de lluvia.
 - **Lo próximo**: lo primero que viene con hora, de hoy o de mañana, con cuánto falta y de
   qué calendario es. Lo de todo el día no cuenta. Si no hay nada, «Nada más por hoy».
-- **Hoy**: el día como línea de tiempo, con una marca «ahora». De lo que ya pasó quedan los
-  dos últimos, con cómo terminó.
+- **Hoy**: el día como línea de tiempo, con una marca «ahora» y cuántas cosas quedan. De lo
+  que ya pasó quedan los dos últimos, con cómo terminó.
 - **Idea para hoy**: el almuerzo y la cena del menú de la semana. Hasta las 15:00 resalta el
   almuerzo; de 15:00 a 22:00 atenúa el almuerzo y resalta la cena; desde las 22:00 pasa a
   «Idea para mañana». Una comida en `off` o sin plato no aparece, y sin menú la tarjeta no se
@@ -729,7 +731,7 @@ puede editar, borrar, agregar ni tachar.
 Se ve claro u oscuro según el tema del dispositivo; en el horario de descanso, o con
 `/silencio` o de vacaciones, se pone oscuro y apagado aunque el dispositivo esté en claro.
 De vacaciones, abajo de la fecha dice «De vacaciones hasta el 25/10». Apaisado ocupa
-tres columnas; vertical, dos.
+tres columnas; vertical, dos; en un teléfono angosto, una sola que se desplaza.
 
 Para dejarlo fijo en una tablet o un teléfono viejo:
 
@@ -753,13 +755,15 @@ Para dejarlo fijo en una tablet o un teléfono viejo:
 3. El campo de texto acepta lo mismo que un mensaje sin barra en Telegram («poné una alarma a
    las 7»), y los paneles tienen los comandos con sus campos. Los equipos tildados en «Casa»
    van como `en <equipo>`. Si falta un dato, pregunta como en el chat, y la pregunta se puede
-   contestar desde acá o desde Telegram.
+   contestar desde acá o desde Telegram. «Pastillas» y «Turnos» tienen un solo botón cada
+   uno: con el campo vacío muestran lo que hay; con texto («7 enalapril 30»), lo cargan.
 4. Un comando que tarda —una pregunta con búsqueda— muestra «⏳ Procesando…» hasta que
    contesta, aunque tarde un minuto.
 
 **Las personas de la casa** se cargan en la tarjeta «👪 Personas», al pie del control: nombre
 y, si tiene, su Telegram, elegido de los chats de `ALLOWED_CHAT_IDS` que no son de nadie, o
-«Sin Telegram». El nombre es el que dice la casa: letras y espacios, sin números ni guiones,
+«Sin Telegram». Un chat que todavía no le escribió al bot aparece como «Todavía no escribió
+(·1234)», con los últimos cuatro números. El nombre es el que dice la casa: letras y espacios, sin números ni guiones,
 sin repetir y sin «todos» ni «nadie». Cada fila se renombra, cambia de Telegram o se borra.
 Sumar o sacar a alguien no avisa a nadie.
 
@@ -880,6 +884,26 @@ python3 -m venv .venv
 
 Los tests no necesitan hardware ni red: el parlante y Piper están mockeados. Si hay `node`,
 también corren la lógica de las páginas; sin `node`, ese test se saltea.
+
+Capturas de la pantalla de la casa, para revisar cómo se ve:
+
+```bash
+CAPTURE_BROWSER=chromium deploy/capture-ui.sh http://192.168.68.10:8099 capturas 7
+```
+
+Los argumentos son la URL base, la carpeta de salida (por defecto `capturas`) y,
+opcional, el número de una alarma para sacar también `/alarma?job=<n>`. Saca `/control`,
+`/agenda`, `/pantalla` y `/pantalla?ver=1` en celular (412×915), tablet (1024×768), PC
+(1440×900), tele 1080p y tele 720p; además, cada una en tema oscuro en celular y PC, y
+control y agenda enteras en una ventana alta. Cada captura usa un perfil vacío, así no
+arrastra lo guardado en el navegador. Solo hace GET: no escribe nada en la casa.
+
+| Variable | Para qué | Por defecto |
+| --- | --- | --- |
+| `CAPTURE_BROWSER` | el Chrome o Chromium a usar | `chromium` |
+| `CAPTURE_FLAGS` | banderas de más, como `--no-sandbox` donde no hay sandbox de usuario | ninguna |
+| `CAPTURE_WAIT_MS` | cuánto tiempo virtual espera a que la página cargue | `6000` |
+| `CAPTURE_TIMEOUT_S` | tope de cada captura, en segundos | `60` |
 
 ## Configuración
 
