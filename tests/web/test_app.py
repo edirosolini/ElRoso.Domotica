@@ -9,7 +9,8 @@ import pytest
 from homeauto.meals import LUNCH, Meal, MealStore
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.store import Store
-from homeauto.web.app import FULLCALENDAR, STATIC_DIR, Request, WebApp
+from homeauto.web.apk import FILES
+from homeauto.web.app import APP_FILES, FULLCALENDAR, STATIC_DIR, Request, WebApp
 from homeauto.web.board import Board, RangeError
 from homeauto.web.jobs import NotFound, ReadOnly, WebError
 
@@ -1082,6 +1083,72 @@ def test_a_broken_read_is_a_generic_500(board):
     app = WebApp(board, apps=StubShelf(fail=PermissionError("/var/lib/domotica/app/tele.apk")))
 
     response = get(app, "/app/tele.apk")
+
+    assert response.status == 500
+    assert json.loads(response.body) == {"error": "No pude leer la app."}
+
+
+VERSION_BYTES = (
+    b'{"version_code": 3, "version_name": "0.3.0", "sha256": "' + b"a" * 64 + b'", "size": 1234}'
+)
+
+
+def test_every_file_on_the_list_knows_how_it_is_served():
+    assert set(APP_FILES) == set(FILES)
+
+
+def test_the_tv_app_version_is_served_as_json(board):
+    app = WebApp(board, apps=StubShelf({"tele.json": VERSION_BYTES}))
+
+    response = get(app, "/app/tele.json")
+
+    assert response.status == 200
+    assert response.body == VERSION_BYTES
+    assert response.headers["Content-Type"] == "application/json; charset=utf-8"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "Content-Disposition" not in response.headers
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_without_the_version_in_the_house_it_says_so(board):
+    app = WebApp(board, apps=StubShelf({"tele.apk": APK_BYTES}))
+
+    response = get(app, "/app/tele.json")
+
+    assert response.status == 404
+    assert json.loads(response.body) == {
+        "error": "Todavía no hay versión de la app de la tele en la casa."
+    }
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+def test_the_version_is_only_read(board, method):
+    shelf = StubShelf({"tele.json": VERSION_BYTES})
+    app = WebApp(board, apps=shelf)
+
+    response = app.handle(Request(method=method, path="/app/tele.json"))
+
+    assert response.status == 405
+    assert response.headers["Allow"] == "GET"
+    assert shelf.asked == []
+
+
+@pytest.mark.parametrize("path", ["/app/otro.json", "/app/tele.json/x", "/app/../tele.json"])
+def test_no_other_json_under_app(board, path):
+    shelf = StubShelf({"tele.json": VERSION_BYTES})
+    app = WebApp(board, apps=shelf)
+
+    response = get(app, path)
+
+    assert response.status == 404
+    assert json.loads(response.body) == {"error": "no existe"}
+    assert shelf.asked == []
+
+
+def test_a_broken_version_read_is_a_generic_500(board):
+    app = WebApp(board, apps=StubShelf(fail=PermissionError("/var/lib/domotica/app/tele.json")))
+
+    response = get(app, "/app/tele.json")
 
     assert response.status == 500
     assert json.loads(response.body) == {"error": "No pude leer la app."}

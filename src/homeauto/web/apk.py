@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # Lo único que se sirve: un nombre fuera de la lista no toca el disco.
-FILES = ("tele.apk",)
+FILES = ("tele.apk", "tele.json")
 
 
 class AppShelf:
