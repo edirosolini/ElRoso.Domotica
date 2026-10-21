@@ -85,9 +85,9 @@ button { font: inherit; color: inherit; }
 .corner-link { position: fixed; right: 12px; bottom: 8px; font-size: 13px; color: var(--faint); text-decoration: none; }
 
 /* Vista de alarma */
-.alarm { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; padding: 4vw; text-align: center; }
-.alarm-time { font-size: clamp(96px, 32vh, 360px); font-weight: 250; line-height: .9; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.alarm-message { font-size: clamp(28px, 7vh, 80px); font-weight: 600; line-height: 1.1; overflow-wrap: anywhere; }
+.alarm-view .alarm { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; padding: 4vw; text-align: center; }
+.alarm-view .alarm-time { font-size: clamp(96px, 32vh, 360px); font-weight: 250; line-height: .9; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.alarm-view .alarm-message { font-size: clamp(28px, 7vh, 80px); font-weight: 600; line-height: 1.1; overflow-wrap: anywhere; }
 .alarm-view .eyebrow { font-size: clamp(16px, 3vh, 32px); }
 
 .timeline { list-style: none; margin: 0; padding: 0; }

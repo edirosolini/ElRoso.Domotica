@@ -1,6 +1,7 @@
 """Las rutas de la pantalla, sin servidor HTTP de por medio."""
 
 import json
+import re
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -8,10 +9,11 @@ import pytest
 
 from homeauto.meals import LUNCH, Meal, MealStore
 from homeauto.schedule.history import HistoryStore
+from homeauto.schedule.month import ALARM_ITEM, REMINDER_ITEM, TIMER_ITEM
 from homeauto.schedule.store import Store
 from homeauto.web.apk import FILES
 from homeauto.web.app import APP_FILES, FULLCALENDAR, STATIC_DIR, Request, WebApp
-from homeauto.web.board import Board, RangeError
+from homeauto.web.board import GOOGLE, HOLIDAY, Board, RangeError
 from homeauto.web.jobs import NotFound, ReadOnly, WebError
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
@@ -444,6 +446,36 @@ def test_the_events_take_their_color_with_a_fallback(app):
 
     assert "border-left: 4px solid var(--ev)" in css
     assert "@supports (background: color-mix(" in css
+
+
+def css_selectors(css):
+    """Los selectores de cada regla del CSS, sin las de @media ni @supports."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    preludes = re.findall(r"([^{}]+)\{", css)
+    return [part.strip() for prelude in preludes if not prelude.strip().startswith("@")
+            for part in prelude.split(",")]
+
+
+EVENT_CLASSES = {"casa", "ev", "past", ALARM_ITEM, REMINDER_ITEM, TIMER_ITEM, GOOGLE, HOLIDAY}
+
+
+def test_no_rule_starts_with_a_class_that_the_calendar_puts_on_its_events(app):
+    css = get(app, "/static/app.css").body.decode("utf-8")
+
+    for selector in css_selectors(css):
+        first = re.split(r"[\s>+~]+", selector)[0]
+        assert not EVENT_CLASSES & set(re.findall(r"\.([\w-]+)", first)), selector
+
+
+def test_the_alarm_view_styles_only_apply_inside_its_page(app):
+    css = get(app, "/static/app.css").body.decode("utf-8")
+    page = get(app, "/alarma").body.decode("utf-8")
+
+    alarm = [s for s in css_selectors(css) if s.startswith(".alarm")]
+    assert alarm
+    for selector in alarm:
+        assert selector.startswith(".alarm-view"), selector
+    assert re.search(r'<body class="[^"]*\balarm-view\b', page)
 
 
 def test_the_vendored_bundle_is_cached_for_long_and_ours_revalidate(app):
