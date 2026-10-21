@@ -239,3 +239,19 @@ def test_an_impossible_date_is_refused(text):
 def test_what_cannot_be_read_is_refused(text):
     with pytest.raises(TimeSpecError):
         parse_return_date(text, TODAY)
+
+
+@pytest.mark.parametrize(
+    "word", ["hoy", "Mañana", "pasado", "dentro", "tarde", "noche", "lunes", "lun-vie", "finde"]
+)
+def test_words_of_time_are_recognized(word):
+    from homeauto.timespec import is_time_word
+
+    assert is_time_word(word)
+
+
+@pytest.mark.parametrize("word", ["Pedro", "China", "Tía"])
+def test_names_are_not_words_of_time(word):
+    from homeauto.timespec import is_time_word
+
+    assert not is_time_word(word)

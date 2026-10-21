@@ -8,7 +8,8 @@ from homeauto.bot.commands import HELP, Commands, with_actions
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.reminders import Reminders
-from homeauto.schedule.store import ALARM, REMINDER, Store
+from homeauto.people import Household, PersonStore
+from homeauto.schedule.store import ALARM, EVERYONE, NOBODY, PERSON, REMINDER, Store
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
 
@@ -49,6 +50,7 @@ def cmd(tmp_path):
         config=make_config(allowed={OWNER, OTHER}),
         speakers=StubRegistry(parlante=FakeSpeaker()),
         reminders=reminders,
+        household=Household(PersonStore(path), {OWNER, OTHER}),
         clock=lambda: NOW,
     )
     commands.told = told
@@ -298,3 +300,81 @@ def test_someone_without_a_chat_marks_done_and_every_chat_hears(cmd):
         (OWNER, "✅ Abuela (pantalla) marcó hecho: «tomar la pastilla»"),
         (OTHER, "✅ Abuela (pantalla) marcó hecho: «tomar la pastilla»"),
     ]
+
+
+def test_a_reminder_for_someone_of_the_house(cmd):
+    china = cmd.household.add("China", OTHER)
+
+    reply = cmd.remind(OWNER, "para China diaria 8:00 tomar la pastilla")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (PERSON, china.id)
+    assert job.repeat == "daily"
+    assert job.message == "tomar la pastilla"
+    assert "para China" in reply
+
+
+def test_a_reminder_for_someone_after_the_device(cmd):
+    china = cmd.household.add("China")
+
+    cmd.remind(OWNER, "en parlante para china lun-vie 7:30 salir al colegio")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (PERSON, china.id)
+    assert job.weekdays == [1, 2, 3, 4, 5]
+    assert job.message == "salir al colegio"
+
+
+def test_a_monthly_reminder_for_everyone(cmd):
+    cmd.remind(OWNER, "para todos mensual 10 9:00 pagar la luz")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.assignee == EVERYONE
+    assert job.monthday == 10
+
+
+def test_a_reminder_without_para_is_for_nobody(cmd):
+    cmd.remind(OWNER, "diaria 8:00 tomar la pastilla")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert (job.assignee, job.assignee_id) == (NOBODY, None)
+
+
+def test_a_reminder_for_someone_outside_the_roster_is_not_assigned(cmd):
+    reply = cmd.remind(OWNER, "para Pedro diaria 8:00 tomar la pastilla")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert reply == (
+        "«Pedro» no está en el padrón: cargalo en Personas, en /control, o usá «para todos»."
+    )
+
+
+def test_a_reminder_para_tomorrow_keeps_its_old_answer(cmd):
+    reply = cmd.remind(OWNER, "para mañana 8:00 tomar la pastilla")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "decime qué días" in reply
+
+
+def test_a_reminder_for_someone_still_asks_for_the_days(cmd):
+    cmd.household.add("China")
+
+    reply = cmd.remind(OWNER, "para China 8:00 tomar la pastilla")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "decime qué días" in reply
+
+
+def test_the_reminder_keeps_who_asked_for_it(cmd):
+    eze = cmd.household.add("Eze", OWNER)
+    cmd.household.add("China", OTHER)
+
+    cmd.remind(OWNER, "para China diaria 8:00 tomar la pastilla")
+
+    [job] = cmd.reminders.list(OWNER)
+    assert job.author_id == eze.id
+
+
+def test_help_says_where_the_person_goes():
+    assert "/recordar para China diaria 8:00 la pastilla" in HELP
+    assert "«para todos»" in HELP

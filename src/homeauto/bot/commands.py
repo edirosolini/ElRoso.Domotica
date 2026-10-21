@@ -61,10 +61,22 @@ from homeauto.schedule.spec import (
     weekdays_label,
 )
 from homeauto.schedule.rota import turn_for, week_start
-from homeauto.schedule.store import ALARM, DAILY, MONTHLY, ONCE, REMINDER, WEEKLY
+from homeauto.schedule.store import (
+    ALARM,
+    DAILY,
+    EVERYONE,
+    MONTHLY,
+    NOBODY,
+    ONCE,
+    PERSON,
+    REMINDER,
+    WEEKLY,
+)
 from homeauto.quiet import Hush, away_label, away_of, reason_of
 from homeauto.timespec import (
+    MONTHLY_WORDS,
     TimeSpecError,
+    is_time_word,
     parse_duration,
     parse_monthday,
     parse_return_date,
@@ -82,6 +94,13 @@ log = logging.getLogger(__name__)
 DEVICE_ERRORS = (CastError, TtsError, UnknownDevice)
 TARGET_WORD = "en"
 ALL_WORD = "todos"
+# «para <persona|todos|nadie>» en /timer, /alarma y /recordar, después de «en <equipo>».
+ASSIGN_WORD = "para"
+NOBODY_WORD = "nadie"
+# Cuántas palabras se prueban como nombre de alguien que no está en el padrón.
+MAX_STRANGER_WORDS = 3
+# Un nombre de persona no arranca con artículo: «para las 8:00» es una hora.
+ARTICLES = frozenset({"el", "la", "los", "las", "un", "una"})
 
 # Una tanda de alias adelante: "comedor", "comedor,recamara", "comedor, recamara".
 _TARGET_LIST = re.compile(r"^([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
@@ -176,6 +195,16 @@ class TargetError(Exception):
     """Alguno de los equipos pedidos no existe."""
 
 
+class UnknownPerson(Exception):
+    """«para <nombre>» nombra a alguien que no está en el padrón; `rest` es lo que sigue."""
+
+    def __init__(self, name: str, rest: str):
+        super().__init__(
+            f"«{name}» no está en el padrón: cargalo en Personas, en /control, o usá «para todos»."
+        )
+        self.rest = rest
+
+
 # El pedido en curso quiere el parlante. Va en contextvar y no en el objeto:
 # dos mensajes se atienden a la vez.
 _ALOUD = contextvars.ContextVar("aloud", default=False)
@@ -237,6 +266,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /recordar diaria 8:00 la pastilla — un recordatorio todos los días
 /recordar lun-vie 7:30 salir al colegio — solo esos días
 /recordar mensual 10 9:00 pagar la luz — el 10 de cada mes
+/recordar para China diaria 8:00 la pastilla — para alguien de la casa; también «para todos» o «para nadie»
 /pastillas — cuántas quedan de cada remedio
 /pastillas 7 enalapril 30 — cada «Hecho» del recordatorio #7 descuenta una
 /pastillas enalapril +30 — repone · /pastillas enalapril aviso 5 — avisa con 5 o menos
@@ -274,6 +304,7 @@ La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, 5.30, mañana
 Una hora que ya pasó se entiende como la de mañana.
 Los días de una alarma o un recordatorio van adelante de la hora: lun-vie, mar,jue, finde, sab.
 Cualquier comando acepta «en <equipo>» adelante para mandarlo a otro lado.
+En /timer, /alarma y /recordar, «para <persona>» va después de «en <equipo>»: /alarma en comedor para China 7:30 arriba.
 Te contesto acá salvo que lo pidas: agregá «por el parlante» o «en voz alta» al final
 y sale por los equipos. /decir y /llamar suenan siempre, y las alarmas también.
 
@@ -296,6 +327,24 @@ def _day_and_meal(text: str, meals: tuple[str, ...]) -> tuple[date, str] | None:
     except ValueError:
         return None
     return (day, meal) if meal in meals else None
+
+
+@dataclass(frozen=True)
+class Assignment:
+    """Para quién es un aviso: la asignación, la persona y su nombre."""
+
+    assignee: str = NOBODY
+    person_id: int | None = None
+    name: str | None = None
+
+    @property
+    def label(self) -> str:
+        """«para China», «para todos», o vacío si no es para nadie en particular."""
+        if self.assignee == EVERYONE:
+            return f"{ASSIGN_WORD} {ALL_WORD}"
+        if self.assignee == PERSON:
+            return f"{ASSIGN_WORD} {self.name}"
+        return ""
 
 
 def _cancel_button(job_id: int) -> tuple[str, str]:
@@ -337,6 +386,7 @@ class Commands:
         meal_store=None,
         meal_planner=None,
         cleaner=None,
+        household=None,
         tell_others: Callable[[int, str], None] | None = None,
         correct=as_written,
         polish=as_is,
@@ -366,6 +416,8 @@ class Commands:
         self.meal_planner = meal_planner
         # Propone borrar teles viejas y avisos que sobran.
         self.cleaner = cleaner
+        # El padrón de la casa, para «para <persona>» y el autor de un aviso.
+        self.household = household
         # Escribe a todos los chats menos al que se le pasa.
         self.tell_others = tell_others
         self.correct = correct
@@ -450,6 +502,80 @@ class Commands:
                 if aliases:
                     return aliases, (match.group(2) or "").strip()
         return (default or self._default_aliases(chat_id)), text
+
+    def _split_assignee(self, text: str) -> tuple[Assignment, str]:
+        """Saca un «para <persona|todos|nadie>» de adelante, si nombra a alguien de la casa."""
+        text = text.strip()
+        head, _, rest = text.partition(" ")
+        if head.lower() != ASSIGN_WORD:
+            return Assignment(), text
+        rest = rest.strip()
+        first, _, after = rest.partition(" ")
+        if first.lower() == ALL_WORD:
+            return Assignment(EVERYONE), after.strip()
+        if first.lower() == NOBODY_WORD:
+            return Assignment(NOBODY), after.strip()
+        person = self._person_at_start(rest)
+        if person is None:
+            self._refuse_stranger(rest)
+            return Assignment(), text
+        size = len(person.name.split())
+        parts = rest.split(None, size)
+        remainder = parts[size] if len(parts) > size else ""
+        return Assignment(PERSON, person.id, person.name), remainder.strip()
+
+    def _person_at_start(self, text: str):
+        """La persona del padrón con la que arranca el texto; el nombre más largo gana."""
+        if self.household is None:
+            return None
+        words = text.split()
+        found = None
+        for person in self.household.list():
+            size = len(person.name.split())
+            if " ".join(words[:size]).casefold() != person.name.casefold():
+                continue
+            if found is None or size > len(found.name.split()):
+                found = person
+        return found
+
+    def _refuse_stranger(self, text: str) -> None:
+        """Levanta UnknownPerson si el texto arranca con un nombre y lo que sigue se puede agendar."""
+        first = text.split(None, 1)[0].lower() if text.split() else ""
+        if first in ARTICLES or is_time_word(first) or self._schedulable(text):
+            return
+        for size in range(1, MAX_STRANGER_WORDS + 1):
+            parts = text.split(None, size)
+            if len(parts) <= size:
+                return
+            name = " ".join(parts[:size])
+            if not SAYABLE_NAME.fullmatch(name):
+                return
+            if self._schedulable(parts[size]):
+                raise UnknownPerson(name, parts[size])
+
+    def _schedulable(self, text: str) -> bool:
+        """Si el texto arranca con una repetición o un cuándo que se puede leer."""
+        head = text.split(None, 1)[0].lower() if text.split() else ""
+        if head in slots.DAILY_WORDS or head in MONTHLY_WORDS or parse_weekdays(head):
+            return True
+        try:
+            parse_schedule(text, now=self.clock())
+        except TimeSpecError:
+            return False
+        return True
+
+    def _without_assignee(self, text: str) -> str:
+        try:
+            return self._split_assignee(text)[1]
+        except UnknownPerson as exc:
+            return exc.rest
+
+    def _author(self, chat_id: int) -> int | None:
+        """La persona del padrón dueña del chat, o None."""
+        if self.household is None:
+            return None
+        person = self.household.by_chat(chat_id)
+        return person.id if person is not None else None
 
     def _broadcast(self, aliases: list[str], action) -> dict[str, str | None]:
         """Corre la acción en todos los equipos a la vez.
@@ -1065,10 +1191,24 @@ class Commands:
             return TURNS_USAGE
         self.reminders.set_rota(job_id, people, week_start(self.clock().date()))
         job = self.reminders.get(job_id)
-        return (
+        reply = (
             f"🔁 El #{job_id} se turna por semana entre {', '.join(job.turns)}: «{job.message}»\n"
             f"Le toca a {turn_for(job, job.when)} el {format_when(job.when, self.clock())}."
         )
+        strangers = self._outside_roster(people)
+        if strangers:
+            one = len(strangers) == 1
+            reply += (
+                f"\n⚠️ No {'está' if one else 'están'} en el padrón: {', '.join(strangers)}."
+                f" En {'su semana' if one else 'sus semanas'} el aviso no va a su chat."
+            )
+        return reply
+
+    def _outside_roster(self, names: list[str]) -> list[str]:
+        """Los nombres que no son de nadie del padrón; sin padrón, ninguno."""
+        if self.household is None:
+            return []
+        return [name for name in names if self.household.by_name(name) is None]
 
     def _turn_list(self) -> str:
         rotas = [job for job in self.reminders.list(None) if job.turns]
@@ -1435,7 +1575,7 @@ class Commands:
             return False
         if decision.command not in self._dispatch():
             return False
-        return slots.missing(decision.command, decision.argument) is None
+        return slots.missing(decision.command, decision.argument, self._without_assignee) is None
 
     def _continue(self, pending, text: str):
         """Se vuelve a leer el hilo entero, así la respuesta se junta con lo anterior.
@@ -1463,7 +1603,7 @@ class Commands:
         """
         if not self.conversation:
             return None
-        slot = slots.missing(decision.command, decision.argument)
+        slot = slots.missing(decision.command, decision.argument, self._without_assignee)
         return slot if slot and slot.name not in asked else None
 
     def agenda_command(self, chat_id: int, text: str = "") -> str:
@@ -1726,7 +1866,9 @@ class Commands:
         kind: str = ALARM,
         monthday: int | None = None,
         skip_holidays: bool = False,
+        assignment: Assignment | None = None,
     ) -> str:
+        """Agenda un aviso: «en <equipo>», «para <persona>», cuándo y el mensaje, en ese orden."""
         denial = self._denial(chat_id)
         if denial:
             return denial
@@ -1735,6 +1877,11 @@ class Commands:
             aliases, rest = self._split_target(chat_id, text)
         except TargetError as exc:
             return str(exc)
+        if assignment is None:
+            try:
+                assignment, rest = self._split_assignee(rest)
+            except UnknownPerson as exc:
+                return str(exc)
 
         now = self.clock()
         try:
@@ -1750,12 +1897,16 @@ class Commands:
         job = self.reminders.add(
             chat_id, when, message, repeat=repeat, device=",".join(aliases), days=days, kind=kind,
             monthday=monthday, skip_holidays=skip_holidays,
+            assignee=assignment.assignee, assignee_id=assignment.person_id,
+            author_id=self._author(chat_id),
         )
         offer(_cancel_button(job.id))
         reply = (
             f"{label} #{job.id} en {', '.join(aliases)} "
             f"para {format_when(when, now)}: «{message}»"
         )
+        if assignment.label:
+            reply += f" · {assignment.label}"
         note = short_month_note(monthday) if monthday else ""
         return f"{reply}\n{note}" if note else reply
 
@@ -1774,6 +1925,10 @@ class Commands:
         try:
             aliases, rest = self._split_target(chat_id, text)
         except TargetError as exc:
+            return str(exc)
+        try:
+            assignment, rest = self._split_assignee(rest)
+        except UnknownPerson as exc:
             return str(exc)
 
         noun, example = (
@@ -1795,12 +1950,13 @@ class Commands:
                 return f"Con mensual necesito una hora. Ej: /{command} mensual 10 9:00 pagar la luz"
             return self._schedule(
                 chat_id, prefix + after_day, MONTHLY, f"{noun} {monthly_label(monthday)}",
-                kind=kind, monthday=monthday,
+                kind=kind, monthday=monthday, assignment=assignment,
             )
 
         if head.lower() in slots.DAILY_WORDS:
             return self._schedule(
-                chat_id, prefix + tail, DAILY, f"{noun} todos los días", kind=kind
+                chat_id, prefix + tail, DAILY, f"{noun} todos los días", kind=kind,
+                assignment=assignment,
             )
 
         days = parse_weekdays(head)
@@ -1812,7 +1968,7 @@ class Commands:
             skip = skips_holidays(head)
             return self._schedule(
                 chat_id, prefix + tail, WEEKLY, f"{noun} {weekdays_label(days, skip)}",
-                days=days, kind=kind, skip_holidays=skip,
+                days=days, kind=kind, skip_holidays=skip, assignment=assignment,
             )
 
         if kind == REMINDER:
@@ -1820,7 +1976,9 @@ class Commands:
                 "Un recordatorio repite: decime qué días. Ej: /recordar diaria 8:00 la pastilla"
                 f" o {example}. Para una sola vez, /timer mañana 10:00 llamar al médico"
             )
-        return self._schedule(chat_id, prefix + rest, ONCE, noun, kind=kind)
+        return self._schedule(
+            chat_id, prefix + rest, ONCE, noun, kind=kind, assignment=assignment
+        )
 
     def postpone(self, chat_id: int, text: str = "") -> str:
         """Vuelve a agendar la alarma o el timer que acaba de sonar."""
@@ -1852,7 +2010,7 @@ class Commands:
         now = self.clock()
         lines = [
             f"{'🔔' if job.is_reminder else '⏰'} #{job.id} · {format_when(job.when, now)} · {', '.join(job.devices) or self.config.default_device}"
-            f"{self._repetition(job)} — {job.message}"
+            f"{self._repetition(job)}{self._for_whom(job)} — {job.message}"
             for job in jobs
         ]
         lines.append("\nCancelá con /cancelar <número>")
@@ -1865,6 +2023,15 @@ class Commands:
         if job.turns:
             text += f" · turnos {', '.join(job.turns)}"
         return text
+
+    def _for_whom(self, job) -> str:
+        """« · para China» o « · para todos»; vacío si no es para nadie en particular."""
+        if job.assignee == EVERYONE:
+            return f" · {Assignment(EVERYONE).label}"
+        if job.assignee != PERSON or self.household is None:
+            return ""
+        person = self.household.get(job.assignee_id)
+        return f" · {Assignment(PERSON, person.id, person.name).label}" if person else ""
 
     def cancel(self, chat_id: int, text: str) -> str:
         denial = self._denial(chat_id)

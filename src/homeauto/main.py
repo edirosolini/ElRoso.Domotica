@@ -1133,6 +1133,7 @@ def main() -> None:
         meal_store=meal_store,
         meal_planner=meal_planner,
         cleaner=cleaner,
+        household=household,
         tell_others=lambda chat_id, text: _tell_alert_chats(
             notifier, config.allowed_chat_ids, chat_id, text
         ),

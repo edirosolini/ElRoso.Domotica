@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Callable
 
 from homeauto.route import strip_target
 from homeauto.timespec import (
@@ -77,10 +78,24 @@ POSITION = Slot("numero", "¿Cuál saco? El número sale en /compras.")
 PHRASE = Slot("texto", "¿Qué traduzco?")
 
 
-def missing(command: str, argument: str) -> Slot | None:
-    """El primer dato que le falta al comando, o None si ya puede ejecutarse."""
+# Los que aceptan «para <persona>» adelante; la persona nunca se pregunta.
+ASSIGNABLE = ("timer", "alarma", "recordar")
+
+
+def missing(
+    command: str, argument: str, unassign: Callable[[str], str] | None = None
+) -> Slot | None:
+    """El primer dato que le falta al comando, o None si ya puede ejecutarse.
+
+    `unassign` saca el «para <persona>» del argumento; sin él, se lee como texto.
+    """
     check = _CHECKS.get(command)
-    return check(_payload(argument)) if check else None
+    if check is None:
+        return None
+    payload = _payload(argument)
+    if unassign is not None and command in ASSIGNABLE:
+        payload = unassign(payload)
+    return check(payload)
 
 
 def _payload(argument: str) -> str:

@@ -65,7 +65,19 @@ CASES = (
     ("pasá a compras lo del menú de la semana", "menu", "compras semana"),
     ("agregá milanesas a compras", "agregar", "milanesas"),
     ("limpiá las teles viejas", "depurar", "teles"),
+    ("recordale a China tomar la pastilla todos los días a las ocho", "recordar", "para China"),
+    ("recordale a Papá en media hora sacar la ropa", "timer", "para Papá"),
+    ("recordales a todos los lunes a las ocho sacar la basura", "recordar", "para todos"),
+    # «para mañana» no es una persona: no puede quedar adelante del argumento.
+    ("recordame para mañana comprar pan", ("timer", "recordar", "agregar"), "!para mañana"),
 )
+
+
+def payload_ok(fragment: str, argument: str) -> bool:
+    """Si el argumento trae el fragmento; con «!» adelante, si no lo trae."""
+    if fragment.startswith("!"):
+        return fragment[1:].lower() not in argument.lower()
+    return fragment.lower() in argument.lower()
 
 
 def main() -> int:
@@ -91,9 +103,10 @@ def main() -> int:
         mark = "ok  " if ok else "FALLA"
         if fragment:
             payload_checks += 1
-            in_payload = fragment.lower() in (argument or "").lower()
+            in_payload = payload_ok(fragment, argument or "")
             payload_good += in_payload
-            note = "" if in_payload else f"  ← falta «{fragment}»"
+            missing = f"sobra «{fragment[1:]}»" if fragment.startswith("!") else f"falta «{fragment}»"
+            note = "" if in_payload else f"  ← {missing}"
         else:
             note = ""
         print(f"{mark} {message[:46]:48} → {got:12} «{argument}»{note}  [{elapsed:.1f}s]")

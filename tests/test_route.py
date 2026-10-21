@@ -401,3 +401,51 @@ def test_the_router_measurement_covers_purge():
     from deploy.measure_router import CASES
 
     assert ("limpiá las teles viejas", "depurar", "teles") in CASES
+
+
+def test_the_prompt_says_where_the_person_goes():
+    from homeauto.route import PROMPT
+
+    assert '"para <nombre>"' in PROMPT
+    assert '"para mañana"' in PROMPT
+
+
+def test_the_prompt_has_a_reminder_for_someone_of_the_house():
+    from homeauto.route import PROMPT
+
+    assert (
+        "Mensaje: recordale a China tomar la pastilla todos los días a las ocho\n"
+        "COMANDO: recordar\n"
+        "ARGUMENTO: para China diaria 8:00 tomar la pastilla"
+    ) in PROMPT
+    assert (
+        "Mensaje: recordale a Papá en media hora sacar la ropa\n"
+        "COMANDO: timer\n"
+        "ARGUMENTO: para Papá 30m sacar la ropa"
+    ) in PROMPT
+
+
+def test_the_router_measurement_covers_the_person_and_its_lookalike():
+    from deploy.measure_router import CASES
+
+    assert (
+        "recordale a China tomar la pastilla todos los días a las ocho", "recordar", "para China"
+    ) in CASES
+    assert ("recordale a Papá en media hora sacar la ropa", "timer", "para Papá") in CASES
+    assert (
+        "recordales a todos los lunes a las ocho sacar la basura", "recordar", "para todos"
+    ) in CASES
+    [(_, commands, fragment)] = [
+        case for case in CASES if case[0] == "recordame para mañana comprar pan"
+    ]
+    assert "timer" in commands
+    assert fragment == "!para mañana"
+
+
+def test_the_measurement_counts_a_fragment_that_must_not_be_there():
+    from deploy.measure_router import payload_ok
+
+    assert payload_ok("!para mañana", "mañana comprar pan")
+    assert not payload_ok("!para mañana", "para mañana comprar pan")
+    assert payload_ok("para China", "para china diaria 8:00 la pastilla")
+    assert not payload_ok("para China", "diaria 8:00 la pastilla")
