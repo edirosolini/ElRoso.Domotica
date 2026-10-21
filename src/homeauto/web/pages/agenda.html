@@ -28,8 +28,10 @@
     <label class="who" id="filter-label" hidden><span>Ver</span>
       <select id="filter" aria-label="Ver lo de"></select>
     </label>
-    <a class="ghost" href="/pantalla">Pantalla</a>
-    <a class="ghost" href="/control">Control</a>
+    <nav class="links">
+      <a class="ghost" href="/pantalla">Pantalla</a>
+      <a class="ghost" href="/control">Control</a>
+    </nav>
   </header>
 
   <div id="problems" class="problems" hidden></div>
@@ -38,7 +40,7 @@
   <div class="card calendar-card"><div id="calendar"></div></div>
 </div>
 
-<button type="button" class="fab" id="new-job" hidden><span>+</span> Nuevo aviso</button>
+<button type="button" class="fab" id="new-job" aria-label="Nuevo aviso" hidden><span class="fab-plus" aria-hidden="true">+</span> <span class="fab-label">Nuevo aviso</span></button>
 
 <div id="detail" class="sheet-wrap" hidden>
   <div class="sheet">

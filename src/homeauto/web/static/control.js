@@ -73,8 +73,20 @@
     return "/api/live?chat=" + encodeURIComponent(who.slice(2));
   }
 
+  // Un chat con el nombre visto en Telegram o, si no escribió, con sus últimos cuatro dígitos.
   function chatLabel(chat) {
-    return chat.seen ? chat.seen + " (" + chat.chat_id + ")" : "Chat " + chat.chat_id;
+    if (chat.seen) {
+      return chat.seen + " (" + chat.chat_id + ")";
+    }
+    return "Todavía no escribió (·" + String(Math.abs(chat.chat_id)).slice(-4) + ")";
+  }
+
+  // El comando de un formulario; null si el dato es obligatorio y está vacío.
+  function formCommand(verb, need, devices, text) {
+    if (need && !String(text || "").replace(/\s+/g, "")) {
+      return null;
+    }
+    return targeted(verb, devices, text);
   }
 
   // Los chats que esa persona puede tomar: los de nadie y el suyo.
@@ -166,6 +178,16 @@
     return items;
   }
 
+  // Si lo urgente no tiene nada más que el silencio.
+  function isCalm(items) {
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind !== "quiet") {
+        return false;
+      }
+    }
+    return true;
+  }
+
   function statusText(status) {
     var parts = [];
     for (var i = 0; i < (status || []).length; i++) {
@@ -179,7 +201,7 @@
       targeted: targeted, whoOptions: whoOptions, pickWho: pickWho, commandBody: commandBody,
       liveUrl: liveUrl, chatLabel: chatLabel, freeChats: freeChats, personBody: personBody,
       sinceText: sinceText, quietTitle: quietTitle, urgentItems: urgentItems,
-      statusText: statusText,
+      statusText: statusText, formCommand: formCommand, isCalm: isCalm,
     };
   }
   if (typeof document === "undefined") {
@@ -254,6 +276,7 @@
     var list = byId("urgent");
     clear(list);
     var items = urgentItems(live);
+    byId("urgent-card").classList.toggle("calm", isCalm(items));
     for (var i = 0; i < items.length; i++) {
       var row = element("li", "urgent-item " + items[i].kind);
       var text = element("div", "urgent-text");
@@ -369,11 +392,14 @@
         event.preventDefault();
         var input = node.querySelector("input, textarea");
         var text = input ? input.value : "";
-        if (node.getAttribute("data-need") && !text.replace(/\s+/g, "")) {
+        var devices = node.getAttribute("data-target") ? checkedDevices() : [];
+        var command = formCommand(node.getAttribute("data-verb"), Boolean(node.getAttribute("data-need")),
+          devices, text);
+        if (command === null) {
           input.focus();
           return;
         }
-        send(commandOf(node, text), false);
+        send(command, false);
         if (input && !node.getAttribute("data-keep")) {
           input.value = "";
         }
@@ -398,6 +424,13 @@
     });
   }
 
+  // Marca el chip del equipo según su casilla.
+  function markDevice(label, check) {
+    return function () {
+      label.classList.toggle("on", check.checked);
+    };
+  }
+
   function fillDevices(devices) {
     var box = byId("devices");
     clear(box);
@@ -406,6 +439,7 @@
       var check = document.createElement("input");
       check.type = "checkbox";
       check.value = devices[i];
+      check.addEventListener("change", markDevice(label, check));
       label.appendChild(check);
       label.appendChild(element("span", "", devices[i]));
       box.appendChild(label);
@@ -475,6 +509,7 @@
       writePerson("PUT", path, { chat_id: select.value === "" ? null : parseInt(select.value, 10) });
     });
     row.appendChild(select);
+    var actions = element("div", "person-actions");
     var rename = element("button", "", "Renombrar");
     rename.type = "button";
     rename.addEventListener("click", function () {
@@ -483,15 +518,16 @@
         writePerson("PUT", path, { name: name });
       }
     });
-    row.appendChild(rename);
-    var remove = element("button", "", "Borrar");
+    actions.appendChild(rename);
+    var remove = element("button", "danger", "Borrar");
     remove.type = "button";
     remove.addEventListener("click", function () {
       if (window.confirm("¿Borrar a " + person.name + " del padrón?")) {
         writePerson("DELETE", path, null);
       }
     });
-    row.appendChild(remove);
+    actions.appendChild(remove);
+    row.appendChild(actions);
     return row;
   }
 

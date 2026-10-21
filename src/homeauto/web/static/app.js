@@ -4,6 +4,9 @@
 
   var HOUR = { hour: "2-digit", minute: "2-digit", hour12: false };
   var MONTH_VIEW = "dayGridMonth";
+  var LIST_VIEW = "listWeek";
+  var VIEWS = [MONTH_VIEW, "timeGridWeek", "timeGridDay", LIST_VIEW];
+  var SAVED_VIEW = "casa.agenda.vista";
   var WIDE = "(min-width: 720px)";
   var MIN_HEIGHT = 480;
   var BOTTOM_GAP = 40;
@@ -126,8 +129,30 @@
     return found ? id : null;
   }
 
+  // La vista con que abre: un mes pedido, la guardada o, sin guardar, mes en ancho y lista en angosto.
+  function startView(saved, wide, askedMonth) {
+    if (askedMonth) {
+      return MONTH_VIEW;
+    }
+    if (VIEWS.indexOf(saved) !== -1) {
+      return saved;
+    }
+    return wide ? MONTH_VIEW : LIST_VIEW;
+  }
+
+  // Los calendarios que no se pudieron leer, según los problemas del feed.
+  function brokenCalendars(calendars, problems) {
+    return (calendars || []).filter(function (calendar) {
+      return (problems || []).indexOf("No pude leer el calendario " + calendar.name + ".") !== -1;
+    }).map(function (calendar) {
+      return calendar.name;
+    });
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
+      startView: startView,
+      brokenCalendars: brokenCalendars,
       isPastToday: isPastToday,
       toLocalInput: toLocalInput,
       nowScroll: nowScroll,
@@ -186,17 +211,17 @@
     });
   }
 
-  function readFilter() {
+  function readSaved(key) {
     try {
-      return window.localStorage.getItem(SAVED_FILTER);
+      return window.localStorage.getItem(key);
     } catch (error) {
       return null;
     }
   }
 
-  function saveFilter(value) {
+  function writeSaved(key, value) {
     try {
-      window.localStorage.setItem(SAVED_FILTER, value);
+      window.localStorage.setItem(key, value);
     } catch (error) {
       return;
     }
@@ -211,13 +236,20 @@
     box.hidden = list.length === 0;
   }
 
-  function showLegend(calendars) {
+  // La leyenda de los calendarios, con los que no se pudieron leer marcados.
+  function showLegend(calendars, problems) {
     var legend = byId("legend");
+    var broken = brokenCalendars(calendars, problems);
     clear(legend);
     calendars.forEach(function (calendar) {
       var item = document.createElement("li");
-      var pill = line("span", calendar.name);
+      var failed = broken.indexOf(calendar.name) !== -1;
+      var pill = line("span", failed ? "⚠ " + calendar.name : calendar.name);
       pill.className = "pill";
+      if (failed) {
+        item.className = "broken";
+        item.title = "No se pudo leer";
+      }
       pill.style.setProperty("--c", calendar.color);
       item.appendChild(pill);
       legend.appendChild(item);
@@ -573,7 +605,7 @@
       fillSelect(filter, [{ value: "", label: "Toda la casa" }].concat(persons.map(function (person) {
         return { value: String(person.id), label: person.name };
       })));
-      state.person = savedPerson(readFilter(), persons);
+      state.person = savedPerson(readSaved(SAVED_FILTER), persons);
       filter.value = state.person === null ? "" : String(state.person);
       applyPastToday();
       byId("filter-label").hidden = persons.length === 0;
@@ -635,6 +667,7 @@
       button.addEventListener("click", function () {
         calendar.setOption("scrollTime", nowScroll(new Date()));
         calendar.changeView(button.getAttribute("data-view"));
+        writeSaved(SAVED_VIEW, button.getAttribute("data-view"));
       });
     });
   }
@@ -671,7 +704,7 @@
     byId("filter").addEventListener("change", function () {
       var value = byId("filter").value;
       state.person = value ? parseInt(value, 10) : null;
-      saveFilter(value);
+      writeSaved(SAVED_FILTER, value);
       applyPastToday();
     });
     closeOnBackdrop("detail", closeDetail);
@@ -680,7 +713,8 @@
     var calendar = new FullCalendar.Calendar(byId("calendar"), {
       locale: "es",
       timeZone: "local",
-      initialView: MONTH_VIEW,
+      initialView: startView(readSaved(SAVED_VIEW), window.matchMedia(WIDE).matches,
+        initialDate() !== undefined),
       initialDate: initialDate(),
       headerToolbar: false,
       footerToolbar: false,
@@ -700,7 +734,7 @@
       },
       eventSourceSuccess: function (content) {
         showProblems(content.problems || []);
-        showLegend(content.calendars || []);
+        showLegend(content.calendars || [], content.problems || []);
         var now = new Date();
         var fold = folding();
         return (content.events || []).map(function (raw) {

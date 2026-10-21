@@ -972,6 +972,42 @@ def test_the_control_offers_to_purge_next_to_the_scheduled(app):
     assert '<button type="button" class="cmd" data-verb="depurar">🧹 Depurar</button>' in scheduled
 
 
+def test_the_control_has_one_pills_and_one_turns_field_that_also_reads(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    scheduled = page[page.index("<h2>⏰ Programado</h2>"):]
+    scheduled = scheduled[:scheduled.index("</section>")]
+    for verb in ("pastillas", "turnos"):
+        assert scheduled.count(f'data-verb="{verb}"') == 1, verb
+        form = scheduled[scheduled.index(f'data-verb="{verb}"'):]
+        form = form[:form.index(">")]
+        assert "data-need" not in form, verb
+    assert '<a class="btn secondary" href="/agenda">Crear en la agenda</a>' in scheduled
+
+
+def test_the_control_placeholders_are_short_and_the_example_goes_to_the_title(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    placeholders = re.findall(r'placeholder="([^"]*)"', page)
+    assert placeholders
+    for text in placeholders:
+        assert len(text) <= 20, text
+    assert 'title="' in page
+
+
+def test_the_alarm_says_for_whom_apart_from_the_eyebrow(app):
+    page = get(app, "/alarma").body.decode("utf-8")
+
+    assert '<div id="for" class="alarm-for" hidden></div>' in page
+
+
+def test_the_new_job_button_keeps_its_name_when_it_shrinks_to_an_icon(app):
+    page = get(app, "/agenda").body.decode("utf-8")
+
+    assert 'aria-label="Nuevo aviso"' in page
+    assert '<span class="fab-label">Nuevo aviso</span>' in page
+
+
 def test_the_manifest_opens_the_control_standalone_with_both_icons(app):
     manifest = body_json(get(app, "/static/manifest.webmanifest"))
 
@@ -1501,3 +1537,157 @@ def test_anything_else_under_tele_does_not_exist(board, path):
 @pytest.mark.parametrize("path", ["/api/tele/setup", "/api/tele/comedor/poll"])
 def test_without_the_service_there_is_no_tele(board, path):
     assert get(WebApp(board), path).status == 404
+
+
+# --- la hoja de estilos ---
+
+
+def stylesheet(app):
+    return re.sub(r"/\*.*?\*/", "", get(app, "/static/app.css").body.decode("utf-8"), flags=re.S)
+
+
+def css_rules(css):
+    """Cada regla como (selectores, cuerpo); las de un @media salen sueltas."""
+    found = []
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        selectors = [" ".join(part.split()) for part in selector.split(",")]
+        found.append((selectors, body))
+    return found
+
+
+def rule(css, selector):
+    """Los cuerpos de todas las reglas que nombran ese selector, juntos."""
+    bodies = [body for selectors, body in css_rules(css) if selector in selectors]
+    assert bodies, selector
+    return " ".join(bodies)
+
+
+def declarations(body):
+    return {name.strip(): value.strip() for name, value in
+            (part.split(":", 1) for part in body.split(";") if ":" in part)}
+
+
+def theme(css, name):
+    """Los tokens de un tema: los de :root pisados por los del tema."""
+    blocks = {"light": css.split(":root {", 1)[1],
+              "dark": css.split("@media (prefers-color-scheme: dark)", 1)[1].split(":root {", 1)[1],
+              "night": css.split(':root[data-theme="night"] {', 1)[1]}
+    tokens = declarations(blocks["light"].split("}", 1)[0])
+    tokens.update(declarations(blocks[name].split("}", 1)[0]))
+    return tokens
+
+
+def rgb(value):
+    value = value.strip()
+    if value.startswith("#"):
+        digits = value[1:]
+        if len(digits) == 3:
+            digits = "".join(c * 2 for c in digits)
+        return tuple(int(digits[i:i + 2], 16) for i in (0, 2, 4)), 1.0
+    parts = [float(p) for p in value[value.index("(") + 1:value.index(")")].split(",")]
+    return tuple(parts[:3]), parts[3] if len(parts) > 3 else 1.0
+
+
+def over(top, bottom):
+    color, alpha = rgb(top)
+    base, _ = rgb(bottom)
+    return "#" + "".join(f"{round(c * alpha + b * (1 - alpha)):02x}" for c, b in zip(color, base))
+
+
+def contrast(first, second):
+    def luminance(value):
+        channels = [c / 255 for c in rgb(value)[0]]
+        linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    high, low = sorted((luminance(first), luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+@pytest.mark.parametrize("name", ["light", "dark", "night"])
+def test_every_theme_declares_the_shared_tokens(app, name):
+    tokens = theme(stylesheet(app), name)
+
+    for token in ("--space-1", "--space-2", "--space-3", "--space-4", "--space-5", "--tap",
+                  "--on-accent", "--accent-ink", "--faint"):
+        assert token in tokens, token
+    assert tokens["--tap"] == "44px"
+
+
+@pytest.mark.parametrize("name", ["light", "dark"])
+def test_text_on_the_accent_and_on_the_soft_accent_reads_well(app, name):
+    tokens = theme(stylesheet(app), name)
+    soft = over(tokens["--accent-soft"], tokens["--card"])
+
+    assert contrast(tokens["--on-accent"], tokens["--accent"]) >= 4.5
+    assert contrast(tokens["--accent-ink"], soft) >= 4.5
+
+
+@pytest.mark.parametrize("name", ["light", "dark", "night"])
+def test_the_faint_text_of_an_empty_state_is_legible(app, name):
+    tokens = theme(stylesheet(app), name)
+
+    assert contrast(tokens["--faint"], tokens["--card"]) >= 3
+
+
+@pytest.mark.parametrize("selector", [".btn.primary", ".agenda .fab", ".agenda .segmented button.on",
+                                      ".agenda .days-row button.on", ".kiosk .add-item button"])
+def test_the_filled_buttons_write_with_the_on_accent_color(app, selector):
+    assert "color: var(--on-accent)" in rule(stylesheet(app), selector)
+
+
+@pytest.mark.parametrize("selector", [".btn.secondary", ".control .action"])
+def test_the_secondary_buttons_write_with_the_accent_ink(app, selector):
+    assert "color: var(--accent-ink)" in rule(stylesheet(app), selector)
+
+
+def test_the_focus_is_always_visible(app):
+    css = stylesheet(app)
+
+    assert ":focus-visible" in css
+    for selectors, body in css_rules(css):
+        if re.search(r"outline:\s*(none|0)\b", body):
+            assert all(":not(:focus-visible)" in s for s in selectors), selectors
+
+
+@pytest.mark.parametrize("selector", [".btn", ".ghost", ".round", ".control .action", ".control input",
+                                      ".control select", ".agenda .segmented button",
+                                      ".agenda .days-row button", ".control .device"])
+def test_the_controls_are_big_enough_to_touch(app, selector):
+    assert "min-height: var(--tap)" in rule(stylesheet(app), selector)
+
+
+def test_the_control_panels_do_not_stretch_and_the_rows_are_a_grid(app):
+    css = stylesheet(app)
+
+    assert "align-items: start" in rule(css, ".control .panels")
+    assert "display: grid" in rule(css, ".control .cmd.row")
+    assert "vh" not in rule(css, ".control .card-head h2")
+
+
+@pytest.mark.parametrize("page", [".control", ".agenda"])
+def test_the_control_and_the_agenda_size_their_text_without_vh(app, page):
+    for selectors, body in css_rules(stylesheet(app)):
+        if any(s.startswith(page + " ") for s in selectors):
+            assert "vh" not in declarations(body).get("font-size", ""), selectors
+
+
+def test_only_the_alarm_and_the_forms_break_words_anywhere(app):
+    for selectors, body in css_rules(stylesheet(app)):
+        if "anywhere" in body:
+            assert all(s.startswith((".alarm-view ", ".agenda ", ".control ")) for s in selectors), selectors
+
+
+@pytest.mark.parametrize("selector", [".kiosk .eyebrow", ".kiosk .count", ".kiosk .problems",
+                                      ".kiosk .card-head h2"])
+def test_the_kiosk_scales_its_small_print_with_the_screen(app, selector):
+    assert "vh" in declarations(rule(stylesheet(app), selector))["font-size"]
+
+
+def test_the_kiosk_scrolls_on_a_narrow_phone(app):
+    narrow = stylesheet(app).split("@media (max-width: 599px)", 1)[1].split("\n}\n", 1)[0]
+
+    assert "height: auto" in rule(narrow + "\n}", ".kiosk")
+
+
+def test_the_alarm_hour_fits_a_portrait_phone(app):
+    assert "min(32vh, 28vw)" in rule(stylesheet(app), ".alarm-view .alarm-time")

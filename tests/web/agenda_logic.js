@@ -133,4 +133,20 @@ assert.strictEqual(agenda.savedPerson("", persons), null);
 assert.strictEqual(agenda.savedPerson(null, persons), null);
 assert.strictEqual(agenda.savedPerson("abc", persons), null);
 
+// La vista con que abre: la guardada; sin guardar, mes en pantalla ancha y lista en el celular.
+assert.strictEqual(agenda.startView(null, false, false), "listWeek");
+assert.strictEqual(agenda.startView(null, true, false), "dayGridMonth");
+assert.strictEqual(agenda.startView("timeGridWeek", false, false), "timeGridWeek");
+assert.strictEqual(agenda.startView("dayGridMonth", false, false), "dayGridMonth");
+assert.strictEqual(agenda.startView("cualquiera", false, false), "listWeek");
+// Con un mes pedido en la dirección, abre en el mes.
+assert.strictEqual(agenda.startView("listWeek", false, true), "dayGridMonth");
+
+// Los calendarios que no se pudieron leer, para marcarlos en la leyenda.
+var calendars = [{ name: "familia", color: "#1" }, { name: "familia_privado", color: "#2" }];
+assert.deepStrictEqual(agenda.brokenCalendars(calendars,
+  ["No pude leer el calendario familia_privado."]), ["familia_privado"]);
+assert.deepStrictEqual(agenda.brokenCalendars(calendars, []), []);
+assert.deepStrictEqual(agenda.brokenCalendars(calendars, ["No pude leer la agenda."]), []);
+
 console.log("ok");
