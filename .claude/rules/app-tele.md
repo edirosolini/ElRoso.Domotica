@@ -99,10 +99,10 @@ la tele está viva **y** anunció la capacidad (`TeleLink.can()`); si no, va dir
 
 - **`play`**: espera `received` diez segundos (`ACK_TIMEOUT`) y después `done` hasta la
   duración del clip más `FINISH_MARGIN`, con tope `FINISH_TIMEOUT`; sin duración, el tope. A
-  cualquiera de los dos se le suman trece segundos (`APP_WAKE_MARGIN`): lo que la app espera a
+  cualquiera de los dos se le suman treinta segundos (`APP_WAKE_MARGIN`): lo que la app espera a
   que la tele prenda antes de sonar. Si no llega, o llega `failed`, anula la orden y **lo dice
   por Cast**.
-- 🔴 **`APP_WAKE_MARGIN` son los diez segundos de `OrderRunner.wakeTimeoutMs` más los tres de
+- 🔴 **`APP_WAKE_MARGIN` son los diez segundos de `OrderRunner.wakeTimeoutMs` más los veinte de
   `settleMs`, en la app.** Si cambia uno, hay que cambiar el otro: con el margen corto el CT
   repite por Cast un aviso que la app todavía va a decir.
 - ⚠️ **`received` sin `done` a tiempo también sale por Cast**, así que puede sonar dos veces:
@@ -165,9 +165,18 @@ si no hay kiosco abierto, lo que el servicio le pide se pierde sin error.
 Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
 
 - **`play` corre en su propio hilo**, uno solo para todos los `play`, así el latido sigue y un
-  `stop` lo puede cortar a mitad. Prende la pantalla con un wake lock, espera que prenda con
-  tope de diez segundos —si no prende, suena igual— y, solo si estaba apagada, tres más
-  para que asiente: sin esa espera el audio se pierde mientras la tele despierta.
+  `stop` lo puede cortar a mitad. Espera que prenda con tope de diez segundos —si no prende,
+  suena igual— y, solo si estaba apagada, veinte más para que asiente.
+- 🔴 **En Android 14 el wake lock no prende la pantalla.** `AndroidDevice.wake()` además trae
+  `MainActivity`, declarada con `turnScreenOn` y `showWhenLocked`, y eso es lo que prende la
+  tele; necesita la superposición. Sin esto la tele seguía en reposo y el audio no tenía salida:
+  con el Chromecast dormido, la salida HDMI recién se conecta al despertar.
+- 🔴 **Los veinte segundos están medidos en la tele de la habitación** (Chromecast con Google TV
+  HD, 2026-10-21): la pantalla se enciende en un segundo, la tele termina el enganche por HDMI a
+  los diez y recién reproduce sonido a los dieciocho. Con tres se perdía la frase entera. Con la
+  tele prendida no se espera.
+- ⚠️ **En el Chromecast la salida HDMI es de volumen fijo**: subir `STREAM_MUSIC` no cambia lo que
+  se escucha, manda el volumen de la tele.
 - **Sube `STREAM_MUSIC` al piso de `min_volume`** (`VolumeFloor`): el CT lo manda de cero a
   cien y se lleva a los pasos del equipo **redondeando para arriba**; sin valor, la mitad. Solo
   sube, nunca baja, y **restaura el volumen al terminar o al fallar**.
