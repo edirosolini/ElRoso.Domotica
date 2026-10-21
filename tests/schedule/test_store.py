@@ -278,3 +278,91 @@ def test_update_validates_like_add(store, bad):
         store.update(job.id, T2, "otra", **bad)
 
     assert store.get(job.id) == job
+
+
+# --- asignación ------------------------------------------------------------
+
+
+def test_a_new_job_is_for_nobody(store):
+    job = store.add(OWNER, T1, "arriba")
+
+    assert (job.assignee, job.assignee_id, job.author_id) == ("none", None, None)
+    assert store.get(job.id) == job
+
+
+def test_a_job_can_be_for_a_person_and_know_who_wrote_it(store):
+    job = store.add(OWNER, T1, "sacar la basura", assignee="person", assignee_id=3, author_id=5)
+
+    again = store.get(job.id)
+    assert (again.assignee, again.assignee_id, again.author_id) == ("person", 3, 5)
+
+
+def test_a_job_can_be_for_everyone(store):
+    job = store.add(OWNER, T1, "a cenar", assignee="all")
+
+    assert store.get(job.id).assignee == "all"
+    assert store.get(job.id).assignee_id is None
+
+
+@pytest.mark.parametrize(
+    "assignee, assignee_id",
+    [("person", None), ("alguien", None), ("all", 3), ("none", 3)],
+)
+def test_a_wrong_assignment_is_rejected(store, assignee, assignee_id):
+    with pytest.raises(ValueError):
+        store.add(OWNER, T1, "arriba", assignee=assignee, assignee_id=assignee_id)
+
+
+def test_update_keeps_the_assignment_unless_it_is_given(store):
+    job = store.add(OWNER, T1, "arriba", assignee="person", assignee_id=3, author_id=5)
+
+    kept = store.update(job.id, T2, "más tarde")
+
+    assert (kept.assignee, kept.assignee_id, kept.author_id) == ("person", 3, 5)
+
+
+def test_update_can_change_the_assignment_but_not_the_author(store):
+    job = store.add(OWNER, T1, "arriba", assignee="person", assignee_id=3, author_id=5)
+
+    changed = store.update(job.id, T1, "arriba", assignee="all")
+
+    assert (changed.assignee, changed.assignee_id, changed.author_id) == ("all", None, 5)
+
+
+def test_update_validates_the_assignment(store):
+    job = store.add(OWNER, T1, "arriba")
+
+    with pytest.raises(ValueError):
+        store.update(job.id, T1, "arriba", assignee="person")
+    assert store.get(job.id).assignee == "none"
+
+
+def test_reassign_passes_the_jobs_of_a_person_to_nobody(store):
+    hers = store.add(OWNER, T1, "sacar la basura", assignee="person", assignee_id=3)
+    other = store.add(OWNER, T1, "regar", assignee="person", assignee_id=4)
+    everyone = store.add(OWNER, T1, "a cenar", assignee="all")
+
+    assert store.reassign(3) == 1
+
+    assert (store.get(hers.id).assignee, store.get(hers.id).assignee_id) == ("none", None)
+    assert store.get(other.id).assignee_id == 4
+    assert store.get(everyone.id).assignee == "all"
+
+
+def test_assignment_columns_are_added_to_an_older_database(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,"
+            " fires_at TEXT NOT NULL, message TEXT NOT NULL, repeat TEXT NOT NULL DEFAULT 'once')"
+        )
+        conn.execute(
+            "INSERT INTO jobs (chat_id, fires_at, message) VALUES (?, ?, 'viejo')",
+            (OWNER, T1.isoformat()),
+        )
+
+    [job] = Store(path).pending()
+
+    assert (job.assignee, job.assignee_id, job.author_id) == ("none", None, None)

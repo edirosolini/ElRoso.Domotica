@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from homeauto.schedule.store import NOBODY, pack_chats, unpack_chats
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ringing (
     job_id    INTEGER PRIMARY KEY,
@@ -15,7 +17,10 @@ CREATE TABLE IF NOT EXISTS ringing (
     devices   TEXT,
     fired_at  TEXT    NOT NULL,
     rings     INTEGER NOT NULL DEFAULT 0,
-    next_ring TEXT
+    next_ring TEXT,
+    assignee  TEXT    NOT NULL DEFAULT 'none',
+    assignee_id INTEGER,
+    audience  TEXT
 );
 """
 
@@ -29,6 +34,10 @@ class Ringing:
     fired_at: datetime
     rings: int = 0
     next_ring: datetime | None = None
+    # Para quién era y a qué chats llegó; `audience` None es todos.
+    assignee: str = NOBODY
+    assignee_id: int | None = None
+    audience: tuple[int, ...] | None = None
 
 
 def _row_to_ringing(row: sqlite3.Row) -> Ringing:
@@ -40,6 +49,9 @@ def _row_to_ringing(row: sqlite3.Row) -> Ringing:
         fired_at=datetime.fromisoformat(row["fired_at"]),
         rings=row["rings"],
         next_ring=datetime.fromisoformat(row["next_ring"]) if row["next_ring"] else None,
+        assignee=row["assignee"],
+        assignee_id=row["assignee_id"],
+        audience=unpack_chats(row["audience"]),
     )
 
 
@@ -61,6 +73,12 @@ class RingingStore:
             conn.execute("ALTER TABLE ringing ADD COLUMN rings INTEGER NOT NULL DEFAULT 0")
         if "next_ring" not in existing:
             conn.execute("ALTER TABLE ringing ADD COLUMN next_ring TEXT")
+        if "assignee" not in existing:
+            conn.execute(f"ALTER TABLE ringing ADD COLUMN assignee TEXT NOT NULL DEFAULT '{NOBODY}'")
+        if "assignee_id" not in existing:
+            conn.execute("ALTER TABLE ringing ADD COLUMN assignee_id INTEGER")
+        if "audience" not in existing:
+            conn.execute("ALTER TABLE ringing ADD COLUMN audience TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -68,17 +86,28 @@ class RingingStore:
         return conn
 
     def remember(
-        self, job_id: int, chat_id: int | None, message: str, devices: str | None, at: datetime
+        self,
+        job_id: int,
+        chat_id: int | None,
+        message: str,
+        devices: str | None,
+        at: datetime,
+        assignee: str = NOBODY,
+        assignee_id: int | None = None,
+        audience: tuple[int, ...] | None = None,
     ) -> None:
         """Deja la alarma sonando desde `at`, sin repeticiones todavía."""
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO ringing (job_id, chat_id, message, devices, fired_at, rings, next_ring)"
-                " VALUES (?, ?, ?, ?, ?, 0, NULL) "
+                "INSERT INTO ringing (job_id, chat_id, message, devices, fired_at, rings, next_ring,"
+                " assignee, assignee_id, audience) VALUES (?, ?, ?, ?, ?, 0, NULL, ?, ?, ?) "
                 "ON CONFLICT(job_id) DO UPDATE SET chat_id = excluded.chat_id, "
                 "message = excluded.message, devices = excluded.devices, "
-                "fired_at = excluded.fired_at, rings = 0, next_ring = NULL",
-                (job_id, chat_id, message, devices, at.isoformat()),
+                "fired_at = excluded.fired_at, rings = 0, next_ring = NULL, "
+                "assignee = excluded.assignee, assignee_id = excluded.assignee_id, "
+                "audience = excluded.audience",
+                (job_id, chat_id, message, devices, at.isoformat(), assignee, assignee_id,
+                 pack_chats(audience)),
             )
 
     def get(self, job_id: int) -> Ringing | None:

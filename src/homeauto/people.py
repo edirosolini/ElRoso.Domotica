@@ -185,6 +185,11 @@ class Household:
         """La persona dueña de ese chat, si el chat es de la casa."""
         return next((person for person in self.list() if person.chat_id == chat_id), None)
 
+    def by_name(self, name: str) -> Person | None:
+        """La persona con ese nombre, sin distinguir mayúsculas ni espacios de más."""
+        wanted = " ".join(name.split()).casefold()
+        return next((person for person in self.list() if person.name.casefold() == wanted), None)
+
     def roster(self) -> Roster:
         people = self.list()
         chats = {person.chat_id for person in people if person.chat_id is not None}

@@ -7,7 +7,7 @@ prueba sin esperar tiempo real.
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Callable, Iterable, Protocol
 
@@ -19,10 +19,13 @@ from homeauto.schedule.history import CANCEL, HOLIDAY, SNOOZE, HistoryStore
 from homeauto.schedule.ringing import Ringing, RingingStore
 from homeauto.schedule.rota import turn_for, with_turn
 from homeauto.schedule.spec import skips
-from homeauto.schedule.store import ALARM, ONCE, Job, Store, next_run
+from homeauto.schedule.store import (
+    ALARM, EVERYONE, NOBODY, ONCE, PERSON, Job, Store, next_run,
+)
 
 if TYPE_CHECKING:
     from homeauto.holidays import Holiday
+    from homeauto.people import Person
     from homeauto.lists import ListStore
     from homeauto.schedule.stock import Stock, StockStore
 
@@ -38,6 +41,27 @@ NAG_LIMIT = 3
 # Cada cuánto vuelve a sonar una alarma desde que terminó, y hasta cuándo desde que sonó.
 RING_DELAY = timedelta(minutes=5)
 RING_LIMIT = timedelta(minutes=30)
+
+# Cómo llama la casa a un aviso para todos.
+EVERYONE_NAME = "Todos"
+
+
+@dataclass(frozen=True)
+class Assignment:
+    """Para quién suena un aviso: a qué chats llega (None es todos) y con qué nombre se lo llama."""
+
+    assignee: str = NOBODY
+    assignee_id: int | None = None
+    audience: tuple[int, ...] | None = None
+    addressee: str | None = None
+
+    def photo(self) -> dict:
+        """Lo que se guarda de la asignación con lo que sonó."""
+        return {
+            "assignee": self.assignee,
+            "assignee_id": self.assignee_id,
+            "audience": self.audience,
+        }
 
 
 class Timer(Protocol):
@@ -65,6 +89,8 @@ class Reminders:
         lists: ListStore | None = None,
         quiet=None,
         screen=None,
+        resolve: Callable[[int], Person | None] | None = None,
+        find: Callable[[str], Person | None] | None = None,
     ):
         self.store = store
         self.timer = timer
@@ -84,6 +110,9 @@ class Reminders:
         self.quiet = quiet
         # Prende la vista de alarma en las teles y la cierra después.
         self.screen = screen
+        # La persona del padrón por id y por nombre.
+        self.resolve = resolve
+        self.find = find
         self.notify = notify
         self.clock = clock
         # Los chats que pueden posponer lo que sonó; vacío es solo el que lo pidió.
@@ -130,9 +159,13 @@ class Reminders:
         monthday: int | None = None,
         skip_holidays: bool = False,
         stock_id: int | None = None,
+        assignee: str = NOBODY,
+        assignee_id: int | None = None,
+        author_id: int | None = None,
     ) -> Job:
         job = self.store.add(
-            chat_id, when, message, repeat, device, days, kind, monthday, skip_holidays, stock_id
+            chat_id, when, message, repeat, device, days, kind, monthday, skip_holidays, stock_id,
+            assignee=assignee, assignee_id=assignee_id, author_id=author_id,
         )
         self._arm(job)
         return job
@@ -148,10 +181,13 @@ class Reminders:
         kind: str = ALARM,
         monthday: int | None = None,
         skip_holidays: bool = False,
+        assignee: str | None = None,
+        assignee_id: int | None = None,
     ) -> Job | None:
         """Reescribe un job y lo rearma; lo que ya sonó y espera su «Hecho» no se toca."""
         job = self.store.update(
-            job_id, when, message, repeat, device, days, kind, monthday, skip_holidays
+            job_id, when, message, repeat, device, days, kind, monthday, skip_holidays,
+            assignee=assignee, assignee_id=assignee_id,
         )
         if job is None:
             return None
@@ -208,7 +244,7 @@ class Reminders:
         now = self.clock()
         if last is None or now - last.at > SNOOZE_WINDOW:
             return None
-        for chat in self._audience(chat_id):
+        for chat in self._chats(last.audience, chat_id):
             self.fired.forget(chat)
         if last.job_id is not None:
             self._stop_ringing(last.job_id)
@@ -216,7 +252,7 @@ class Reminders:
             self._write_history(lambda history: history.mark_closed(last.job_id, SNOOZE, now))
         return self.add(
             chat_id, now + delay, last.message, device=last.device, kind=last.kind,
-            stock_id=last.stock_id,
+            stock_id=last.stock_id, assignee=last.assignee, assignee_id=last.assignee_id,
         )
 
     def done(self, chat_id: int, job_id: int, who: str) -> str | None:
@@ -232,7 +268,7 @@ class Reminders:
         self._write_history(lambda history: history.mark_done(job_id, now, who))
         if wait is not None and wait.stock_id is not None:
             self._take_dose(chat_id, wait.stock_id)
-        audience = self._audience(chat_id)
+        audience = self._chats(wait.audience if wait is not None else None, chat_id)
         for chat in audience:
             if self.fired is not None and (last := self.fired.last(chat)) and last.message == message:
                 self.fired.forget(chat)
@@ -255,14 +291,14 @@ class Reminders:
                 self.stop_audio(_ringing_job(ringing).devices)
             except Exception:
                 log.exception("could not stop the audio of job %s", job_id)
-        audience = self._audience(chat_id)
+        audience = self._chats(ringing.audience, chat_id)
         if self.fired is not None:
             for chat in audience:
                 if (last := self.fired.last(chat)) and last.job_id == job_id:
                     self.fired.forget(chat)
         now = self.clock()
         self._write_history(lambda history: history.mark_off(job_id, now, who))
-        self._tell_others(chat_id, f"🔕 {who} apagó la alarma: «{ringing.message}»")
+        self._tell_others(chat_id, f"🔕 {who} apagó la alarma: «{ringing.message}»", audience)
         return ringing.message
 
     def forget_wait(self, job_id: int, before: datetime) -> bool:
@@ -283,11 +319,57 @@ class Reminders:
     def _audience(self, chat_id: int | None) -> list[int]:
         return self.chat_ids or ([chat_id] if chat_id is not None else [])
 
-    def _tell_others(self, chat_id: int, text: str) -> None:
-        """Escribe a todos los chats menos al que tocó el botón."""
-        for chat in self._audience(chat_id):
+    def _chats(self, audience: tuple[int, ...] | None, chat_id: int | None) -> list[int]:
+        """Los chats de una audiencia guardada; None es todos."""
+        return list(audience) if audience is not None else self._audience(chat_id)
+
+    def _escalated(
+        self, assignee: str, audience: tuple[int, ...] | None, chat_id: int | None
+    ) -> list[int]:
+        """Todos los chats si el aviso era de una persona; si no, su audiencia."""
+        chats = self._chats(audience, chat_id)
+        if assignee != PERSON:
+            return chats
+        return list(dict.fromkeys([*self._audience(chat_id), *chats]))
+
+    def _tell_others(
+        self, chat_id: int | None, text: str, chats: list[int] | None = None
+    ) -> None:
+        """Escribe a los chats del aviso, o a todos, menos al que tocó el botón."""
+        for chat in self._audience(chat_id) if chats is None else chats:
             if chat != chat_id:
                 self._write(chat, text)
+
+    def _person(self, lookup: Callable | None, key: object) -> Person | None:
+        """Busca una persona en el padrón sin que una falla frene el aviso."""
+        if lookup is None or key is None:
+            return None
+        try:
+            return lookup(key)
+        except Exception:
+            log.exception("no pude leer el padrón para %s", key)
+            return None
+
+    def _assignment(self, job: Job, turn: str | None) -> Assignment:
+        """Para quién suena el job: el del turno si está en el padrón, si no su asignación."""
+        person = self._person(self.find, turn)
+        if person is None and job.assignee == PERSON:
+            person = self._person(self.resolve, job.assignee_id)
+        if person is not None:
+            audience = (person.chat_id,) if person.chat_id is not None else None
+            return Assignment(PERSON, person.id, audience, person.name)
+        if job.assignee == EVERYONE:
+            return Assignment(EVERYONE, addressee=EVERYONE_NAME)
+        return Assignment()
+
+    def _addressee(self, assignee: str, assignee_id: int | None) -> str | None:
+        """El nombre con que se llama lo que ya sonó; una persona que ya no está, ninguno."""
+        if assignee == EVERYONE:
+            return EVERYONE_NAME
+        if assignee == PERSON:
+            person = self._person(self.resolve, assignee_id)
+            return person.name if person is not None else None
+        return None
 
     def _stop_ringing(self, job_id: int) -> Ringing | None:
         """Deja de repetir la alarma; devuelve lo que sonaba, o None si no sonaba."""
@@ -324,7 +406,8 @@ class Reminders:
             return
         if self.clock() - ringing.fired_at >= RING_LIMIT:
             if self._stop_ringing(job_id) is not None:
-                for chat in self._audience(ringing.chat_id):
+                chats = self._escalated(ringing.assignee, ringing.audience, ringing.chat_id)
+                for chat in chats:
                     self._write(chat, f"⏰ Dejé de sonar: «{ringing.message}», nadie la apagó")
             return
 
@@ -332,7 +415,8 @@ class Reminders:
         self.ringing.mark_rang(job_id)
         self._write_history(lambda history: history.mark_nag(job_id))
         try:
-            self.announce(_ringing_job(ringing), rings=rings)
+            addressee = self._addressee(ringing.assignee, ringing.assignee_id)
+            self.announce(_ringing_job(ringing, addressee), rings=rings)
         except Exception:
             log.exception("could not ring job %s again", job_id)
         self._next_ring(job_id, ringing.fired_at)
@@ -398,7 +482,13 @@ class Reminders:
 
         text = f"🔔 Sigue pendiente: «{wait.message}»"
         actions = tuple((label, data.format(job=job_id)) for label, data in self.nag_actions)
-        for chat in self._audience(chat_id):
+        last = wait.nags + 1 >= NAG_LIMIT
+        chats = (
+            self._escalated(wait.assignee, wait.audience, chat_id)
+            if last
+            else self._chats(wait.audience, chat_id)
+        )
+        for chat in chats:
             try:
                 if actions:
                     self.notify(chat, text, actions)
@@ -408,7 +498,7 @@ class Reminders:
                 log.exception("no se pudo re-avisar al chat %s del job %s", chat, job_id)
         self._write_history(lambda history: history.mark_nag(job_id))
 
-        if wait.nags + 1 >= NAG_LIMIT:
+        if last:
             self.awaiting.mark_nagged(job_id, None)
         else:
             self.awaiting.mark_nagged(job_id, now + NAG_DELAY)
@@ -424,24 +514,27 @@ class Reminders:
         turn = turn_for(job, job.when)
         if turn is not None:
             job = replace(job, message=with_turn(job.message, turn))
+        assignment = self._assignment(job, turn)
+        job = replace(job, audience=assignment.audience, addressee=assignment.addressee)
+        photo = assignment.photo()
 
         holiday = self._holiday(job)
         if holiday is not None:
-            self._skip(job, holiday)
+            self._skip(job, holiday, photo)
             self._move_on(job)
             return
 
         # Antes de anunciar: el botón de posponer llega con el aviso.
         if self.fired is not None:
             at = self.clock()
-            for chat in self._audience(job.chat_id):
+            for chat in self._chats(job.audience, job.chat_id):
                 self.fired.remember(
-                    chat, job.message, job.device, at, job.kind, job.id, job.stock_id
+                    chat, job.message, job.device, at, job.kind, job.id, job.stock_id, **photo
                 )
         if self.awaiting is not None and job.is_reminder:
             at = self.clock()
             next_nag = at + NAG_DELAY if self._nags() else None
-            self.awaiting.remember(job.id, job.message, at, next_nag, job.stock_id)
+            self.awaiting.remember(job.id, job.message, at, next_nag, job.stock_id, **photo)
             if next_nag is not None:
                 self._arm_nag(job.id, job.chat_id, next_nag)
         fired_at = self.clock()
@@ -451,11 +544,11 @@ class Reminders:
             and not away_of(self.quiet, fired_at)
         )
         if rings:
-            self.ringing.remember(job.id, job.chat_id, job.message, job.device, fired_at)
+            self.ringing.remember(job.id, job.chat_id, job.message, job.device, fired_at, **photo)
             self._on_screen(lambda screen: screen.ring(job))
         self._write_history(
             lambda history: history.record(
-                job.id, job.chat_id, job.kind, job.repeat, job.message, fired_at
+                job.id, job.chat_id, job.kind, job.repeat, job.message, fired_at, **photo
             )
         )
 
@@ -489,17 +582,17 @@ class Reminders:
             log.exception("could not read the holidays for job %s", job.id)
             return None
 
-    def _skip(self, job: Job, holiday: Holiday) -> None:
-        """Deja el feriado en el historial y avisa a todos los chats que hoy no suena."""
+    def _skip(self, job: Job, holiday: Holiday, photo: dict) -> None:
+        """Deja el feriado en el historial y avisa a los chats del aviso que hoy no suena."""
         at = self.clock()
         self._write_history(
             lambda history: history.record(
-                job.id, job.chat_id, job.kind, job.repeat, job.message, at
+                job.id, job.chat_id, job.kind, job.repeat, job.message, at, **photo
             )
         )
         self._write_history(lambda history: history.mark_closed(job.id, HOLIDAY, at))
         log.info("job %s skipped: holiday %s", job.id, holiday.day)
-        for chat in self._audience(job.chat_id):
+        for chat in self._chats(job.audience, job.chat_id):
             self._write(chat, f"🏖 Feriado ({holiday.name}): hoy no suena «{job.message}»")
 
 
@@ -515,14 +608,18 @@ def _ring_key(job_id: int) -> str:
     return f"ring:{job_id}"
 
 
-def _ringing_job(ringing: Ringing) -> Job:
-    """La alarma que suena como job, aunque ya no esté en `jobs`."""
+def _ringing_job(ringing: Ringing, addressee: str | None = None) -> Job:
+    """La alarma que suena como job, aunque ya no esté en `jobs`, con su asignación."""
     return Job(
         id=ringing.job_id,
         chat_id=ringing.chat_id,
         when=ringing.fired_at,
         message=ringing.message,
         device=ringing.devices,
+        assignee=ringing.assignee,
+        assignee_id=ringing.assignee_id,
+        audience=ringing.audience,
+        addressee=addressee,
     )
 
 

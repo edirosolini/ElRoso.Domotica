@@ -248,3 +248,30 @@ def test_the_names_seen_in_telegram_stay_apart(db):
     make(db).add("Eze", 42)
 
     assert seen.names() == {42: "Ezequiel Di Rosolini"}
+
+
+# --- por nombre y la baja con sus avisos ---
+
+
+def test_by_name_finds_the_person_without_caring_about_case(db):
+    house = make(db)
+    china = house.add("China", 77)
+
+    assert house.by_name("china") == china
+    assert house.by_name(" CHINA ") == china
+    assert house.by_name("Enano") is None
+
+
+def test_removing_a_person_passes_her_jobs_to_nobody(db):
+    from datetime import datetime
+
+    from homeauto.schedule.store import Store
+
+    store = Store(db)
+    house = make(db, before_remove=lambda person: store.reassign(person.id))
+    china = house.add("China", 77)
+    job = store.add(42, datetime(2026, 10, 21, 8, 0), "regar", assignee="person", assignee_id=china.id)
+
+    house.remove(china.id)
+
+    assert (store.get(job.id).assignee, store.get(job.id).assignee_id) == ("none", None)

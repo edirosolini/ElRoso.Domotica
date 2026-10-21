@@ -477,3 +477,90 @@ def test_in_the_quiet_hours_or_on_vacation_nothing_reaches_the_tele_app(tmp_path
     assert link.orders("comedor") == []
     assert link.can("comedor", "play"), "la app estaba viva: no le llegó porque no se habló"
     assert len(sent) == 1
+
+
+# --- asignación --------------------------------------------------------------
+
+
+def addressed(message, addressee=None, audience=None, chat_ids=(42, 77)):
+    speaker = FakeSpeaker("parlante")
+    sent = []
+    polish = KeptPolish()
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=speaker),
+        notify=lambda chat_id, text: sent.append((chat_id, text)),
+        fallback="parlante",
+        polish=polish,
+        chat_ids=chat_ids,
+    )
+    announcer(
+        Job(
+            id=7, chat_id=42, when=JOB.when, message=message,
+            addressee=addressee, audience=audience,
+        )
+    )
+    return speaker, sent, polish
+
+
+@pytest.mark.parametrize(
+    "addressee, said",
+    [("China", "China, sacar la basura"), ("Todos", "Todos, sacar la basura")],
+)
+def test_the_assignment_is_said_as_a_call(addressee, said):
+    speaker, sent, polish = addressed("sacar la basura", addressee)
+
+    assert speaker.said == [said]
+    assert polish.kept == [(addressee,)]
+    assert said in sent[0][1]
+
+
+def test_an_alarm_for_nobody_is_said_alone():
+    speaker, _, polish = addressed("sacar la basura")
+
+    assert speaker.said == ["sacar la basura"]
+    assert polish.kept == [()]
+
+
+def test_the_name_in_brackets_wins_over_the_assignment():
+    speaker, _, polish = addressed("[Papá] tomar medicación", "China")
+
+    assert speaker.said == ["Papá, tomar medicación"]
+    assert polish.kept == [("Papá",)]
+
+
+def test_the_turn_wins_over_the_assignment():
+    speaker, _, polish = addressed("Le toca a Cin: sacar la basura", "China")
+
+    assert speaker.said == ["Le toca a Cin: sacar la basura"]
+    assert polish.kept == [("Cin",)]
+
+
+def test_the_audience_of_the_job_decides_the_chats():
+    _, sent, _ = addressed("sacar la basura", "China", audience=(77,))
+
+    assert [chat for chat, _ in sent] == [77]
+
+
+def test_without_an_audience_it_reaches_every_chat():
+    _, sent, _ = addressed("sacar la basura", "Enano")
+
+    assert sorted(chat for chat, _ in sent) == [42, 77]
+
+
+def test_a_repetition_of_an_assigned_alarm_also_calls_by_name():
+    speaker = FakeSpeaker("parlante")
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(parlante=speaker),
+        notify=lambda chat_id, text, actions=(): sent.append(chat_id),
+        fallback="parlante",
+        chat_ids=(42, 77),
+    )
+
+    announcer(
+        Job(id=7, chat_id=42, when=JOB.when, message="arriba", addressee="China", audience=(77,)),
+        rings=1,
+    )
+
+    assert speaker.said == ["China, arriba"]
+    assert sent == [77]

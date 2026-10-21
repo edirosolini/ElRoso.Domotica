@@ -109,3 +109,27 @@ def test_an_old_table_gets_the_new_columns(tmp_path):
     assert ringing.devices is None
     assert ringing.rings == 0
     assert ringing.next_ring is None
+
+
+def test_it_keeps_the_assignment_and_who_it_reached(store):
+    store.remember(7, 42, "arriba", None, NOW, assignee="person", assignee_id=3, audience=(77,))
+
+    ringing = store.get(7)
+    assert (ringing.assignee, ringing.assignee_id, ringing.audience) == ("person", 3, (77,))
+
+
+def test_an_old_row_reached_everyone(tmp_path):
+    path = tmp_path / "jobs.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE ringing (job_id INTEGER PRIMARY KEY, chat_id INTEGER,"
+            " message TEXT NOT NULL, fired_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO ringing (job_id, chat_id, message, fired_at) VALUES (7, 42, 'arriba', ?)",
+            (NOW.isoformat(),),
+        )
+
+    ringing = RingingStore(path).get(7)
+
+    assert (ringing.assignee, ringing.assignee_id, ringing.audience) == ("none", None, None)

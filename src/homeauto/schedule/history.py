@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from homeauto.schedule.store import NOBODY, pack_chats, unpack_chats
+
 # Lo que sonó hace más que esto se borra al registrar un aviso nuevo.
 KEEP = timedelta(days=365)
 
@@ -31,7 +33,10 @@ CREATE TABLE IF NOT EXISTS fired_history (
     nags       INTEGER NOT NULL DEFAULT 0,
     snoozed_at TEXT,
     closed     TEXT,
-    closed_at  TEXT
+    closed_at  TEXT,
+    assignee   TEXT    NOT NULL DEFAULT 'none',
+    assignee_id INTEGER,
+    audience   TEXT
 );
 CREATE INDEX IF NOT EXISTS fired_history_fired_at ON fired_history (fired_at);
 """
@@ -59,6 +64,10 @@ class Entry:
     snoozed_at: datetime | None
     closed: str | None
     closed_at: datetime | None = None
+    # Para quién era y a qué chats llegó; `audience` None es todos.
+    assignee: str = NOBODY
+    assignee_id: int | None = None
+    audience: tuple[int, ...] | None = None
 
 
 def _when(value: str | None) -> datetime | None:
@@ -81,6 +90,9 @@ def _row_to_entry(row: sqlite3.Row) -> Entry:
         snoozed_at=_when(row["snoozed_at"]),
         closed=row["closed"],
         closed_at=_when(row["closed_at"]),
+        assignee=row["assignee"],
+        assignee_id=row["assignee_id"],
+        audience=unpack_chats(row["audience"]),
     )
 
 
@@ -90,6 +102,20 @@ class HistoryStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            self._add_missing_columns(conn)
+
+    @staticmethod
+    def _add_missing_columns(conn: sqlite3.Connection) -> None:
+        """Agrega las columnas de la asignación si la tabla no las tiene."""
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(fired_history)")}
+        if "assignee" not in existing:
+            conn.execute(
+                f"ALTER TABLE fired_history ADD COLUMN assignee TEXT NOT NULL DEFAULT '{NOBODY}'"
+            )
+        if "assignee_id" not in existing:
+            conn.execute("ALTER TABLE fired_history ADD COLUMN assignee_id INTEGER")
+        if "audience" not in existing:
+            conn.execute("ALTER TABLE fired_history ADD COLUMN audience TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -104,14 +130,18 @@ class HistoryStore:
         repeat: str,
         message: str,
         at: datetime,
+        assignee: str = NOBODY,
+        assignee_id: int | None = None,
+        audience: tuple[int, ...] | None = None,
     ) -> None:
         """Abre la fila de un aviso que sonó, todavía sin dar por dicho, y poda lo vencido."""
         with self._connect() as conn:
             conn.execute("DELETE FROM fired_history WHERE fired_at < ?", ((at - KEEP).isoformat(),))
             conn.execute(
-                "INSERT INTO fired_history (job_id, chat_id, kind, repeat, message, fired_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (job_id, chat_id, kind, repeat, message, at.isoformat()),
+                "INSERT INTO fired_history (job_id, chat_id, kind, repeat, message, fired_at,"
+                " assignee, assignee_id, audience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (job_id, chat_id, kind, repeat, message, at.isoformat(), assignee, assignee_id,
+                 pack_chats(audience)),
             )
 
     def mark_announced(self, job_id: int) -> None:

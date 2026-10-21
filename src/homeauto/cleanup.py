@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from homeauto.config import Config
+from homeauto.people import Roster
 from homeauto.schedule.awaiting import KEEP
 from homeauto.schedule.history import DONE, OFF, SNOOZE, Entry
 from homeauto.schedule.reminders import SNOOZE_WINDOW
 from homeauto.schedule.spec import repetition_label
-from homeauto.schedule.store import ONCE, Job
+from homeauto.schedule.store import ONCE, PERSON, Job
 from homeauto.tele import Tele, normalize
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ UNSEEN = "sin latir hace más de siete días"
 
 # Por qué se propone borrar un aviso.
 OUTSIDER = "autor fuera de la lista"
+ORPHAN = "asignado a alguien que ya no está"
 GONE_DEVICE = "su equipo ya no existe"
 IGNORED = f"las últimas {IGNORED_IN_A_ROW} veces nadie lo atendió"
 STALE_ONCE = "de una sola vez y vencido hace más de un día"
@@ -89,16 +91,25 @@ def ignored(entries: list[Entry]) -> bool:
 def job_reasons(
     job: Job,
     now: datetime,
-    allowed: Iterable[int],
+    allowed: Roster | Iterable[int],
     devices: Iterable[str],
     entries: list[Entry],
 ) -> tuple[str, ...]:
-    """Los motivos por los que sobra el aviso; vacío si no sobra."""
-    allowed = frozenset(allowed)
+    """Los motivos por los que sobra el aviso; vacío si no sobra.
+
+    `allowed` es el padrón de la casa, o solo sus chats si no hay padrón.
+    """
+    if isinstance(allowed, Roster):
+        chats, persons = allowed.chats, allowed.person_ids
+    else:
+        chats, persons = frozenset(allowed), None
     known = {alias.lower() for alias in devices}
     reasons = []
-    if allowed and job.chat_id not in allowed:
+    by_person = persons is not None and job.author_id in persons
+    if chats and job.chat_id not in chats and not by_person:
         reasons.append(OUTSIDER)
+    if persons is not None and job.assignee == PERSON and job.assignee_id not in persons:
+        reasons.append(ORPHAN)
     if job.devices and not any(alias.lower() in known for alias in job.devices):
         reasons.append(GONE_DEVICE)
     if job.repeat != ONCE and ignored(entries):
@@ -325,6 +336,7 @@ class Cleaner:
         cache_dir: Path | str | None = None,
         clock: Callable[[], datetime] = datetime.now,
         token: Callable[[], str] = lambda: secrets.token_hex(4),
+        roster: Callable[[], Roster] | None = None,
     ):
         self.config = config
         self.reminders = reminders
@@ -341,6 +353,8 @@ class Cleaner:
         self.cache_dir = Path(cache_dir) if cache_dir is not None else None
         self.clock = clock
         self.token = token
+        # Las personas y los chats de la casa; sin padrón, los chats de la config.
+        self.roster = roster
         self._plans: dict[str, Plan] = {}
         self._lock = threading.Lock()
 
@@ -385,6 +399,7 @@ class Cleaner:
 
     def _jobs(self, now: datetime) -> tuple[JobCandidate, ...]:
         protected = self._protected_jobs(now)
+        house = self.roster() if self.roster is not None else self.config.allowed_chat_ids
         candidates = []
         for job in self.reminders.list(None):
             if job.id in protected or (job.repeat == ONCE and job.when > now):
@@ -392,9 +407,7 @@ class Cleaner:
             entries = self.history.latest(job.id, IGNORED_IN_A_ROW) if self.history else []
             if entries and now - entries[0].fired_at < SNOOZE_WINDOW:
                 continue
-            reasons = job_reasons(
-                job, now, self.config.allowed_chat_ids, self.config.devices, entries
-            )
+            reasons = job_reasons(job, now, house, self.config.devices, entries)
             if reasons:
                 candidates.append(JobCandidate(job, reasons))
         return tuple(candidates)
