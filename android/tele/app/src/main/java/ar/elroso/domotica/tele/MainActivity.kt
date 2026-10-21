@@ -18,9 +18,11 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import ar.elroso.domotica.tele.core.AlarmKey
+import ar.elroso.domotica.tele.core.Caller
 import ar.elroso.domotica.tele.core.CommandResult
 import kotlin.concurrent.thread
 
@@ -30,6 +32,8 @@ class MainActivity : Activity() {
     companion object {
         /** La página que el servicio pide mostrar al ponerla adelante. */
         const val EXTRA_URL = "url"
+        // Opacidad del botón de cambiar la tele cuando no tiene el foco.
+        private const val IDLE_ALPHA = 0.3f
         private val OK_KEYS = setOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER)
     }
 
@@ -43,6 +47,7 @@ class MainActivity : Activity() {
     private val asked = mutableSetOf<Permission>()
     private var web: WebView? = null
     private var hint: TextView? = null
+    private var change: Button? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +80,13 @@ class MainActivity : Activity() {
             setPadding(48, 16, 48, 16)
             visibility = View.GONE
         }
+        change = Button(this).apply {
+            text = getString(R.string.change_tele)
+            isAllCaps = false
+            alpha = IDLE_ALPHA
+            setOnFocusChangeListener { view, focused -> view.alpha = if (focused) 1f else IDLE_ALPHA }
+            setOnClickListener { startActivity(Intent(this@MainActivity, SetupActivity::class.java)) }
+        }
         setContentView(FrameLayout(this).apply {
             addView(web)
             addView(hint, FrameLayout.LayoutParams(
@@ -82,6 +94,11 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
             ).apply { bottomMargin = 48 })
+            addView(change, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.END,
+            ).apply { setMargins(0, 0, 24, 24) })
         })
         Kiosk.attach(this)
         refreshHint()
@@ -109,29 +126,33 @@ class MainActivity : Activity() {
     fun onAlarm(id: Long?) = runOnUiThread {
         if (id != null) {
             load(Tele.urls.alarm(id))
-            if (Tele.choice(this).chatId == null) Tele.log("alarma sin persona elegida: el OK no la apaga")
+            if (Tele.choice(this).caller == null) Tele.log("alarma sin persona elegida: el OK no la apaga")
         }
         refreshHint()
     }
 
     private fun refreshHint() {
-        val command = AlarmKey.offCommand(Kiosk.alarm, Tele.choice(this).chatId)
+        val command = AlarmKey.offCommand(Kiosk.alarm, Tele.choice(this).caller)
         hint?.visibility = if (command == null) View.GONE else View.VISIBLE
     }
 
-    /** Con una alarma sonando, el OK del control la apaga a nombre de la persona elegida. */
+    /** Abajo desde el kiosco va al botón de cambiar; con una alarma sonando, el OK la apaga a nombre de quien se eligió. */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN && web?.hasFocus() == true) {
+            if (event.action == KeyEvent.ACTION_DOWN) change?.requestFocus()
+            return true
+        }
         if (event.keyCode !in OK_KEYS) return super.dispatchKeyEvent(event)
-        val chat = Tele.choice(this).chatId
-        val command = AlarmKey.offCommand(Kiosk.alarm, chat) ?: return super.dispatchKeyEvent(event)
-        if (chat != null && event.action == KeyEvent.ACTION_UP && event.repeatCount == 0) silence(chat, command)
+        val caller = Tele.choice(this).caller
+        val command = AlarmKey.offCommand(Kiosk.alarm, caller) ?: return super.dispatchKeyEvent(event)
+        if (caller != null && event.action == KeyEvent.ACTION_UP && event.repeatCount == 0) silence(caller, command)
         return true
     }
 
-    private fun silence(chat: Long, command: String) {
+    private fun silence(caller: Caller, command: String) {
         Tele.log("OK del control: $command")
         thread(name = "tele-ok") {
-            when (val result = Tele.api.command(chat, command)) {
+            when (val result = Tele.api.command(caller, command)) {
                 is CommandResult.Replied -> Tele.log("el CT contestó al OK: ${result.text}")
                 is CommandResult.Failed -> Tele.log("el OK no llegó al CT: ${result.reason}")
             }
@@ -140,7 +161,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (web != null) askNextPermission()
+        val view = web ?: return
+        view.requestFocus()
+        askNextPermission()
     }
 
     override fun onDestroy() {

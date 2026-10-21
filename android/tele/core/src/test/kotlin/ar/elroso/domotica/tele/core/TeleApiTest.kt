@@ -142,9 +142,17 @@ class TeleApiTest {
     fun commandPostsAsThePersonAndReadsTheReply() {
         transport.reply(200, """{"text": "Apagada", "actions": []}""")
 
-        assertEquals(CommandResult.Replied("Apagada"), api.command(-22, "callar 7"))
+        assertEquals(CommandResult.Replied("Apagada"), api.command(Caller.Chat(-22), "callar 7"))
         assertEquals(listOf("POST http://casa/api/command"), transport.requests)
         assertEquals(listOf("""{"chat_id":-22,"data":"callar 7"}"""), transport.bodies)
+    }
+
+    @Test
+    fun commandPostsAsAPersonOfTheRoster() {
+        transport.reply(200, """{"text": "Apagada", "actions": []}""")
+
+        assertEquals(CommandResult.Replied("Apagada"), api.command(Caller.Person(3), "callar 7"))
+        assertEquals(listOf("""{"person_id":3,"data":"callar 7"}"""), transport.bodies)
     }
 
     @Test
@@ -152,8 +160,8 @@ class TeleApiTest {
         transport.reply(400, """{"error": "Ese chat no es de la casa."}""")
         transport.fail()
 
-        assertEquals(CommandResult.Failed("HTTP 400: Ese chat no es de la casa."), api.command(1, "callar 7"))
-        assertEquals(CommandResult.Failed("sin red"), api.command(1, "callar 7"))
+        assertEquals(CommandResult.Failed("HTTP 400: Ese chat no es de la casa."), api.command(Caller.Chat(1), "callar 7"))
+        assertEquals(CommandResult.Failed("sin red"), api.command(Caller.Chat(1), "callar 7"))
     }
 
     @Test

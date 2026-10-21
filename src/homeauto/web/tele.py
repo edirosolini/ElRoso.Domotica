@@ -21,6 +21,7 @@ class TeleService:
         people,
         chat_ids: Iterable[int],
         screens,
+        household=None,
     ):
         self.link = link
         self.devices = tuple(normalize(alias) for alias in devices)
@@ -28,15 +29,29 @@ class TeleService:
         self.chat_ids = sorted(chat_ids)
         # El `ScreenStore` que dice qué alarma suena en cada tele.
         self.screens = screens
+        self.household = household
 
     def setup(self) -> dict:
-        """Las teles con pantalla y la gente de la casa, para configurar la app."""
-        names = self.people.names()
-        return {
-            "devices": list(self.devices),
-            "people": [
+        """Las teles con pantalla, el padrón y los chats de la casa, para configurar la app."""
+        persons = self.household.list() if self.household is not None else []
+        if persons:
+            people = [
+                {"chat_id": person.chat_id, "name": person.name}
+                for person in persons
+                if person.chat_id is not None
+            ]
+        else:
+            names = self.people.names()
+            people = [
                 {"chat_id": chat_id, "name": display_name(chat_id, names)}
                 for chat_id in self.chat_ids
+            ]
+        return {
+            "devices": list(self.devices),
+            "people": people,
+            "persons": [
+                {"id": person.id, "name": person.name, "chat_id": person.chat_id}
+                for person in persons
             ],
         }
 

@@ -9,12 +9,13 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import ar.elroso.domotica.tele.core.Person
+import ar.elroso.domotica.tele.core.Owner
+import ar.elroso.domotica.tele.core.Owners
 import ar.elroso.domotica.tele.core.TeleChoice
 import ar.elroso.domotica.tele.core.TeleFailure
 import kotlin.concurrent.thread
 
-/** Primer uso: se elige con el control qué tele es y de quién, con lo que manda `setup`. */
+/** Primer uso o cambio: se elige con el control qué tele es y de quién, con lo que manda `setup`. */
 class SetupActivity : Activity() {
 
     private lateinit var title: TextView
@@ -38,7 +39,7 @@ class SetupActivity : Activity() {
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
-                    onSuccess = { chooseDevice(it.devices, it.people) },
+                    onSuccess = { chooseDevice(it.devices, Owners.of(it)) },
                     onFailure = {
                         Tele.log("no pude leer la configuración del CT: ${it.message}")
                         show("No pude hablar con la casa (${it.message}).", "Reintentar" to { load() })
@@ -48,30 +49,33 @@ class SetupActivity : Activity() {
         }
     }
 
-    private fun chooseDevice(devices: List<String>, people: List<Person>) {
+    private fun chooseDevice(devices: List<String>, owners: List<Owner>) {
         if (devices.isEmpty()) {
             show("La casa no tiene teles con pantalla.", "Reintentar" to { load() })
             return
         }
-        show("¿Qué tele es esta?", *devices.map { alias -> alias to { choosePerson(alias, people) } }.toTypedArray())
+        show("¿Qué tele es esta?", *devices.map { alias -> alias to { chooseOwner(alias, owners) } }.toTypedArray())
     }
 
-    private fun choosePerson(alias: String, people: List<Person>) {
-        if (people.isEmpty()) {
-            finishSetup(TeleChoice(alias, null))
+    private fun chooseOwner(alias: String, owners: List<Owner>) {
+        if (owners.isEmpty()) {
+            finishSetup(TeleChoice.of(alias, null))
             return
         }
         show(
             "¿De quién es la tele $alias?",
-            *people.map { person -> person.name to { finishSetup(TeleChoice(alias, person.chatId)) } }.toTypedArray(),
+            *owners.map { owner -> owner.label to { finishSetup(TeleChoice.of(alias, owner.caller)) } }.toTypedArray(),
         )
     }
 
-    /** Guarda la elección, arranca el servicio y pasa al kiosco. */
+    /** Guarda la elección, arranca el servicio (de nuevo si cambió la tele) y pasa al kiosco. */
     private fun finishSetup(choice: TeleChoice) {
+        val before = Tele.choice(this)
         Tele.save(this, choice)
-        Tele.log("primer uso: tele ${choice.alias}, persona ${if (choice.chatId == null) "sin elegir" else "elegida"}")
+        val owner = if (choice.caller == null) "sin elegir" else "elegida"
+        Tele.log("${if (before.ready) "cambio" else "primer uso"}: tele ${choice.alias}, persona $owner")
         try {
+            if (before.ready && before.alias != choice.alias) stopService(Intent(this, TeleService::class.java))
             TeleService.start(this)
         } catch (e: Exception) {
             Tele.log("no pude arrancar el servicio: ${e.javaClass.simpleName}: ${e.message}")

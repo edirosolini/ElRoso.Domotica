@@ -1222,6 +1222,7 @@ def main() -> None:
                     people=people,
                     chat_ids=config.allowed_chat_ids,
                     screens=pages.store,
+                    household=household,
                 ),
             ),
         )

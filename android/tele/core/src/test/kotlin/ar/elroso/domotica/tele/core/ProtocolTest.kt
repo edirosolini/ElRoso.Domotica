@@ -26,6 +26,21 @@ class ProtocolTest {
 
         assertEquals(emptyList<String>(), setup.devices)
         assertEquals(emptyList<Person>(), setup.people)
+        assertEquals(emptyList<Resident>(), setup.persons)
+    }
+
+    @Test
+    fun parsesTheRosterWithAndWithoutChat() {
+        val body = """
+            {"devices": ["comedor"],
+             "people": [{"chat_id": 11, "name": "Papá"}],
+             "persons": [{"id": 3, "name": "Enano", "chat_id": null}, {"id": 1, "name": "Papá", "chat_id": 11}]}
+        """
+
+        val setup = Protocol.parseSetup(body)
+
+        assertEquals(listOf(Resident(3, "Enano", null), Resident(1, "Papá", 11)), setup.persons)
+        assertEquals(listOf(Person(11, "Papá")), setup.people)
     }
 
     @Test
@@ -106,7 +121,8 @@ class ProtocolTest {
 
     @Test
     fun encodesTheCommand() {
-        assertEquals("""{"chat_id":-22,"data":"callar 7"}""", Protocol.encodeCommand(-22, "callar 7"))
+        assertEquals("""{"chat_id":-22,"data":"callar 7"}""", Protocol.encodeCommand(Caller.Chat(-22), "callar 7"))
+        assertEquals("""{"person_id":3,"data":"callar 7"}""", Protocol.encodeCommand(Caller.Person(3), "callar 7"))
     }
 
     @Test

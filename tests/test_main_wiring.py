@@ -1369,6 +1369,21 @@ def test_the_tele_app_registers_and_polls_on_the_one_database(wired, tmp_path, m
     assert tele.link.alive("comedor")
 
 
+def test_the_tele_app_offers_the_padron_of_the_screen(wired, tmp_path, monkeypatch):
+    """La persona que carga la pantalla aparece en el `setup` de la app de la tele."""
+    web = _wired_web(monkeypatch, tmp_path, HOUSE + "SCREEN_DEVICES=comedor\n")
+    assert web.tele.household is web.control.household
+
+    created = web.handle(Request.from_target(
+        "POST", "/api/persons", headers=WRITE,
+        body=json.dumps({"name": "Enano"}).encode("utf-8")))
+    enano = json.loads(created.body)["id"]
+    setup = json.loads(web.handle(Request(method="GET", path="/api/tele/setup")).body)
+
+    assert setup["persons"] == [{"id": enano, "name": "Enano", "chat_id": None}]
+    assert setup["people"] == []
+
+
 def test_without_a_token_there_is_no_tele_app(wired, tmp_path, monkeypatch):
     built = []
     monkeypatch.setattr(main.TeleStore, "__init__", lambda self, *a, **k: built.append(a))
