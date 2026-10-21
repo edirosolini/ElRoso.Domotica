@@ -51,6 +51,7 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /estado                         cómo están los servicios vigilados
 /equipos                        qué equipos hay y cuál está activo
 /usar tv                        cambia el equipo por defecto
+/depurar                        cuenta teles y avisos que sobran; borra solo al confirmar
 ```
 
 **Horario de descanso.** De **23:00 a 07:00** por defecto, nada suena en voz alta: el aviso llega igual a
@@ -282,6 +283,7 @@ armá otro menú sin carne                  →  /menu nuevo sin carne
 pasá a compras lo del menú de la semana   →  /menu compras semana
 llamá a todos a cenar                     →  /llamar en todos a cenar
 poné la pantalla en la tele de la recámara  →  /pantalla en recamara
+limpiá las teles viejas                   →  /depurar teles
 ```
 
 **Ejecuta y te dice qué entendió**, no pregunta antes. La respuesta arranca con

@@ -78,6 +78,9 @@ existen ya saben rechazar un argumento malo.
   sumaron cuatro ejemplos —tres de `menu` y el negativo «agregá milanesas a compras» →
   `agregar`: un ítem suelto no es el menú— y los mismos cuatro casos a la medición. Seis
   paráfrasis que no están en el prompt también salieron bien.
+- 🔴 **Con `depurar` la medición pasa a cuarenta y siete casos**: el ejemplo y el caso «limpiá
+  las teles viejas» → `depurar teles`. Medido el 2026-10-21: **cuarenta y siete de cuarenta y
+  siete comandos y treinta y cinco de treinta y cinco payloads**.
 - ⚠️ **`measure_router.py` agrega `/opt/domotica/src` adelante de `sys.path`**, y eso le gana a
   `PYTHONPATH`: corrido tal cual mide el prompt **desplegado**. Para medir una rama, la copia
   del script tiene que apuntar a la copia del src.
@@ -88,7 +91,7 @@ existen ya saben rechazar un argumento malo.
 - ⚠️ **Un `Read timed out` de la API en la medición no es el prompt**: el router corta a los
   seis segundos y el caso sale como `RouteError`. Se vuelve a correr.
 - ⚠️ **La medición usa el proveedor y el modelo barato del env del CT**, por `build_model`, y
-  los imprime al empezar. Con un modelo que la API no acepta, las cuarenta y seis llamadas
+  los imprime al empezar. Con un modelo que la API no acepta, las cuarenta y siete llamadas
   fallan y el resultado es cero: es el modelo, no el prompt. Con `LLM_PROVIDER=anthropic` y
   Claude Haiku 5.5, el mismo prompt dio treinta y nueve o cuarenta de cuarenta y dos
   (2026-10-20): por eso el router sigue en Gemini. Ver **Proveedor del texto**, en
@@ -108,7 +111,7 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; la última corrida dio cuarenta y seis de cuarenta y seis con los comandos que se sumaron después. Si se toca el
+  limpios; la última corrida dio cuarenta y siete de cuarenta y siete con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
@@ -246,7 +249,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (la última corrida, cuarenta y seis de cuarenta y seis) y un segundo prompt es un segundo
+  prompt del router **está medido** (la última corrida, cuarenta y siete de cuarenta y siete) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
@@ -279,21 +282,24 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
 
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 41 nombres: 31 comandos y 10 **alias** (`help`, `tiempo`,
+`ALL_COMMANDS` tiene 42 nombres: 32 comandos y 10 **alias** (`help`, `tiempo`,
 `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
 funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
 
-🔴 **El menú de Telegram tiene 10, no los 31.** `recordar` entró como el décimo, y es el
+🔴 **El menú de Telegram tiene 10, no los 32.** `recordar` entró como el décimo, y es el
 tope que fija el test. Con los 18, la lista que sale al escribir `/`
 era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
 argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
 `parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
-`sacar`, `traducir`, `posponer`, `pastillas`, `vacaciones`, `turnos`, `pantalla`, `menu`— **siguen andando escritos** y se alcanzan sin barra por el router.
+`sacar`, `traducir`, `posponer`, `pastillas`, `vacaciones`, `turnos`, `pantalla`, `menu`, `depurar`— **siguen andando escritos** y se alcanzan sin barra por el router.
 
 - **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
   va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
   ata las dos mitades.
 - **`/lista` nombra a `/cancelar` y `/compras` nombra a `/sacar`.** Son las salidas del menú
   que dejan a otro comando sin puerta: quien ve la lista ahí mismo lee cómo borrar de ella.
+- **`depurar` está en `HELP` y no en el menú**: es solo para los chats de alertas. Sus botones
+  `depurar ok <token>` y `depurar no <token>` los desvía `press()` a `purge_confirm()` y
+  `purge_drop()`. Ver `.claude/rules/depurador.md`.
 - **`hecho`, `borrar`, `callar` y `confirmar` no están en `ALL_COMMANDS`**: son solo botones, en
   `Commands.press()`. Ni se escriben ni los nombra el router.

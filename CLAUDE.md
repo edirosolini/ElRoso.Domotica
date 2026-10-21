@@ -39,6 +39,7 @@ Domotica/
 │   ├── translate.py     # traducir, solo para leer
 │   ├── people.py        # el nombre visible de cada chat de la casa
 │   ├── screen.py        # la pantalla de la casa en las teles: kiosco y vista de alarma
+│   ├── cleanup.py       # el depurador: teles viejas y avisos que ya no sirven
 │   ├── tele.py          # las teles con la app de la casa: registro, versión y latido
 │   ├── api.py           # servidor HTTP de la LAN: /say para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
@@ -204,7 +205,7 @@ ssh root@192.168.68.60 'pct push 300 /tmp/measure_router.py /tmp/measure_router.
 ```
 
 Corre **adentro del CT** porque ahí está la clave: pasarla por línea de comandos la dejaría
-en el historial del shell, igual que el token de `domotica-say`. Son cuarenta y seis llamadas
+en el historial del shell, igual que el token de `domotica-say`. Son cuarenta y siete llamadas
 al modelo barato, con pausa para no chocar el límite por minuto.
 
 El proceso es `python -m homeauto.main`, sin entry point instalado.
@@ -364,4 +365,5 @@ Se cargan solas al trabajar los archivos de su `paths:`. Son tan reglas del proy
 - `.claude/rules/web.md` — API HTTP de la LAN y la pantalla web (agenda, kiosco, escritura, control).
 - `.claude/rules/pantalla-tv.md` — DashCast: `/pantalla`, restaurar tras un anuncio y la vista de alarma.
 - `.claude/rules/app-tele.md` — la app de la tele: registro en el CT, la app Android y su compilación.
+- `.claude/rules/depurador.md` — `/depurar`: qué teles y avisos sobran, qué nunca se toca y cómo se confirma.
 - `.claude/rules/cableado.md` — el composition root `main()` y su test.
