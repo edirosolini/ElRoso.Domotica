@@ -39,6 +39,7 @@ Domotica/
 │   ├── translate.py     # traducir, solo para leer
 │   ├── people.py        # el nombre visible de cada chat de la casa
 │   ├── screen.py        # la pantalla de la casa en las teles: kiosco y vista de alarma
+│   ├── tele.py          # las teles con la app de la casa: registro, versión y latido
 │   ├── api.py           # servidor HTTP de la LAN: /say para otros sistemas
 │   ├── bot/             # comandos, sin nada de Telegram adentro
 │   ├── schedule/        # timers, alarmas, preferencias por chat
@@ -104,7 +105,7 @@ pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda
 
 ### Estado
 
-Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con diecinueve tablas
+Un solo SQLite, `$STATE_DIRECTORY/jobs.db` (`/var/lib/domotica/jobs.db`), con veinte tablas
 independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 
 | Clase | Para qué |
@@ -128,6 +129,7 @@ independientes y una clase por tabla, cada una dueña de su `SCHEMA`:
 | `quiet.AwayStore` | hasta cuándo dura el modo vacaciones (`away`) |
 | `screen.ScreenStore` | qué alarma prendió cada tele y cuándo se cierra (`screens`) |
 | `meals.MealStore` | el plato de cada día y comida del menú, ocho semanas (`meal_plans`) |
+| `tele.TeleStore` | cada tele con la app: versión, capacidades, último latido y dirección (`teles`) |
 
 Comparten archivo pero no se conocen entre sí. Cada una crea su tabla al construirse, así que
 un despliegue nuevo no necesita migración.
@@ -357,4 +359,5 @@ Se cargan solas al trabajar los archivos de su `paths:`. Son tan reglas del proy
 - `.claude/rules/consultas.md` — preguntas con búsqueda, cuentas y unidades, listas, menú semanal y traducción.
 - `.claude/rules/web.md` — API HTTP de la LAN y la pantalla web (agenda, kiosco, escritura, control).
 - `.claude/rules/pantalla-tv.md` — DashCast: `/pantalla`, restaurar tras un anuncio y la vista de alarma.
+- `.claude/rules/app-tele.md` — la app de la tele: registro, latido y consulta periódica.
 - `.claude/rules/cableado.md` — el composition root `main()` y su test.
