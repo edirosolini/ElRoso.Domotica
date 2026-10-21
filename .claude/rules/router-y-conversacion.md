@@ -78,9 +78,14 @@ existen ya saben rechazar un argumento malo.
   sumaron cuatro ejemplos —tres de `menu` y el negativo «agregá milanesas a compras» →
   `agregar`: un ítem suelto no es el menú— y los mismos cuatro casos a la medición. Seis
   paráfrasis que no están en el prompt también salieron bien.
-- 🔴 **Con `depurar` la medición pasa a cuarenta y siete casos**: el ejemplo y el caso «limpiá
-  las teles viejas» → `depurar teles`. Medido el 2026-10-21: **cuarenta y siete de cuarenta y
-  siete comandos y treinta y cinco de treinta y cinco payloads**.
+- 🔴 **Con `depurar` la medición pasó a cuarenta y siete casos** («limpiá las teles viejas» →
+  `depurar teles`), y con «para <persona>» a cincuenta y uno: «recordale a China…» →
+  `recordar para China`, «recordale a Papá en media hora…» → `timer para Papá`, «recordales
+  a todos…» → `recordar para todos`, y el negativo «recordame para mañana comprar pan», que
+  no puede llevar «para mañana» adelante. Medido el 2026-10-21: **cincuenta y uno de
+  cincuenta y uno comandos y treinta y nueve de treinta y nueve payloads**.
+- **Un fragmento con «!» adelante es un payload que no tiene que aparecer** (`payload_ok()`):
+  `"!para mañana"` falla si el argumento lo trae, y la línea dice «sobra» en vez de «falta».
 - ⚠️ **`measure_router.py` agrega `/opt/domotica/src` adelante de `sys.path`**, y eso le gana a
   `PYTHONPATH`: corrido tal cual mide el prompt **desplegado**. Para medir una rama, la copia
   del script tiene que apuntar a la copia del src.
@@ -91,7 +96,7 @@ existen ya saben rechazar un argumento malo.
 - ⚠️ **Un `Read timed out` de la API en la medición no es el prompt**: el router corta a los
   seis segundos y el caso sale como `RouteError`. Se vuelve a correr.
 - ⚠️ **La medición usa el proveedor y el modelo barato del env del CT**, por `build_model`, y
-  los imprime al empezar. Con un modelo que la API no acepta, las cuarenta y siete llamadas
+  los imprime al empezar. Con un modelo que la API no acepta, las cincuenta y una llamadas
   fallan y el resultado es cero: es el modelo, no el prompt. Con `LLM_PROVIDER=anthropic` y
   Claude Haiku 5.5, el mismo prompt dio treinta y nueve o cuarenta de cuarenta y dos
   (2026-10-20): por eso el router sigue en Gemini. Ver **Proveedor del texto**, en
@@ -111,8 +116,14 @@ existen ya saben rechazar un argumento malo.
   modelo dejaba el verbo adentro del payload: "decí que ya llegué" volvía como
   `decir → "decí que ya llegué"` y la casa se decía a sí misma la orden. Con cinco ejemplos,
   medido contra el endpoint real: **dieciséis de dieciséis comandos** y los tres payloads
-  limpios; la última corrida dio cuarenta y siete de cuarenta y siete con los comandos que se sumaron después. Si se toca el
+  limpios; la última corrida dio cincuenta y uno de cincuenta y uno con los comandos que se sumaron después. Si se toca el
   prompt, se vuelve a medir.
+- 🔴 **«para <persona>» lo pone el router adelante del argumento**, después del equipo si lo
+  hay, en `timer`, `alarma` y `recordar`: «recordale a China…» es `para China diaria 8:00 …`.
+  La regla del prompt aclara que «para mañana» y «para las ocho» no son una persona: el
+  comando solo consume el «para» si lo que sigue es del padrón, pero un «para mañana» delante
+  de la hora deja una orden que no parsea. Ver **Para quién suena**, en
+  `.claude/rules/programado.md`.
 - 🔴 **El router usa el modelo barato y sin búsqueda.** Interpretar no es averiguar, y cada
   mensaje suelto paga esta llamada: medido, **un segundo y tres**. Con búsqueda serían treinta
   segundos delante de "bajá el volumen". El que sí busca es `ASK_MODEL`, y solo cuando la
@@ -249,7 +260,7 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   del dueño de la casa, tomada junto con la de preguntar.
 - 🔴 **El hilo se vuelve a rutear entero, con el mismo prompt.** La alternativa era un segundo
   prompt que fusionara la respuesta con el argumento a medio armar; se descartó porque el
-  prompt del router **está medido** (la última corrida, cuarenta y siete de cuarenta y siete) y un segundo prompt es un segundo
+  prompt del router **está medido** (la última corrida, cincuenta y uno de cincuenta y uno) y un segundo prompt es un segundo
   comportamiento que nadie midió. El precio es **una llamada más por turno**: un mensaje
   contestando una pregunta paga dos, la que decide si es un comando nuevo y la del hilo.
 - 🔴 **Un dato no se pregunta dos veces.** Si la respuesta no lo trajo, se sigue de largo y el
@@ -272,6 +283,11 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   Si se separan, el bot pregunta por algo que ya tenía o ejecuta algo que no puede.
   `tests/bot/test_conversation.py` los ata: lo que `slots` llama incompleto, el comando de
   verdad tiene que rechazarlo.
+- **La persona nunca se pregunta.** `slots.missing()` recibe `unassign`
+  (`Commands._without_assignee()`) y en `timer`, `alarma` y `recordar` (`slots.ASSIGNABLE`)
+  mira el argumento sin el «para X»: si no, «para China» se leería como la hora o el mensaje
+  que falta. Con un nombre fuera del padrón saca igual las palabras del nombre, y el comando
+  contesta el error.
 - 🔴 **Las preguntas van al chat, nunca al parlante**, así que son la excepción a la regla de
   los dígitos: "¿Cuál cancelo? El número sale en /lista" se lee, no se dice.
 - ⚠️ **La fidelidad de `decir` pasa a medirse contra el hilo entero.** La respuesta llega en el

@@ -279,6 +279,8 @@ basura». `schedule/rota.py` es la lógica; los nombres viven en dos columnas de
 - **Solo se turna lo que repite.** Un timer, una alarma de una sola vez o un pospuesto se
   rechazan: sonar una vez no tiene turnos.
 - **Un solo nombre se acepta.** No rota, pero el aviso dice a quién le toca.
+- ⚠️ **`/turnos` avisa los nombres que no son del padrón** (`Household.by_name()`): «⚠️ No está
+  en el padrón: X. En su semana el aviso no va a su chat.» Igual los guarda.
 - **Cualquier chat permitido turna cualquier job**, como `/pastillas`: la tarea es de la casa.
 - `/turnos 7 off` lo corta y `/turnos` lista lo que se turna en toda la casa, con a quién le
   toca la próxima. `/lista` lo muestra como « · turnos Cin, Die».
@@ -310,9 +312,9 @@ lo creó. Entran por `_add_missing_columns` con `none`: **lo que ya existía es 
 como sonaba todo antes**. `store.check_assignee()` rechaza un valor que no existe, una
 persona sin id o un id sin persona.
 
-**La pantalla asigna** con «Para» y muestra para quién es cada aviso en la agenda, el
-kiosco, la vista de alarma y `/control`. ⚠️ **Telegram todavía no asigna** («para X»). Ver
-**Escribir desde la pantalla**, en `.claude/rules/web.md`.
+**Asignan Telegram, con «para X», y la pantalla, con «Para»**; además, el turno de alguien del
+padrón. La pantalla muestra para quién es cada aviso en la agenda, el kiosco, la vista de alarma
+y `/control`: ver **Escribir desde la pantalla**, en `.claude/rules/web.md`.
 
 | Asignación | Chats que reciben el aviso | El parlante dice |
 | --- | --- | --- |
@@ -349,6 +351,25 @@ kiosco, la vista de alarma y `/control`. ⚠️ **Telegram todavía no asigna** 
   pospuesto copia `assignee` y `assignee_id`, no la audiencia: se resuelve de nuevo al sonar.
 - **Repetir una alarma vuelve a buscar el nombre** por `assignee_id`; si la persona ya no está,
   suena sin nombre a los mismos chats.
+- **En Telegram va `para <persona|todos|nadie>`** en `/timer`, `/alarma` y `/recordar`
+  (`Commands._split_assignee()`). El orden es fijo: `en <equipo>`, `para …`, días o
+  `mensual`, la hora y el mensaje: `/alarma en comedor para China lun-vie 7:30 arriba`.
+- **El «para» se consume solo si sigue «todos», «nadie» o una persona del padrón**, sin
+  distinguir mayúsculas (`casefold()`). Un nombre puede tener varias palabras y gana el más
+  largo que coincida. Si no, el texto queda como estaba y lo lee el parser de la hora.
+- 🔴 **Un nombre que no está en el padrón es un error, no un mensaje**: si después de «para»
+  vienen de una a tres palabras con forma de nombre (`SAYABLE_NAME`) y después algo que se
+  puede agendar, contesta ««<nombre>» no está en el padrón: cargalo en Personas, en
+  /control, o usá «para todos».» (`UnknownPerson`) y no agenda nada. Sin padrón, todo nombre
+  cae acá; «para todos» y «para nadie» andan igual.
+- ⚠️ **Un artículo o una palabra de tiempo después de «para» no se toma como nombre**
+  (`ARTICLES` en `commands.py`; `timespec.is_time_word()`: `TIME_WORDS`, días y `lun-vie`):
+  «para las 8:00 …», «para el lunes …», «para hoy …» o «para dentro de 10m …» contestan el
+  error de siempre del parser, no el del padrón. Una persona que se llame «Tarde» o «Noche» y
+  esté cargada se asigna igual: el padrón se mira antes.
+- **La respuesta y `/lista` suman « · para <nombre>»** o « · para todos». En `/lista`, una
+  persona que ya no está no se muestra.
+- **El autor (`author_id`) es la persona del padrón dueña del chat** que lo pidió, o ninguna.
 - 🔴 **Borrar una persona pasa sus avisos a «nadie»** (`Store.reassign()`, por el
   `before_remove` de `Household` que arma `main()`), antes de borrar la fila. Si falla, la
   persona no se borra. Lo que ya sonó conserva su foto.

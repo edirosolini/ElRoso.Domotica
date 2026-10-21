@@ -14,6 +14,7 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /recordar diaria 8:00 pastilla  recordatorio todos los días
 /recordar lun-vie 7:30 colegio  recordatorio solo esos días
 /recordar mensual 10 9:00 luz   recordatorio el 10 de cada mes
+/recordar para China diaria 8:00 pastilla  para alguien de la casa; también «para todos»
 /pastillas                      cuántas quedan de cada remedio
 /pastillas 7 enalapril 30       cada «Hecho» del recordatorio #7 descuenta una
 /pastillas enalapril +30        repone
@@ -31,6 +32,7 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /alarma lun-vie 5:30 arriba     para despertarse, solo esos días
 /alarma hábiles 6:30 arriba     de lunes a viernes, salvo feriados
 /alarma mensual 10 9:00 luz     el 10 de cada mes
+/alarma en comedor para China 7:30 arriba  en ese equipo, para esa persona
 /lista                          lo que está programado
 /cancelar 3                     cancela por número
 /posponer                       repite en 10 minutos la alarma que acaba de sonar
@@ -223,7 +225,17 @@ nombres se separan por comas o por «y» y van solo con letras y espacios, porqu
 voz alta; un solo nombre también vale. Solo se turna lo que repite, y lo puede hacer
 cualquier chat. Volver a correr `/turnos` sobre el mismo número arranca la cuenta de nuevo
 esta semana; `/turnos 7 off` lo corta y `/lista` muestra los nombres. No se puede cambiar el
-turno a mano ni saltear una semana.
+turno a mano ni saltear una semana. Si un nombre no es de una persona cargada en la casa, la
+respuesta lo avisa: en su semana el aviso no va a su chat.
+
+**Para quién es.** `/timer`, `/alarma` y `/recordar` aceptan `para <persona>`, `para todos`
+o `para nadie`, después de `en <equipo>` y antes de los días y la hora:
+`/alarma en comedor para China lun-vie 7:30 arriba`. Al sonar, uno de una persona con
+Telegram le llega solo a ella, y el parlante dice «China, arriba». La persona tiene que estar
+cargada en «👪 Personas», en `/control`; los nombres de varias palabras valen y no importan
+las mayúsculas. Con un nombre que no está, contesta que no está en el padrón y no programa
+nada. La respuesta y `/lista` muestran « · para China». Sin `para`, es como siempre: para
+nadie en particular.
 
 **Llamar a alguien en el aviso.** Un mensaje que empieza con el nombre entre corchetes,
 `/recordar diaria 9:00 [Papá] tomar medicación`, suena y se escribe «Papá, tomar medicación».
@@ -274,6 +286,8 @@ despertame a las 7 y media                →  /alarma 7:30 despertame
 recordame la pastilla todos los días a las 8  →  /recordar diaria 8:00 la pastilla
 recordame el 10 de cada mes a las nueve pagar la luz  →  /recordar mensual 10 9:00 pagar la luz
 recordame los días hábiles a las siete salida al colegio  →  /recordar hábiles 7:00 salida al colegio
+recordale a China tomar la pastilla todos los días a las ocho  →  /recordar para China diaria 8:00 tomar la pastilla
+recordale a Papá en media hora sacar la ropa  →  /timer para Papá 30m sacar la ropa
 bajá el volumen a 40                      →  /volumen 40
 callate una hora                          →  /silencio 1h
 nos vamos de vacaciones hasta el 25 de octubre  →  /vacaciones hasta 25/10
