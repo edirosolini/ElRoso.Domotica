@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Callable, Iterable
 from homeauto.schedule.rota import turn_for, with_turn
 from homeauto.schedule.history import CANCEL, DONE, HOLIDAY, OFF, SNOOZE, Entry
 from homeauto.schedule.store import (
-    ALARM, DAILY, MONTHLY, ONCE, WEEKLY, Job, next_month, next_run, on_monthday,
+    ALARM, DAILY, MONTHLY, NOBODY, ONCE, WEEKLY, Job, next_month, next_run, on_monthday,
 )
 from homeauto.timespec import next_weekday
 
@@ -37,6 +37,9 @@ class Item:
     job_id: int | None = None
     # Nombre del feriado por el que no suena; vacío si viene del historial.
     holiday: str | None = None
+    # Para quién es, como en el job o en la foto de lo que sonó.
+    assignee: str = NOBODY
+    assignee_id: int | None = None
 
 
 def item_kind(kind: str, repeat: str) -> str:
@@ -71,6 +74,7 @@ def occurrences_between(
                     Item(
                         at=at, kind=kind, message=message, job_id=job.id,
                         holiday=holiday.name if holiday is not None else None,
+                        assignee=job.assignee, assignee_id=job.assignee_id,
                     )
                 )
             at = next_run(job, at)
@@ -106,4 +110,6 @@ def from_history(entry: Entry) -> Item:
         cancelled=entry.closed == CANCEL,
         off=entry.closed == OFF,
         holiday="" if entry.closed == HOLIDAY else None,
+        assignee=entry.assignee,
+        assignee_id=entry.assignee_id,
     )

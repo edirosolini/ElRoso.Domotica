@@ -324,6 +324,140 @@ def test_a_chat_that_fails_does_not_stop_the_others(parts):
     assert told == [EZE]
 
 
+# --- para quién es y a nombre de quién ---
+
+
+def test_what_is_created_without_choosing_is_for_nobody(parts):
+    created = parts["build"]().create(payload())
+
+    job = parts["store"].get(created["id"])
+    assert (job.assignee, job.assignee_id) == ("none", None)
+    assert (created["assignee"], created["assignee_id"], created["assignee_name"]) == (
+        "none", None, None,
+    )
+
+
+def test_a_job_can_be_for_everyone(parts):
+    created = parts["build"]().create(payload(assignee="all"))
+
+    job = parts["store"].get(created["id"])
+    assert (job.assignee, job.assignee_id) == ("all", None)
+    assert created["assignee"] == "all"
+
+
+def test_a_job_can_be_for_a_person_of_the_padron(parts):
+    jobs = parts["build"]()
+    china = jobs.add_person({"name": "China"})
+
+    created = jobs.create(payload(assignee="person", assignee_id=china["id"]))
+
+    job = parts["store"].get(created["id"])
+    assert (job.assignee, job.assignee_id) == ("person", china["id"])
+    assert (created["assignee"], created["assignee_id"], created["assignee_name"]) == (
+        "person", china["id"], "China",
+    )
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"assignee": "alguien"},
+        {"assignee": "person"},
+        {"assignee": "person", "assignee_id": 99},
+        {"assignee": "person", "assignee_id": "1"},
+        {"assignee": "all", "assignee_id": 1},
+    ],
+)
+def test_an_assignment_that_does_not_exist_is_refused(parts, bad):
+    jobs = parts["build"]()
+    jobs.add_person({"name": "China"})
+
+    with pytest.raises(WebError):
+        jobs.create(payload(**bad))
+    assert parts["store"].pending() == []
+
+
+def test_with_an_empty_padron_only_nobody_or_everyone_can_be_chosen(parts):
+    jobs = parts["build"]()
+
+    with pytest.raises(WebError):
+        jobs.create(payload(assignee="person", assignee_id=1))
+    assert jobs.create(payload(assignee="all"))["assignee"] == "all"
+
+
+def test_editing_changes_who_it_is_for(parts):
+    jobs = parts["build"]()
+    china = jobs.add_person({"name": "China"})
+    created = jobs.create(payload())
+
+    updated = jobs.update(created["id"], payload(assignee="person", assignee_id=china["id"]))
+    back = jobs.update(created["id"], payload(assignee="none"))
+
+    assert updated["assignee_name"] == "China"
+    assert (back["assignee"], back["assignee_id"]) == ("none", None)
+
+
+def test_editing_without_saying_for_whom_keeps_it(parts):
+    jobs = parts["build"]()
+    created = jobs.create(payload(assignee="all"))
+
+    updated = jobs.update(created["id"], payload())
+
+    assert updated["assignee"] == "all"
+
+
+def test_a_person_with_a_chat_can_be_the_author(parts):
+    jobs = parts["build"]()
+    eze = jobs.add_person({"name": "Ezequiel", "chat_id": EZE})
+
+    created = jobs.create(payload(author=None, author_id=eze["id"]))
+
+    job = parts["store"].get(created["id"])
+    assert (job.chat_id, job.author_id) == (EZE, eze["id"])
+    assert (created["author"], created["author_id"], created["author_name"]) == (
+        EZE, eze["id"], "Ezequiel",
+    )
+    assert "Ezequiel programó desde la pantalla" in parts["told"][0][1]
+
+
+def test_an_author_without_a_chat_keeps_chat_zero(parts):
+    jobs = parts["build"]()
+    abuela = jobs.add_person({"name": "Abuela"})
+    payload_without_chat = payload(author_id=abuela["id"])
+    del payload_without_chat["author"]
+
+    created = jobs.create(payload_without_chat)
+
+    job = parts["store"].get(created["id"])
+    assert (job.chat_id, job.author_id) == (0, abuela["id"])
+    assert created["author_name"] == "Abuela"
+    assert str(job.id) in parts["timer"].armed
+
+
+def test_a_chat_of_the_padron_as_author_names_its_person(parts):
+    jobs = parts["build"]()
+    eze = jobs.add_person({"name": "Ezequiel", "chat_id": EZE})
+
+    created = jobs.create(payload(author=EZE))
+
+    assert parts["store"].get(created["id"]).author_id == eze["id"]
+    assert created["author_name"] == "Ezequiel"
+
+
+@pytest.mark.parametrize(
+    "author",
+    [{"author": None, "author_id": 99}, {"author": None, "author_id": "1"},
+     {"author": EZE, "author_id": 1}, {"author": None}],
+)
+def test_an_author_that_is_not_of_the_house_is_refused(parts, author):
+    jobs = parts["build"]()
+    jobs.add_person({"name": "Abuela"})
+
+    with pytest.raises(WebError):
+        jobs.create(payload(**author))
+    assert parts["store"].pending() == []
+
+
 # --- leer, editar y borrar ---
 
 
@@ -342,7 +476,11 @@ def test_a_job_is_read_back_as_the_form_needs_it(parts):
         "skip_holidays": False,
         "device": "comedor",
         "author": EZE,
+        "author_id": None,
         "author_name": "Eze",
+        "assignee": "none",
+        "assignee_id": None,
+        "assignee_name": None,
     }
 
 
@@ -530,3 +668,18 @@ def test_adding_is_read_only_without_allowed_chats(parts):
     with pytest.raises(ReadOnly):
         parts["build"](chat_ids=()).add_items("compras", "leche")
     assert parts["lists"].items("compras") == []
+
+
+def test_the_notice_to_the_chats_says_who_it_is_for(parts):
+    jobs = parts["build"]()
+    china = jobs.add_person({"name": "China"})
+
+    created = jobs.create(payload(assignee="person", assignee_id=china["id"]))
+    jobs.update(created["id"], payload(assignee="all"))
+    jobs.create(payload())
+
+    created_text, changed_text, nobody_text = [text for chat, text, _ in parts["told"]
+                                               if chat == EZE]
+    assert "· para China — «arriba»" in created_text
+    assert "· para todos — «arriba»" in changed_text
+    assert "para" not in nobody_text

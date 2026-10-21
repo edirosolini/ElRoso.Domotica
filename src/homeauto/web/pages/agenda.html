@@ -25,6 +25,9 @@
       <button type="button" data-view="timeGridDay">Día</button>
       <button type="button" data-view="listWeek">Lista</button>
     </div>
+    <label class="who" id="filter-label" hidden><span>Ver</span>
+      <select id="filter" aria-label="Ver lo de"></select>
+    </label>
     <a class="ghost" href="/pantalla">Pantalla</a>
     <a class="ghost" href="/control">Control</a>
   </header>
@@ -88,6 +91,12 @@
     </div>
     <label class="holiday-check" id="editor-holidays-label" hidden>
       <input type="checkbox" id="editor-holidays"> <span>No suena en feriados</span>
+    </label>
+    <label class="field"><span>Para</span>
+      <select id="editor-assignee">
+        <option value="none">Nadie</option>
+        <option value="all">Todos</option>
+      </select>
     </label>
     <label class="field"><span>Equipo</span>
       <select id="editor-device">

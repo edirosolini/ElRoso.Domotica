@@ -125,6 +125,11 @@
     return "🔊 La casa habla";
   }
 
+  // La cola «· para X» de lo que es de alguien; vacía si no.
+  function forSuffix(item) {
+    return item.for ? " · para " + item.for : "";
+  }
+
   // Lo urgente en el orden en que se muestra, cada uno con sus botones.
   function urgentItems(live) {
     var items = [];
@@ -133,17 +138,20 @@
     var ringing = live.ringing || [];
     for (i = 0; i < ringing.length; i++) {
       items.push({ kind: "ringing", title: "⏰ " + ringing[i].message,
-        meta: "Sonando " + sinceText(ringing[i].since, now), actions: ringing[i].actions });
+        meta: "Sonando " + sinceText(ringing[i].since, now) + forSuffix(ringing[i]),
+        actions: ringing[i].actions });
     }
     var awaiting = live.awaiting || [];
     for (i = 0; i < awaiting.length; i++) {
       items.push({ kind: "awaiting", title: "🔔 " + awaiting[i].message,
-        meta: "Espera su «Hecho» · sonó " + sinceText(awaiting[i].since, now),
+        meta: "Espera su «Hecho» · sonó " + sinceText(awaiting[i].since, now) +
+          forSuffix(awaiting[i]),
         actions: awaiting[i].actions });
     }
     if (live.snooze) {
       items.push({ kind: "snooze", title: "↻ " + live.snooze.message,
-        meta: "Sonó " + sinceText(live.snooze.since, now) + " · se puede posponer",
+        meta: "Sonó " + sinceText(live.snooze.since, now) + " · se puede posponer" +
+          forSuffix(live.snooze),
         actions: live.snooze.actions });
     }
     var outages = live.outages || [];

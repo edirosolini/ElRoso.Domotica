@@ -778,6 +778,7 @@ def test_the_alarm_view_reads_the_alarm_that_rings(parts, tmp_path):
 
     assert built.ringing(17) == {
         "now": "2026-10-05T12:00:00-03:00", "ringing": True, "message": "arriba, <b>ya</b>",
+        "for": None,
     }
     ringing.take(17)
     assert built.ringing(17)["ringing"] is False
@@ -786,6 +787,97 @@ def test_the_alarm_view_reads_the_alarm_that_rings(parts, tmp_path):
 
 def test_without_a_ringing_store_nothing_rings(parts):
     assert board(parts).ringing(17)["ringing"] is False
+
+
+def test_the_alarm_view_says_who_it_is_for(parts, tmp_path):
+    from homeauto.schedule.ringing import RingingStore
+
+    house = household(tmp_path)
+    china = house.add("China")
+    ringing = RingingStore(tmp_path / "jobs.db")
+    ringing.remember(17, 42, "arriba", None, NOW, assignee="person", assignee_id=china.id)
+    ringing.remember(18, 42, "a comer", None, NOW, assignee="all")
+    built = Board(store=parts["store"], history=parts["history"], clock=Clock(), timezone=TZ,
+                  ringing=ringing, household=house)
+
+    assert built.ringing(17)["for"] == "China"
+    assert built.ringing(18)["for"] == "todos"
+
+
+# --- para quién es ---
+
+
+def household(tmp_path, chats=(42,)):
+    from homeauto.people import Household, PersonStore
+
+    return Household(PersonStore(tmp_path / "jobs.db"), chats)
+
+
+def test_each_house_event_says_who_it_is_for(parts, tmp_path):
+    house = household(tmp_path)
+    china = house.add("China")
+    store = parts["store"]
+    store.add(42, datetime(2026, 10, 6, 7, 0), "arriba", assignee="person", assignee_id=china.id)
+    store.add(42, datetime(2026, 10, 6, 8, 0), "a desayunar", assignee="all")
+    store.add(42, datetime(2026, 10, 6, 9, 0), "la basura")
+    parts["history"].record(9, 42, "alarm", "once", "ya sonó", datetime(2026, 10, 5, 8, 0),
+                            assignee="person", assignee_id=china.id)
+
+    found = Board(store=store, history=parts["history"], clock=Clock(), timezone=TZ,
+                  household=house).events(*WEEK)["events"]
+
+    props = [(e["extendedProps"]["assignee"], e["extendedProps"]["assignee_id"],
+              e["extendedProps"]["for"]) for e in found]
+    assert props == [
+        ("person", china.id, "China"),
+        ("person", china.id, "China"),
+        ("all", None, "todos"),
+        ("none", None, None),
+    ]
+    assert [e["title"] for e in found] == [
+        "⏰ ya sonó · para China · ⚠️ no sonó",
+        "⏰ arriba · para China",
+        "⏰ a desayunar · para todos",
+        "⏰ la basura",
+    ]
+
+
+def test_a_person_that_is_gone_shows_for_nobody(parts, tmp_path):
+    parts["store"].add(42, datetime(2026, 10, 6, 7, 0), "arriba", assignee="person",
+                       assignee_id=99)
+
+    [event] = Board(store=parts["store"], history=parts["history"], clock=Clock(), timezone=TZ,
+                    household=household(tmp_path)).events(*WEEK)["events"]
+
+    assert event["extendedProps"]["for"] is None
+    assert event["title"] == "⏰ arriba"
+
+
+def test_a_broken_padron_does_not_cost_the_agenda(parts):
+    class Broken:
+        def list(self):
+            raise OSError("sin base")
+
+    parts["store"].add(42, datetime(2026, 10, 6, 7, 0), "arriba", assignee="all")
+
+    [event] = Board(store=parts["store"], history=parts["history"], clock=Clock(), timezone=TZ,
+                    household=Broken()).events(*WEEK)["events"]
+
+    assert event["extendedProps"]["for"] == "todos"
+
+
+def test_the_kiosk_today_and_next_say_who_it_is_for(parts, tmp_path):
+    house = household(tmp_path)
+    china = house.add("China")
+    parts["store"].add(42, datetime(2026, 10, 5, 20, 0), "la pastilla", kind=REMINDER,
+                       repeat=DAILY, assignee="person", assignee_id=china.id)
+
+    screen = Board(store=parts["store"], history=parts["history"], clock=Clock(), timezone=TZ,
+                   household=house).screen()
+
+    assert screen["today"][0]["label"] == "📌 la pastilla"
+    assert screen["today"][0]["for"] == "China"
+    assert screen["next"]["title"] == "📌 la pastilla · para China"
 
 
 # --- la idea del menú ---

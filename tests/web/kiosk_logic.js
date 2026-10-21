@@ -90,4 +90,10 @@ assert.deepStrictEqual(
 assert.strictEqual(kiosk.mealView(null), null);
 assert.strictEqual(kiosk.mealView({ day: "2026-10-21", tomorrow: false, items: [] }), null);
 
+// Lo de hoy dice para quién es, si es de alguien.
+assert.strictEqual(kiosk.todayLabel({ label: "📌 la pastilla", title: "x", for: "China" }),
+  "📌 la pastilla · para China");
+assert.strictEqual(kiosk.todayLabel({ label: "⏰ arriba", title: "x", for: null }), "⏰ arriba");
+assert.strictEqual(kiosk.todayLabel({ title: "Dentista" }), "Dentista");
+
 console.log("ok");

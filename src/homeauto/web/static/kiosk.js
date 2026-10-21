@@ -70,6 +70,12 @@
     });
   }
 
+  // El texto de una entrada de hoy, con para quién es si es de alguien.
+  function todayLabel(entry) {
+    var text = entry.label || entry.title;
+    return entry.for ? text + " · para " + entry.for : text;
+  }
+
   // El cielo con mayúscula y la sensación térmica.
   function skyLine(weather) {
     var sky = weather.sky || "";
@@ -112,7 +118,8 @@
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { untilText: untilText, nextMeta: nextMeta, nowIndex: nowIndex, skyLine: skyLine,
-      trimPast: trimPast, awayText: awayText, readOnly: readOnly, mealView: mealView };
+      trimPast: trimPast, awayText: awayText, readOnly: readOnly, mealView: mealView,
+      todayLabel: todayLabel };
   }
   if (typeof document === "undefined") {
     return;
@@ -305,7 +312,7 @@
       bar.style.setProperty("--c", entry.color);
       item.appendChild(span("hour", entry.time || "Todo el día"));
       item.appendChild(bar);
-      item.appendChild(span("what", entry.label || entry.title));
+      item.appendChild(span("what", todayLabel(entry)));
       if (entry.past && entry.mark) {
         item.appendChild(span("mark", entry.mark));
       }

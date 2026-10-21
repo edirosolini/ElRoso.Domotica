@@ -23,4 +23,10 @@ var morning = new Date(2026, 9, 15, 7, 5);
 assert.strictEqual(alarm.clockText(morning), "07:05");
 assert.strictEqual(alarm.dateText(morning), "jueves 15 de octubre");
 
+// Para quién es la alarma que suena.
+assert.strictEqual(alarm.forText({ ringing: true, message: "arriba", for: "China" }), "Para China");
+assert.strictEqual(alarm.forText({ ringing: true, message: "arriba", for: "todos" }), "Para todos");
+assert.strictEqual(alarm.forText({ ringing: true, message: "arriba", for: null }), "");
+assert.strictEqual(alarm.forText(null), "");
+
 console.log("ok");

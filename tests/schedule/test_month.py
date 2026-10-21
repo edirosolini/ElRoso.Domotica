@@ -388,3 +388,33 @@ def test_the_turn_of_what_is_coming_is_the_one_that_will_sound():
 
     for item in october([job]):
         assert item.message == f"Le toca a {turn_for(job, item.at)}: sacar la basura"
+
+
+# --- para quién es ---
+
+
+def test_what_is_coming_carries_who_it_is_for():
+    assigned = Job(id=1, chat_id=42, when=datetime(2026, 10, 6, 7, 0), message="arriba",
+                   assignee="person", assignee_id=3)
+
+    [item] = october([assigned])
+
+    assert (item.assignee, item.assignee_id) == ("person", 3)
+
+
+def test_what_sounded_keeps_who_it_was_for():
+    sounded = Entry(
+        id=1, job_id=1, chat_id=42, kind=ALARM, repeat=ONCE, message="arriba",
+        fired_at=datetime(2026, 10, 2, 8, 0), announced=True, done_at=None, done_by=None,
+        nags=0, snoozed_at=None, closed=None, assignee="all",
+    )
+
+    item = from_history(sounded)
+
+    assert (item.assignee, item.assignee_id) == ("all", None)
+
+
+def test_by_default_it_is_for_nobody():
+    [item] = october([job(datetime(2026, 10, 6, 7, 0))])
+
+    assert (item.assignee, item.assignee_id) == ("none", None)
