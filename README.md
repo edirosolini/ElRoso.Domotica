@@ -119,8 +119,16 @@ toda la semana y `/menu compras 2026-10-21 cena` los de un plato; lo que ya esta
 repite. Los ingredientes van sin cantidades, y la sal, el aceite, la pimienta y el agua no se
 pasan; otro condimento con nombre propio, como el orégano, puede llegar a compras. Si lo que arma el modelo no sirve, no se guarda nada. Se lee y nunca
 suena: pedido «por el parlante», contesta escrito y avisa por qué. `MENU_LUNCH_AT=off` o
-`MENU_DINNER_AT=off` saca esa comida del menú; por ahora la hora no cambia nada más. No está en el menú de Telegram: se escribe, se
+`MENU_DINNER_AT=off` saca esa comida del menú. No está en el menú de Telegram: se escribe, se
 pide sin barra o se toca «Menú» en el control.
+
+**Aviso antes de cada comida.** A la hora de `MENU_LUNCH_AT` (11:00) y de `MENU_DINNER_AT`
+(17:30) les escribe a todos el plato de hoy, solo escrito: «🍽 Idea para el almuerzo:
+Milanesas con puré.» y abajo «Lleva: carne, pan rallado, huevo, papa.», con «🛒 Pasar a
+compras» para los ingredientes de ese plato y «🔄 Otra idea» para cambiarlo. Usa la semana de
+hoy, también el domingo. Si la semana no está armada y la anterior sí, la arma sin repetir sus
+platos. No manda nada si nunca hubo menú, si a la semana le falta esa comida, si el modelo
+falla o en vacaciones; el horario de descanso no lo frena. `off` en la clave apaga ese aviso.
 
 **Traducir.** `/traducir hola` va de español a inglés y al revés; `/traducir al francés hola`
 al idioma que pidas. Vuelve escrito y nunca por el parlante: la voz de la casa habla español
@@ -783,8 +791,8 @@ NEWS_RSS_AMBITO=https://www.ambito.com/rss/pages/home.xml   # una clave por medi
 NEWS_COUNT=5                   # cuántos titulares, hasta diez
 SCREEN_DEVICE=comedor          # dónde muestra /pantalla sin equipo
 SCREEN_DEVICES=comedor,recamara,habitacion   # qué equipos tienen pantalla, por coma
-MENU_LUNCH_AT=11:00            # el almuerzo entra en /menu; "off" lo saca
-MENU_DINNER_AT=17:30           # la cena entra en /menu; "off" la saca
+MENU_LUNCH_AT=11:00            # aviso del almuerzo y el almuerzo en /menu; "off" lo saca
+MENU_DINNER_AT=17:30           # aviso de la cena y la cena en /menu; "off" la saca
 ```
 
 Los equipos van por **UUID, nunca por IP**: son DHCP y se mueven. Para conocer el UUID de un
