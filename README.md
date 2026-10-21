@@ -825,7 +825,7 @@ Explorer):
 La primera vez que se abre, con el control:
 
 1. Elegir qué tele es, de las de `SCREEN_DEVICES`.
-2. Elegir de quién es, de los chats de la casa.
+2. Elegir de quién es, de las personas de la casa; sin personas cargadas, de los chats.
 3. Aceptar las notificaciones y después «mostrar sobre otras apps». En Google TV abre la lista
    general: bajar hasta la app y activarla. Sin ese permiso la alarma suena en la tele pero no
    se ve.
@@ -833,7 +833,8 @@ La primera vez que se abre, con el control:
    actualizar sola.
 
 Después muestra la pantalla de la casa y, al prender la tele, se conecta sola con el CT. La
-elección queda guardada: para cambiarla hay que borrar los datos de la app desde Ajustes.
+elección queda guardada. Para cambiarla, bajar con el control hasta «Cambiar tele o persona»,
+abajo a la derecha; BACK vuelve sin cambiar nada.
 
 ### Actualizar una tele
 
