@@ -56,10 +56,11 @@ separada del transporte HTTP y se prueba sin red.
 | `GET /api/live?chat=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat |
 | `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` |
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
-| `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader. Ver **App de la tele** |
+| `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader o con un explorador de archivos con acceso a la red. Ver **App de la tele** |
 | `GET /api/tele/setup` | las teles con pantalla y los chats de la casa, para configurar la app de la tele |
 | `POST /api/tele/hello` | registra una tele con su versión y capacidades |
-| `GET /api/tele/<alias>/poll` | el latido de una tele y la alarma que suena en ella. Ver **Registro en el CT**, en `.claude/rules/app-tele.md` |
+| `GET /api/tele/<alias>/poll` | el latido de una tele, la alarma que suena en ella y sus órdenes pendientes. Ver **Registro en el CT**, en `.claude/rules/app-tele.md` |
+| `POST /api/tele/<alias>/ack` | lo que la app dice de una orden: recibida, hecha o fallida. Ver **Órdenes**, en `.claude/rules/app-tele.md` |
 
 `Board` arma los datos y `WebApp.handle(Request) -> Response` rutea; ninguno de los dos
 conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arquitectura**, en `CLAUDE.md`.
@@ -302,7 +303,8 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
   reiniciar: una descarga en curso nunca ve un APK a medias.
 - La app se firma con una clave de release fija, así que una versión nueva instala encima. Ver
   **La app Android**, en `.claude/rules/app-tele.md`.
-- El registro y el latido de la app están en **Registro en el CT**, en `.claude/rules/app-tele.md`.
+- El registro y el latido de la app están en **Registro en el CT**, y las órdenes en **Órdenes**,
+  los dos en `.claude/rules/app-tele.md`.
 
 ## Control desde la web
 
