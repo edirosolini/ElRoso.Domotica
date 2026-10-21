@@ -39,6 +39,12 @@ MANIFEST = "application/manifest+json; charset=utf-8"
 PNG = "image/png"
 APK = "application/vnd.android.package-archive"
 
+# Cómo sale cada archivo de `/app/`: tipo, si es descarga y qué dice cuando falta.
+APP_FILES = {
+    "tele.apk": (APK, True, "Todavía no hay app de la tele en la casa."),
+    "tele.json": (JSON, False, "Todavía no hay versión de la app de la tele en la casa."),
+}
+
 REVALIDATE = "no-cache"
 FOREVER = "public, max-age=31536000, immutable"
 
@@ -348,8 +354,8 @@ class WebApp:
             return _json(500, {"error": "No pude atender a la tele."})
 
     def _app(self, request: Request, name: str) -> Response:
-        """Devuelve la app `name` como descarga; 404 si no se ofrece o no está."""
-        if name not in APPS:
+        """Devuelve el archivo `name` de la app; 404 si no se ofrece o no está."""
+        if name not in APPS or name not in APP_FILES:
             return _json(404, {"error": "no existe"})
         if request.method != "GET":
             return _json(405, {"error": "método no permitido"}, Allow="GET")
@@ -360,11 +366,11 @@ class WebApp:
         except OSError:
             log.exception("no pude leer la app %s", name)
             return _json(500, {"error": "No pude leer la app."})
+        content_type, download, missing = APP_FILES[name]
         if data is None:
-            return _json(404, {"error": "Todavía no hay app de la tele en la casa."})
-        return _respond(
-            200, data, APK, "no-store", **{"Content-Disposition": f'attachment; filename="{name}"'}
-        )
+            return _json(404, {"error": missing})
+        extra = {"Content-Disposition": f'attachment; filename="{name}"'} if download else {}
+        return _respond(200, data, content_type, "no-store", **extra)
 
     def _page(self, name: str) -> Response:
         return _respond(200, (self.pages_dir / name).read_bytes(), HTML, REVALIDATE)
