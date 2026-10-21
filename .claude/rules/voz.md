@@ -245,6 +245,15 @@ del wav de Piper. Hay tres:
   con `chime` sin ser urgente. El corte de internet suena con el beep suave. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
   descanso no se habla, así que tampoco suena.
 
+## Cache de audio
+
+- **Reusar un archivo le actualiza la fecha.** `VoiceSynth.say()` con el `.wav` y `Voicemail`
+  con el `.ogg` pasan por `tts.reuse()`, que le pone la hora actual: así `/depurar audio` sabe
+  qué no se usa hace treinta días. Ver **Audio**, en `.claude/rules/depurador.md`.
+- **Si el archivo ya no está, se vuelve a hacer**: `reuse()` devuelve False, `VoiceSynth`
+  sintetiza y `Voicemail` codifica de nuevo. Si no puede tocar la fecha por otro error, lo
+  loguea y usa el archivo igual.
+
 ## Gotchas
 
 - 🔴 **Piper no deja pausa entre oraciones si no se le pide.** Se lo llamaba sin un solo

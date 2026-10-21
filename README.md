@@ -51,7 +51,8 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /estado                         cómo están los servicios vigilados
 /equipos                        qué equipos hay y cuál está activo
 /usar tv                        cambia el equipo por defecto
-/depurar                        cuenta teles y avisos que sobran; borra solo al confirmar
+/depurar                        cuenta lo que sobra: teles, avisos, historial, audio y listas; borra solo al confirmar
+/depurar historial 6            deja seis meses de historial y propone borrar lo cerrado de antes
 ```
 
 **Horario de descanso.** De **23:00 a 07:00** por defecto, nada suena en voz alta: el aviso llega igual a
