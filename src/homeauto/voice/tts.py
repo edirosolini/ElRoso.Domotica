@@ -153,6 +153,18 @@ def _join(parts: list[Path], out_path: Path, silence_seconds: float) -> None:
         target.writeframes(audio)
 
 
+def reuse(path: Path) -> bool:
+    """Marca el archivo del cache como recién usado; False si no está."""
+    try:
+        os.utime(path)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        log.warning("no pude marcar como usado %s", path)
+        return path.is_file()
+    return True
+
+
 class VoiceSynth:
     """Produce un wav reproducible para una frase, reusando lo ya hecho."""
 
@@ -188,12 +200,12 @@ class VoiceSynth:
 
         sound = chime_audio.sound(chime)
         cached = self.cache_dir / f"{self._key(text, sound)}.wav"
-        if cached.is_file():
+        if reuse(cached):
             return cached
 
         with self._lock:
             # Otro pudo haberla sintetizado mientras esperábamos el candado.
-            if cached.is_file():
+            if reuse(cached):
                 return cached
 
             # Se arma aparte y se mueve al lugar: una corrida fallida no puede

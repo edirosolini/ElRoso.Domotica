@@ -1,11 +1,14 @@
 """/depurar: solo para los chats de alertas, con vista previa y confirmación por botón."""
 
+import os
 from datetime import datetime, timedelta
 
 import pytest
 
 from homeauto.bot.commands import HELP, Commands, with_actions
 from homeauto.cleanup import PLAN_TTL, Cleaner
+from homeauto.lists import ListStore
+from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.store import DAILY, Store
 from homeauto.tele import Tele, TeleLink, TeleStore
@@ -200,3 +203,153 @@ def test_the_help_offers_purge():
     line = next(line for line in HELP.splitlines() if "/depurar" in line)
 
     assert "/depurar teles" in line or "alertas" in line
+
+
+# --- historial, audio y listas ---
+
+
+@pytest.fixture
+def full(tmp_path):
+    """Una casa con historial, listas y cache de audio, cada una con algo para borrar."""
+    clock = Clock()
+    db = tmp_path / "jobs.db"
+    store = Store(db)
+    history = HistoryStore(db)
+    lists = ListStore(db, clock=lambda: NOW - timedelta(days=40))
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    reminders = Reminders(
+        store=store, timer=Timer(), announce=lambda job: None, history=history, clock=clock
+    )
+    config = make_config(allowed=(OWNER, OTHER), alert_chat_ids=frozenset({OWNER}))
+    cleaner = Cleaner(
+        config=config, reminders=reminders, history=history, lists=lists, cache_dir=cache,
+        clock=clock,
+    )
+    for days in (200, 100, 40):
+        at = NOW - timedelta(days=days)
+        history.record(days, OWNER, "reminder", DAILY, "la pastilla", at)
+        history.mark_done(days, at, "Cin")
+    lists.add("compras", ["leche"])
+    wav = cache / "viejo.wav"
+    wav.write_bytes(b"\0" * 10)
+    moment = (NOW - timedelta(days=60)).timestamp()
+    os.utime(wav, (moment, moment))
+    cmd = Commands(
+        config=config, speakers=StubRegistry(), reminders=reminders, cleaner=cleaner, clock=clock
+    )
+    return {"cmd": cmd, "history": history, "lists": lists, "wav": wav}
+
+
+def ask(full, text, chat_id=OWNER):
+    return with_actions(full["cmd"].purge, chat_id, text)
+
+
+def test_the_overview_offers_history_audio_and_lists(full):
+    reply = ask(full, "")
+
+    assert "Historial: 3" in reply.text
+    assert "Audio: 1" in reply.text
+    assert "Listas: 1" in reply.text
+    assert reply.actions == (
+        ("Ver historial (3)", "depurar historial"),
+        ("Ver audio (1)", "depurar audio"),
+        ("Ver listas (1)", "depurar listas"),
+    )
+
+
+def test_the_history_asks_how_many_months_to_keep(full):
+    reply = ask(full, "historial")
+
+    assert "meses" in reply.text
+    assert reply.actions == (
+        ("Dejar 1 mes", "depurar historial 1"),
+        ("Dejar 3 meses", "depurar historial 3"),
+        ("Dejar 6 meses", "depurar historial 6"),
+        ("Dejar 12 meses", "depurar historial 12"),
+    )
+
+
+def test_the_months_chosen_lead_to_the_detail_with_delete(full):
+    data = ask(full, "historial").actions[1][1]
+
+    reply = with_actions(full["cmd"].press, OWNER, data)
+
+    assert "3 meses" in reply.text
+    (delete, delete_data), (cancel, _) = reply.actions
+    assert delete == "Borrar 2"
+    assert cancel == "Cancelar"
+    assert full["cmd"].press(OWNER, delete_data) == "🧹 Borré 2 de 2."
+    assert full["history"].count_before(NOW) == 1
+
+
+def test_the_months_can_be_written(full):
+    reply = ask(full, "historial 6 meses")
+
+    assert reply.actions[0][0] == "Borrar 1"
+
+
+@pytest.mark.parametrize("months", ["0", "13", "-3", "+20"])
+def test_months_out_of_range_are_explained_and_offer_nothing(full, months):
+    reply = ask(full, f"historial {months}")
+
+    assert "entre 1 y 12 meses" in reply.text
+    assert reply.actions == ()
+
+
+def test_audio_and_lists_are_reached_by_their_names(full):
+    audio = ask(full, "audio")
+    lists = ask(full, "listas")
+
+    assert "audios sin usar" in audio.text
+    assert audio.actions[0][0] == "Borrar 1"
+    assert "leche" in lists.text
+    assert lists.actions[0][0] == "Borrar 1"
+    assert full["cmd"].press(OWNER, audio.actions[0][1]) == "🧹 Borré 1 de 1."
+    assert not full["wav"].exists()
+
+
+def test_every_new_purge_button_fits_in_the_callback_data(full):
+    actions = (
+        ask(full, "").actions + ask(full, "historial").actions
+        + ask(full, "historial 12").actions + ask(full, "audio").actions
+        + ask(full, "listas").actions
+    )
+
+    for _label, data in actions:
+        assert len(data.encode("utf-8")) <= 64, data
+
+
+@pytest.mark.parametrize("what", ["historial", "historial 3", "audio", "listas"])
+def test_a_non_alert_chat_cannot_see_the_new_categories(full, what):
+    reply = ask(full, what, chat_id=OTHER)
+
+    assert reply.text == "Solo los chats de alertas pueden depurar."
+    assert reply.actions == ()
+
+
+@pytest.mark.parametrize("name, other", [("compras", "pendientes"), ("pendientes", "compras")])
+def test_one_list_by_its_name_shows_and_deletes_only_that_list(full, name, other):
+    full["lists"].add("pendientes", ["plomero"])
+
+    reply = ask(full, name)
+
+    shown = "leche" if name == "compras" else "plomero"
+    hidden = "plomero" if name == "compras" else "leche"
+    assert shown in reply.text
+    assert hidden not in reply.text
+    assert reply.actions[0][0] == "Borrar 1"
+    assert full["cmd"].press(OWNER, reply.actions[0][1]) == "🧹 Borré 1 de 1."
+    assert len(full["lists"].items(name)) == 0
+    assert len(full["lists"].items(other)) == 1
+
+
+def test_lists_by_the_general_name_shows_every_list(full):
+    full["lists"].add("pendientes", ["plomero"])
+
+    reply = ask(full, "lista")
+
+    assert "leche" in reply.text
+    assert "plomero" in reply.text
+    assert reply.actions[0][0] == "Borrar 2"
+

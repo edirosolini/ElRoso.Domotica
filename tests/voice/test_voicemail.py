@@ -57,6 +57,17 @@ def test_a_second_ask_reuses_the_encoded_file(tmp_path):
     assert len(encoder.calls) == 1
 
 
+def test_reusing_an_encoded_note_marks_it_as_used(tmp_path):
+    import os
+
+    mail = Voicemail(FakeSynth(tmp_path), encode=FakeEncoder())
+    path = mail("hola")
+    os.utime(path, (1_000_000, 1_000_000))
+
+    assert mail("hola") == path
+    assert path.stat().st_mtime > 1_000_000
+
+
 def test_an_encoder_that_fails_is_reported(tmp_path):
     mail = Voicemail(FakeSynth(tmp_path), encode=FakeEncoder(fail=True))
 

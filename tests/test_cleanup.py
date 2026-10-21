@@ -1,11 +1,18 @@
 """El depurador: qué propone borrar, qué no toca nunca y qué borra al confirmar."""
 
+import os
 from datetime import datetime, timedelta
 
 import pytest
 
 from homeauto.cleanup import (
+    CACHE,
+    CACHE_UNUSED,
     GONE_DEVICE,
+    HISTORY,
+    LIST_STALE,
+    LISTS,
+    PARTIAL_STALE,
     IGNORED,
     IGNORED_IN_A_ROW,
     JOBS,
@@ -19,8 +26,10 @@ from homeauto.cleanup import (
     UNSEEN,
     Cleaner,
     job_reasons,
+    months_ago,
     tele_reason,
 )
+from homeauto.lists import SHOPPING, TODO, ListStore
 from homeauto.schedule.awaiting import KEEP, AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import DONE, OFF, SNOOZE, HistoryStore
@@ -94,14 +103,19 @@ def house(tmp_path):
         alert_chat_ids=frozenset({OWNER}),
         screen_devices=("comedor", "recamara"),
     )
+    lists = ListStore(db, clock=clock)
+    cache = tmp_path / "cache"
+    cache.mkdir()
     cleaner = Cleaner(
         config=config, reminders=reminders, history=history, fired=fired, awaiting=awaiting,
-        ringing=ringing, screens=screens, tele=link, clock=clock, token=Tokens(),
+        ringing=ringing, screens=screens, tele=link, lists=lists, cache_dir=cache, clock=clock,
+        token=Tokens(),
     )
     return {
         "cleaner": cleaner, "clock": clock, "timer": timer, "store": store,
         "history": history, "fired": fired, "awaiting": awaiting, "ringing": ringing,
-        "screens": screens, "link": link, "reminders": reminders, "db": db,
+        "screens": screens, "link": link, "reminders": reminders, "db": db, "lists": lists,
+        "cache": cache,
     }
 
 
@@ -504,3 +518,287 @@ def test_an_old_wait_of_a_proposed_job_is_not_counted_twice(house):
     assert house["cleaner"].overview().leftovers == 0
     assert "Borré 1 de 1" in house["cleaner"].confirm(OWNER, preview.token)
     assert house["awaiting"].get(job.id) is None
+
+
+# --- historial ---
+
+
+def closed_row(house, job_id, days_ago):
+    at = NOW - timedelta(days=days_ago)
+    house["history"].record(job_id, OWNER, REMINDER, DAILY, "la pastilla", at)
+    house["history"].mark_done(job_id, at, "Cin")
+
+
+def open_row(house, job_id, days_ago):
+    at = NOW - timedelta(days=days_ago)
+    house["history"].record(job_id, OWNER, ALARM, DAILY, "arriba", at)
+
+
+def history_rows(house):
+    return house["history"].between(NOW - timedelta(days=400), NOW + timedelta(days=1))
+
+
+def test_months_ago_keeps_the_day_or_falls_on_the_last_of_the_month():
+    assert months_ago(datetime(2026, 10, 21, 12, 0), 3) == datetime(2026, 7, 21, 12, 0)
+    assert months_ago(datetime(2026, 3, 31, 8, 0), 1) == datetime(2026, 2, 28, 8, 0)
+    assert months_ago(datetime(2026, 1, 15), 12) == datetime(2025, 1, 15)
+
+
+def test_the_overview_counts_the_closed_history_older_than_a_month(house):
+    closed_row(house, 1, 40)
+    closed_row(house, 2, 10)
+    open_row(house, 3, 40)
+
+    assert house["cleaner"].overview().history == 1
+
+
+def test_the_history_detail_counts_what_goes_with_the_months_chosen(house):
+    closed_row(house, 1, 200)
+    closed_row(house, 2, 100)
+    closed_row(house, 3, 40)
+
+    preview = house["cleaner"].preview(OWNER, HISTORY, months=3)
+
+    assert preview.size == 2
+    assert preview.token is not None
+    assert "3 meses" in preview.text
+    assert "21/07/2026" in preview.text
+
+
+def test_fewer_than_one_month_of_history_is_refused(house):
+    with pytest.raises(ValueError):
+        house["cleaner"].preview(OWNER, HISTORY, months=0)
+    with pytest.raises(ValueError):
+        house["cleaner"].preview(OWNER, HISTORY)
+
+
+def test_confirming_the_history_never_takes_an_open_row(house):
+    closed_row(house, 1, 100)
+    open_row(house, 2, 100)
+
+    preview = house["cleaner"].preview(OWNER, HISTORY, months=1)
+
+    assert house["cleaner"].confirm(OWNER, preview.token) == "🧹 Borré 1 de 1."
+    [left] = history_rows(house)
+    assert left.job_id == 2
+
+
+def test_a_history_row_closed_after_the_preview_stays(house):
+    closed_row(house, 1, 100)
+    open_row(house, 2, 100)
+    preview = house["cleaner"].preview(OWNER, HISTORY, months=1)
+    house["clock"].advance(minutes=1)
+    house["history"].mark_off(2, house["clock"](), "Cin")
+
+    house["cleaner"].confirm(OWNER, preview.token)
+
+    assert [entry.job_id for entry in history_rows(house)] == [2]
+
+
+def test_history_that_went_away_after_the_preview_is_reported(house):
+    closed_row(house, 1, 100)
+    closed_row(house, 2, 100)
+    preview = house["cleaner"].preview(OWNER, HISTORY, months=1)
+    house["history"].delete_before(NOW, NOW)
+
+    assert house["cleaner"].confirm(OWNER, preview.token) == (
+        "🧹 Borré 0 de 2. El resto cambió desde que lo viste y quedó."
+    )
+
+
+def test_no_old_history_gives_no_token(house):
+    closed_row(house, 1, 10)
+
+    preview = house["cleaner"].preview(OWNER, HISTORY, months=1)
+
+    assert preview.token is None
+    assert preview.size == 0
+
+
+# --- caché de audio ---
+
+
+def cached(house, name, age, size=10):
+    path = house["cache"] / name
+    path.write_bytes(b"\0" * size)
+    moment = (NOW - age).timestamp()
+    os.utime(path, (moment, moment))
+    return path
+
+
+def test_a_wav_unused_for_thirty_days_is_proposed_and_a_newer_one_is_not(house):
+    cached(house, "viejo.wav", CACHE_UNUSED + timedelta(minutes=1))
+    cached(house, "nuevo.wav", CACHE_UNUSED - timedelta(days=1))
+
+    preview = house["cleaner"].preview(OWNER, CACHE)
+
+    assert preview.files == ("viejo.wav",)
+
+
+def test_a_partial_older_than_an_hour_is_proposed_and_a_fresh_one_is_not(house):
+    cached(house, "a.1f.partial", PARTIAL_STALE + timedelta(minutes=1))
+    cached(house, "b.2f.partial.0", PARTIAL_STALE + timedelta(minutes=1))
+    cached(house, "c.partial.ogg", PARTIAL_STALE + timedelta(minutes=1))
+    cached(house, "d.3f.partial", PARTIAL_STALE - timedelta(minutes=1))
+
+    preview = house["cleaner"].preview(OWNER, CACHE)
+
+    assert sorted(preview.files) == ["a.1f.partial", "b.2f.partial.0", "c.partial.ogg"]
+
+
+def test_nothing_touched_in_the_last_hour_and_nothing_else_is_proposed(house):
+    cached(house, "recien.wav", timedelta(minutes=5))
+    cached(house, "recien.ogg", timedelta(minutes=5))
+    cached(house, "otra.txt", CACHE_UNUSED * 2)
+
+    assert house["cleaner"].preview(OWNER, CACHE).files == ()
+
+
+def test_a_voice_note_unused_for_thirty_days_is_proposed_like_a_wav(house):
+    cached(house, "vieja.ogg", CACHE_UNUSED + timedelta(minutes=1))
+    cached(house, "nueva.ogg", CACHE_UNUSED - timedelta(days=1))
+
+    preview = house["cleaner"].preview(OWNER, CACHE)
+
+    assert preview.files == ("vieja.ogg",)
+    assert "1 audios sin usar" in preview.text
+
+
+def test_the_cache_detail_says_how_many_and_how_many_megabytes(house):
+    cached(house, "a.wav", CACHE_UNUSED * 2, size=1_000_000)
+    cached(house, "b.wav", CACHE_UNUSED * 2, size=500_000)
+    cached(house, "c.1f.partial", PARTIAL_STALE * 2, size=0)
+
+    overview = house["cleaner"].overview()
+    preview = house["cleaner"].preview(OWNER, CACHE)
+
+    assert (overview.cache, overview.cache_bytes) == (3, 1_500_000)
+    assert "1,5 MB" in preview.text
+    assert "2 audios" in preview.text
+    assert "1 a medio hacer" in preview.text
+    assert preview.size == 3
+
+
+def test_confirming_the_cache_deletes_only_what_is_still_unused(house):
+    old = cached(house, "viejo.wav", CACHE_UNUSED * 2)
+    used = cached(house, "usado.wav", CACHE_UNUSED * 2)
+    preview = house["cleaner"].preview(OWNER, CACHE)
+    moment = NOW.timestamp()
+    os.utime(used, (moment, moment))
+
+    answer = house["cleaner"].confirm(OWNER, preview.token)
+
+    assert answer == "🧹 Borré 1 de 2. El resto cambió desde que lo viste y quedó."
+    assert not old.exists()
+    assert used.exists()
+
+
+class ReusedRightAfterTheScan(Cleaner):
+    """Un depurador cuyo audio se vuelve a usar justo después de revisar el directorio."""
+
+    def _cache(self, now):
+        files = super()._cache(now)
+        if self.reuse_next:
+            moment = NOW.timestamp()
+            for file in files:
+                os.utime(self.cache_dir / file.name, (moment, moment))
+            self.reuse_next = False
+        return files
+
+
+def test_a_file_reused_just_before_its_unlink_stays(house):
+    used = cached(house, "usado.wav", CACHE_UNUSED * 2)
+    cleaner = ReusedRightAfterTheScan(
+        config=house["cleaner"].config, reminders=house["reminders"],
+        cache_dir=house["cache"], clock=house["clock"],
+    )
+    cleaner.reuse_next = False
+    preview = cleaner.preview(OWNER, CACHE)
+    cleaner.reuse_next = True
+
+    assert cleaner.confirm(OWNER, preview.token) == (
+        "🧹 Borré 0 de 1. El resto cambió desde que lo viste y quedó."
+    )
+    assert used.exists()
+
+
+def test_the_lists_detail_can_be_only_one_list(house):
+    listed(house, SHOPPING, "leche", 40)
+    listed(house, TODO, "plomero", 40)
+
+    preview = house["cleaner"].preview(OWNER, LISTS, list_name=TODO)
+
+    assert [item for _id, _list, item, _at in preview.items] == ["plomero"]
+    assert "leche" not in preview.text
+    assert house["cleaner"].confirm(OWNER, preview.token) == "🧹 Borré 1 de 1."
+    assert house["lists"].items(SHOPPING) == ["leche"]
+    assert house["lists"].items(TODO) == []
+
+
+def test_without_a_cache_directory_there_is_no_audio_to_clean(house):
+    cleaner = Cleaner(
+        config=house["cleaner"].config, reminders=house["reminders"],
+        cache_dir=house["cache"] / "no-existe", clock=house["clock"],
+    )
+
+    assert cleaner.preview(OWNER, CACHE).size == 0
+    assert cleaner.overview().cache == 0
+
+
+# --- listas ---
+
+
+def listed(house, list_name, item, days_ago):
+    house["clock"].now = NOW - timedelta(days=days_ago)
+    house["lists"].add(list_name, [item])
+    house["clock"].now = NOW
+
+
+def test_an_item_older_than_thirty_days_is_proposed_and_a_newer_one_is_not(house):
+    listed(house, SHOPPING, "leche", LIST_STALE.days + 1)
+    listed(house, TODO, "plomero", LIST_STALE.days - 1)
+
+    preview = house["cleaner"].preview(OWNER, LISTS)
+
+    assert [item for _id, _list, item, _at in preview.items] == ["leche"]
+    assert "compras" in preview.text
+    assert "leche" in preview.text
+
+
+def test_an_item_without_a_date_is_counted_but_never_proposed(house):
+    import sqlite3
+
+    with sqlite3.connect(house["db"]) as conn:
+        conn.execute("INSERT INTO list_items (list_name, item) VALUES ('compras', 'yerba')")
+
+    overview = house["cleaner"].overview()
+    preview = house["cleaner"].preview(OWNER, LISTS)
+
+    assert (overview.lists, overview.undated) == (0, 1)
+    assert preview.items == ()
+    assert preview.token is None
+    assert "1 sin fecha" in preview.text
+
+
+def test_confirming_the_lists_takes_only_what_is_still_there(house):
+    listed(house, SHOPPING, "leche", 40)
+    listed(house, SHOPPING, "pan", 40)
+    preview = house["cleaner"].preview(OWNER, LISTS)
+    house["lists"].remove(SHOPPING, 2)
+    listed(house, SHOPPING, "yerba", 0)
+
+    answer = house["cleaner"].confirm(OWNER, preview.token)
+
+    assert answer == "🧹 Borré 1 de 2. El resto cambió desde que lo viste y quedó."
+    assert house["lists"].items(SHOPPING) == ["yerba"]
+
+
+def test_the_overview_counts_the_new_categories(house):
+    closed_row(house, 1, 40)
+    cached(house, "viejo.wav", CACHE_UNUSED * 2)
+    listed(house, SHOPPING, "leche", 40)
+
+    overview = house["cleaner"].overview()
+
+    assert (overview.history, overview.cache, overview.lists) == (1, 1, 1)
+

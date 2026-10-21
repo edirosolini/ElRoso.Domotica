@@ -231,3 +231,24 @@ def test_a_wake_level_is_synthesized_apart_and_longer_than_the_alarm(synth):
     assert wake != alarm
     assert duration_of(wake) > duration_of(alarm)
     assert voice.say("arriba", chime=chime.WAKE) == wake
+
+
+def test_reusing_a_cached_phrase_marks_it_as_used(synth):
+    import os
+
+    s = synth(FakePiper())
+    path = s.say("hola")
+    os.utime(path, (1_000_000, 1_000_000))
+
+    assert s.say("hola") == path
+    assert path.stat().st_mtime > 1_000_000
+
+
+def test_a_phrase_deleted_from_the_cache_is_synthesized_again(synth):
+    piper = FakePiper()
+    s = synth(piper)
+    path = s.say("hola")
+    path.unlink()
+
+    assert s.say("hola").is_file()
+    assert len(piper.calls) == 2
