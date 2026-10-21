@@ -92,9 +92,9 @@ class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
         return AckResult.Answered(parse({ Protocol.parseAck(reply.body) }) { return AckResult.Failed(it) })
     }
 
-    /** Corre un comando de botón (`data`) a nombre de ese chat, como la pantalla de control. */
-    fun command(chatId: Long, data: String): CommandResult {
-        val reply = send({ transport.postJson(urls.command, Protocol.encodeCommand(chatId, data)) }) {
+    /** Corre un comando de botón (`data`) a nombre de esa persona o ese chat, como la pantalla de control. */
+    fun command(caller: Caller, data: String): CommandResult {
+        val reply = send({ transport.postJson(urls.command, Protocol.encodeCommand(caller, data)) }) {
             return CommandResult.Failed(it)
         }
         if (reply.status != 200) return CommandResult.Failed(describe(reply))

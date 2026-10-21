@@ -17,6 +17,7 @@ object Tele {
     private const val PREFS = "tele"
     private const val KEY_ALIAS = "alias"
     private const val KEY_CHAT = "chat_id"
+    private const val KEY_PERSON = "person_id"
     private const val KEY_OFFER_CODE = "offer_code"
     private const val KEY_OFFER_AT = "offer_at"
     private const val KEY_REJECTED = "rejected_code"
@@ -33,7 +34,8 @@ object Tele {
     fun choice(context: Context): TeleChoice {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val chat = if (prefs.contains(KEY_CHAT)) prefs.getLong(KEY_CHAT, 0) else null
-        return TeleChoice(prefs.getString(KEY_ALIAS, null), chat)
+        val person = if (prefs.contains(KEY_PERSON)) prefs.getLong(KEY_PERSON, 0) else null
+        return TeleChoice(prefs.getString(KEY_ALIAS, null), chat, person)
     }
 
     fun save(context: Context, choice: TeleChoice) {
@@ -41,6 +43,8 @@ object Tele {
         editor.putString(KEY_ALIAS, choice.alias)
         val chat = choice.chatId
         if (chat == null) editor.remove(KEY_CHAT) else editor.putLong(KEY_CHAT, chat)
+        val person = choice.personId
+        if (person == null) editor.remove(KEY_PERSON) else editor.putLong(KEY_PERSON, person)
         editor.apply()
     }
 

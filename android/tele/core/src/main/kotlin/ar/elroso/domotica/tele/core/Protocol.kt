@@ -17,9 +17,17 @@ import kotlinx.serialization.json.put
 @Serializable
 data class Person(@SerialName("chat_id") val chatId: Long, val name: String)
 
-/** Con qué se configura la app: las teles con pantalla y la gente de la casa. */
+/** Una persona del padrón, con su chat o sin Telegram. */
 @Serializable
-data class Setup(val devices: List<String> = emptyList(), val people: List<Person> = emptyList())
+data class Resident(val id: Long, val name: String, @SerialName("chat_id") val chatId: Long? = null)
+
+/** Con qué se configura la app: las teles con pantalla, los chats y el padrón de la casa. */
+@Serializable
+data class Setup(
+    val devices: List<String> = emptyList(),
+    val people: List<Person> = emptyList(),
+    val persons: List<Resident> = emptyList(),
+)
 
 /** El registro de la tele que se manda en `hello`. */
 @Serializable
@@ -105,8 +113,11 @@ object Protocol {
 
     fun parseAck(body: String): Boolean = json.decodeFromString(AckReply.serializer(), body).accepted
 
-    fun encodeCommand(chatId: Long, data: String): String = buildJsonObject {
-        put("chat_id", chatId)
+    fun encodeCommand(caller: Caller, data: String): String = buildJsonObject {
+        when (caller) {
+            is Caller.Person -> put("person_id", caller.id)
+            is Caller.Chat -> put("chat_id", caller.id)
+        }
         put("data", data)
     }.toString()
 

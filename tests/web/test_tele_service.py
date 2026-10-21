@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from homeauto.people import PeopleStore
+from homeauto.people import Household, PeopleStore, PersonStore
 from homeauto.screen import ScreenStore
 from homeauto.tele import TeleLink, TeleStore
 from homeauto.web.jobs import NotFound, WebError
@@ -53,7 +53,37 @@ def test_setup_lists_the_screens_and_the_people(service):
     assert service.setup() == {
         "devices": ["comedor", "recamara", "habitacion"],
         "people": [{"chat_id": 42, "name": "Eze"}, {"chat_id": 77, "name": "Chat 77"}],
+        "persons": [],
     }
+
+
+@pytest.fixture
+def household(db):
+    return Household(PersonStore(db), (42, 77))
+
+
+def test_setup_with_an_empty_roster_falls_back_to_the_chats(service, household):
+    service.household = household
+
+    answer = service.setup()
+
+    assert answer["persons"] == []
+    assert answer["people"] == [{"chat_id": 42, "name": "Eze"}, {"chat_id": 77, "name": "Chat 77"}]
+
+
+def test_setup_lists_the_roster_with_and_without_chat(service, household):
+    household.add("Papá", 42)
+    enano = household.add("Enano")
+    service.household = household
+
+    answer = service.setup()
+
+    papa = household.by_chat(42)
+    assert answer["persons"] == [
+        {"id": enano.id, "name": "Enano", "chat_id": None},
+        {"id": papa.id, "name": "Papá", "chat_id": 42},
+    ]
+    assert answer["people"] == [{"chat_id": 42, "name": "Papá"}]
 
 
 def test_hello_registers_the_tele(service, store):
