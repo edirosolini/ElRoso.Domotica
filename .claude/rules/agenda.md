@@ -17,6 +17,11 @@ aparecer; si algún día hace falta que sea inmediato, ahí sí hay que migrar a
 
 - 🔴 **La URL privada es una credencial.** Trato igual que el token de Telegram: archivo con
   permisos 600, jamás en el repo.
+- 🔴 **Una falla de calendario nunca muestra la URL**, ni en el log ni en el chat ni en la web.
+  requests mete la URL en el texto de la excepción (`404 … for url: …`), así que
+  `ical._reason()` deja solo `HTTP <código>` o el nombre de la excepción, y `last_problems`
+  guarda `alias: motivo`. Hasta el 2026-10-20 el log del CT la escribía entera; un calendario
+  cuya URL quedó en el journal tiene que regenerar su dirección secreta.
 - **Una clave de config por calendario** (`CALENDAR_URL_<ALIAS>`). Una lista separada por
   comas sería ambigua: las URLs llevan `:` y `/` propios.
 - **Las recurrencias no se parsean a mano.** `recurring-ical-events` expande RRULE y respeta
