@@ -45,9 +45,9 @@ Domotica/
 │   ├── agenda/          # Google Calendar: lectura, avisos, resumen
 │   ├── voice/           # equipos cast: tts, cast, registro, difusión
 │   ├── watch/           # vigilancia de servicios, de Seq, de internet y del Proxmox
-│   ├── web/             # pantalla de la casa: agenda, kiosco, control y sus feeds JSON
+│   ├── web/             # pantalla de la casa: agenda, kiosco, control, sus feeds JSON y el APK de la tele
 │   └── main.py          # cableado y ciclo de vida del proceso
-├── deploy/              # unit de systemd, despliegue, CLI y la medición del router
+├── deploy/              # unit de systemd, despliegue, CLI, la medición del router y la subida del APK de la tele
 ├── tests/
 └── requirements*.txt
 ```

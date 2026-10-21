@@ -5,6 +5,7 @@ paths:
   - "src/homeauto/people.py"
   - "src/homeauto/main.py"
   - "deploy/domotica-say"
+  - "deploy/push-apk.sh"
   - "tests/web/**"
   - "tests/test_api_server.py"
   - "tests/test_api_service.py"
@@ -55,6 +56,7 @@ separada del transporte HTTP y se prueba sin red.
 | `GET /api/live?chat=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat |
 | `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` |
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
+| `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader. Ver **App de la tele** |
 
 `Board` arma los datos y `WebApp.handle(Request) -> Response` rutea; ninguno de los dos
 conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arquitectura**, en `CLAUDE.md`.
@@ -276,6 +278,28 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
   «Lo próximo» del kiosco lo saltea.
 - **La casilla «No suena en feriados» aparece solo con «Algunos días»**, y el formulario
   manda `skip_holidays` en falso con cualquier otra repetición (`skipsHolidays()`).
+
+## App de la tele
+
+`WebApp._app()` sirve el APK de la tele en `GET /app/tele.apk`, con `AppShelf`
+(`web/apk.py`) leyendo de `$STATE_DIRECTORY/app` (`/var/lib/domotica/app/tele.apk`). Vive en
+`WebApp`, así que **existe solo si la API arrancó**, o sea con `API_TOKEN`.
+
+- 🔴 **Nombre fijo y lista cerrada** (`apk.FILES`). Un nombre fuera de la lista es un 404
+  «no existe» **sin tocar el disco**: no hay listado del directorio ni path traversal.
+- **Se lee del disco en cada pedido**: un APK nuevo se baja sin reiniciar el servicio.
+- Sale con `Content-Disposition: attachment` y `Cache-Control: no-store`.
+- Sin el archivo, 404 «Todavía no hay app de la tele en la casa.». Otro método que no sea
+  `GET` es un 405 con `Allow: GET`; un error al leer que no sea «no existe» es un 500 y se
+  loguea.
+- ⚠️ **No hay `HEAD`**: `api._Handler` no lo atiende y `http.server` contesta 501. Se agrega
+  solo si Downloader lo necesita.
+- **El archivo es `root:root` 644 y `deploy/deploy.sh` no lo toca.** Lo sube
+  `deploy/push-apk.sh`, que lo instala como `.tmp` y lo reemplaza con un `mv` atómico, sin
+  reiniciar: una descarga en curso nunca ve un APK a medias.
+- ⚠️ **Cada build firma con una clave debug distinta**, así que Android rechaza instalar una
+  versión nueva encima: hay que desinstalar la anterior antes. Para que se actualice sola va
+  a hacer falta una clave de firma fija, fuera del repo.
 
 ## Control desde la web
 

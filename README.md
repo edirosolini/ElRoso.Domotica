@@ -736,6 +736,28 @@ contenedor por la red. Lo que sí rechaza es una escritura que venga de otro sit
 el navegador. Sin `API_TOKEN` tampoco existe. Lo que sonó antes del 2026-10-05 no está
 registrado.
 
+## Instalar la app de la tele
+
+El CT sirve el APK de la tele para bajarlo desde la misma tele. Para subir uno nuevo:
+
+```bash
+deploy/push-apk.sh <apk>              # usa 192.168.68.60 y el CT 300
+deploy/push-apk.sh <apk> <pve> <ctid>
+```
+
+Lo deja en `/var/lib/domotica/app/tele.apk` sin reiniciar el servicio y muestra el sha256 de
+los dos lados. `deploy/deploy.sh` no lo toca.
+
+En la tele, con Downloader:
+
+1. Darle a Downloader el permiso «instalar apps desconocidas».
+2. Abrir `http://192.168.68.10:8099/app/tele.apk` e instalar.
+3. Al abrirla, la app pide el permiso «mostrar sobre otras apps». En Google TV abre la lista
+   general: bajar hasta la app y activarla con el control.
+
+Cada versión nueva viene firmada con otra clave: antes de instalarla hay que desinstalar la
+anterior. Sin `API_TOKEN` la descarga no existe, igual que la pantalla.
+
 ## Desarrollo
 
 ```bash
