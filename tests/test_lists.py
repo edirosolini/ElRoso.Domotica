@@ -1,5 +1,8 @@
 """Las listas de la casa: qué comprar y qué hacer."""
 
+import sqlite3
+from datetime import datetime, timedelta
+
 import pytest
 
 from homeauto.lists import ListError, ListStore, SHOPPING, TODO, resolve, split_items
@@ -125,3 +128,51 @@ def test_an_id_that_is_gone_says_so(store):
 )
 def test_text_is_split_by_commas_and_y(text, items):
     assert split_items(text) == items
+
+
+# --- fecha de alta y depurar ---
+
+
+DAY = datetime(2026, 10, 21, 12, 0)
+
+
+def test_an_item_keeps_when_it_was_added(tmp_path):
+    store = ListStore(tmp_path / "jobs.db", clock=lambda: DAY - timedelta(days=40))
+    store.add(SHOPPING, ["leche"])
+
+    [(item_id, name, item, added)] = store.older_than(DAY - timedelta(days=30))
+    assert (name, item, added) == (SHOPPING, "leche", DAY - timedelta(days=40))
+
+
+def test_a_recent_item_is_not_old(tmp_path):
+    store = ListStore(tmp_path / "jobs.db", clock=lambda: DAY - timedelta(days=5))
+    store.add(TODO, ["plomero"])
+
+    assert store.older_than(DAY - timedelta(days=30)) == []
+
+
+def test_an_item_from_before_the_date_has_no_date_and_is_never_old(tmp_path):
+    db = tmp_path / "jobs.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE list_items (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " list_name TEXT NOT NULL, item TEXT NOT NULL)"
+        )
+        conn.execute("INSERT INTO list_items (list_name, item) VALUES ('compras', 'yerba')")
+    store = ListStore(db, clock=lambda: DAY)
+
+    assert store.items(SHOPPING) == ["yerba"]
+    assert store.older_than(DAY + timedelta(days=365)) == []
+    assert store.undated() == 1
+
+
+def test_remove_old_takes_only_the_ids_that_are_still_old(tmp_path):
+    old = ListStore(tmp_path / "jobs.db", clock=lambda: DAY - timedelta(days=40))
+    old.add(SHOPPING, ["leche", "pan"])
+    [(leche, *_), (pan, *_)] = old.older_than(DAY - timedelta(days=30))
+    fresh = ListStore(tmp_path / "jobs.db", clock=lambda: DAY)
+    fresh.add(SHOPPING, ["yerba"])
+    [(yerba, *_)] = [row for row in fresh.entries(SHOPPING) if row[1] == "yerba"]
+
+    assert fresh.remove_old((leche, yerba), DAY - timedelta(days=30)) == 1
+    assert fresh.items(SHOPPING) == ["pan", "yerba"]

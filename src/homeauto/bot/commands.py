@@ -20,7 +20,17 @@ from homeauto.agenda.ical import CalendarError
 from homeauto.ask import NOT_SPOKEN, AskError
 from homeauto.calc import CalcError, evaluate
 from homeauto.aloud import strip_aloud
-from homeauto.cleanup import JOBS, TELES, overview_text
+from homeauto.cleanup import (
+    CACHE,
+    HISTORY,
+    HISTORY_MAX_MONTHS,
+    HISTORY_MIN_MONTHS,
+    HISTORY_MONTHS,
+    JOBS,
+    LISTS as PURGE_LISTS,
+    TELES,
+    overview_text,
+)
 from homeauto.config import Config
 from homeauto.listen import ListenError
 from homeauto.meals import (
@@ -108,7 +118,17 @@ TURNS_USAGE = (
 )
 
 PURGE_USAGE = (
-    "Así: /depurar cuenta lo que sobra · /depurar teles o /depurar avisos lo muestra para borrar"
+    "Así: /depurar cuenta lo que sobra · /depurar teles, /depurar avisos, /depurar historial,"
+    " /depurar audio o /depurar listas lo muestra para borrar"
+)
+# Un número escrito, con signo si lo trae.
+_NUMBER = re.compile(r"[+-]?\d+")
+PURGE_MONTHS_QUESTION = (
+    "📜 ¿Cuántos meses del historial dejo? Lo de antes se borra, salvo lo que sigue abierto."
+)
+PURGE_MONTHS_RANGE = (
+    f"Del historial dejo entre {HISTORY_MIN_MONTHS} y {HISTORY_MAX_MONTHS} meses:"
+    " el resumen semanal usa la última semana."
 )
 PURGE_DENIED = "Solo los chats de alertas pueden depurar."
 # Los botones de la vista previa: «depurar ok <token>» borra y «depurar no <token>» descarta.
@@ -119,6 +139,9 @@ PURGE_NO = "no"
 PURGE_WORDS = {
     TELES: ("tele", "teles"),
     JOBS: ("aviso", "avisos", "alarma", "alarmas", "recordatorio", "recordatorios"),
+    HISTORY: ("historial", "historia"),
+    CACHE: ("audio", "audios", "cache", "caché"),
+    PURGE_LISTS: ("lista", "listas", "compras", "pendientes"),
 }
 
 MENU_USAGE = (
@@ -245,7 +268,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /estado — cómo están los servicios que vigilo
 /equipos — qué equipos tengo y cuál está activo
 /usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
-/depurar — lo que sobra, solo para los chats de alertas · /depurar teles · /depurar avisos
+/depurar — lo que sobra, solo para los chats de alertas · /depurar teles · /depurar avisos · /depurar historial 6 · /depurar audio · /depurar listas
 
 La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, 5.30, mañana 8:00.
 Una hora que ya pasó se entiende como la de mañana.
@@ -1238,6 +1261,13 @@ class Commands:
             jobs = overview.jobs + overview.leftovers
             if jobs:
                 buttons.append((f"Ver avisos ({jobs})", f"{PURGE_COMMAND} {JOBS}"))
+            for label, count, category in (
+                ("historial", overview.history, HISTORY),
+                ("audio", overview.cache, CACHE),
+                ("listas", overview.lists, PURGE_LISTS),
+            ):
+                if count:
+                    buttons.append((f"Ver {label} ({count})", f"{PURGE_COMMAND} {category}"))
             offer(*buttons)
             return overview_text(overview)
 
@@ -1246,7 +1276,22 @@ class Commands:
         )
         if category is None:
             return PURGE_USAGE
-        preview = self.cleaner.preview(chat_id, category)
+        months = next((int(word) for word in words if _NUMBER.fullmatch(word)), None)
+        if category == HISTORY:
+            if months is None:
+                offer(*(
+                    (f"Dejar {m} {'mes' if m == 1 else 'meses'}", f"{PURGE_COMMAND} {HISTORY} {m}")
+                    for m in HISTORY_MONTHS
+                ))
+                return PURGE_MONTHS_QUESTION
+            if not HISTORY_MIN_MONTHS <= months <= HISTORY_MAX_MONTHS:
+                return PURGE_MONTHS_RANGE
+        preview = self.cleaner.preview(
+            chat_id,
+            category,
+            months=months if category == HISTORY else None,
+            list_name=next((word for word in words if word in LISTS), None),
+        )
         if preview.token is not None:
             offer(
                 (f"Borrar {preview.size}", f"{PURGE_COMMAND} {PURGE_OK} {preview.token}"),

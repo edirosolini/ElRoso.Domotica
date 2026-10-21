@@ -170,6 +170,25 @@ class HistoryStore:
             ).fetchall()
         return [_row_to_entry(row) for row in rows]
 
+    def count_before(self, before: datetime) -> int:
+        """Cuántas filas cerradas sonaron antes de `before`."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM fired_history WHERE closed IS NOT NULL AND fired_at < ?",
+                (before.isoformat(),),
+            ).fetchone()
+        return row[0]
+
+    def delete_before(self, before: datetime, closed_by: datetime) -> int:
+        """Borra las filas que sonaron antes de `before` y ya estaban cerradas en `closed_by`."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM fired_history WHERE closed IS NOT NULL AND fired_at < ?"
+                " AND (closed_at IS NULL OR closed_at <= ?)",
+                (before.isoformat(), closed_by.isoformat()),
+            )
+        return cursor.rowcount
+
     def _update(self, job_id: int, assignments: str, values: tuple = ()) -> bool:
         with self._connect() as conn:
             changed = conn.execute(

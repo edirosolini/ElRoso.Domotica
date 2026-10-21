@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from homeauto.voice.tts import reuse
+
 log = logging.getLogger(__name__)
 
 ENCODER = "opusenc"
@@ -47,7 +49,7 @@ class Voicemail:
     def __call__(self, text: str) -> Path:
         wav = self.synth.say(text)
         ogg = wav.with_suffix(".ogg")
-        if ogg.is_file():
+        if reuse(ogg):
             return ogg
 
         pending = ogg.with_suffix(".partial.ogg")

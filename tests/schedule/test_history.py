@@ -211,3 +211,37 @@ def test_latest_are_the_last_rows_of_the_job_newest_first_without_holidays(histo
 
 def test_latest_of_a_job_that_never_rang_is_empty(history):
     assert history.latest(7, 14) == []
+
+
+# --- depurar ---
+
+
+def test_count_before_counts_only_closed_rows_older_than_the_cut(history):
+    record(history, job_id=1, at=NOW - timedelta(days=40))
+    history.mark_done(1, NOW - timedelta(days=40), "Cin")
+    record(history, job_id=2, at=NOW - timedelta(days=40))
+    record(history, job_id=3, at=NOW - timedelta(days=10))
+    history.mark_done(3, NOW - timedelta(days=10), "Cin")
+
+    assert history.count_before(NOW - timedelta(days=30)) == 1
+
+
+def test_delete_before_never_takes_an_open_row(history):
+    record(history, job_id=1, at=NOW - timedelta(days=40))
+    history.mark_done(1, NOW - timedelta(days=40), "Cin")
+    record(history, job_id=2, at=NOW - timedelta(days=40))
+
+    deleted = history.delete_before(NOW - timedelta(days=30), NOW)
+
+    assert deleted == 1
+    [left] = history.between(NOW - timedelta(days=50), NOW)
+    assert left.job_id == 2
+    assert left.closed is None
+
+
+def test_delete_before_leaves_a_row_closed_after_it_was_shown(history):
+    record(history, job_id=2, at=NOW - timedelta(days=40))
+    history.mark_closed(2, "cancel", NOW + timedelta(minutes=1))
+
+    assert history.delete_before(NOW - timedelta(days=30), NOW) == 0
+    assert len(history.between(NOW - timedelta(days=50), NOW)) == 1

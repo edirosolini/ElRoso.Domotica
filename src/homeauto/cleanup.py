@@ -1,12 +1,14 @@
-"""El depurador: propone borrar teles viejas y avisos que ya no sirven, y borra al confirmar."""
+"""El depurador: propone borrar lo que ya no sirve en la casa, y borra al confirmar."""
 
 from __future__ import annotations
 
+import calendar
 import logging
 import secrets
 import threading
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Callable, Iterable
 
 from homeauto.config import Config
@@ -21,6 +23,9 @@ log = logging.getLogger(__name__)
 
 TELES = "teles"
 JOBS = "avisos"
+HISTORY = "historial"
+CACHE = "audio"
+LISTS = "listas"
 
 # Una tele sin latir hace más que esto ya no se usa.
 TELE_UNSEEN = timedelta(days=7)
@@ -30,6 +35,18 @@ IGNORED_IN_A_ROW = 14
 OVERDUE = timedelta(days=1)
 # Cuánto dura una vista previa antes de que haya que pedirla de nuevo.
 PLAN_TTL = timedelta(minutes=10)
+# Los meses de historial que se ofrecen conservar y el rango que se acepta.
+HISTORY_MONTHS = (1, 3, 6, 12)
+HISTORY_MIN_MONTHS = 1
+HISTORY_MAX_MONTHS = 12
+# Un audio del cache sin usar hace más que esto ya no se pide.
+CACHE_UNUSED = timedelta(days=30)
+# Lo terminado del cache: la voz y su nota de voz.
+CACHED = (".wav", ".ogg")
+# Un audio a medio hacer más viejo que esto ya no se termina.
+PARTIAL_STALE = timedelta(hours=1)
+# Un ítem de una lista agregado hace más que esto se propone sacar.
+LIST_STALE = timedelta(days=30)
 
 # Por qué se propone borrar una tele.
 NOT_A_SCREEN = "no está en SCREEN_DEVICES"
@@ -43,6 +60,14 @@ STALE_ONCE = "de una sola vez y vencido hace más de un día"
 
 # Lo que cuenta como que alguien atendió el aviso.
 ANSWERED = (DONE, OFF, SNOOZE)
+
+
+def months_ago(now: datetime, months: int) -> datetime:
+    """El mismo día y hora `months` meses atrás, o el último día de ese mes si no lo tiene."""
+    year, month = divmod(now.year * 12 + now.month - 1 - months, 12)
+    month += 1
+    day = min(now.day, calendar.monthrange(year, month)[1])
+    return now.replace(year=year, month=month, day=day)
 
 
 def tele_reason(tele: Tele, screen_devices: Iterable[str], now: datetime) -> str | None:
@@ -98,10 +123,22 @@ class JobCandidate:
 
 
 @dataclass(frozen=True)
+class CacheFile:
+    name: str
+    size: int
+    partial: bool
+
+
+@dataclass(frozen=True)
 class Overview:
     teles: int
     jobs: int
     leftovers: int
+    history: int = 0
+    cache: int = 0
+    cache_bytes: int = 0
+    lists: int = 0
+    undated: int = 0
 
 
 @dataclass(frozen=True)
@@ -116,10 +153,17 @@ class Plan:
     jobs: tuple[int, ...] = ()
     fired: tuple[int, ...] = ()
     waits: tuple[int, ...] = ()
+    before: datetime | None = None
+    rows: int = 0
+    files: tuple[str, ...] = ()
+    items: tuple[int, ...] = ()
 
     @property
     def size(self) -> int:
-        return len(self.teles) + len(self.jobs) + len(self.fired) + len(self.waits)
+        return (
+            len(self.teles) + len(self.jobs) + len(self.fired) + len(self.waits) + self.rows
+            + len(self.files) + len(self.items)
+        )
 
 
 @dataclass(frozen=True)
@@ -133,6 +177,8 @@ class Preview:
     jobs: tuple[JobCandidate, ...] = ()
     fired: tuple[int, ...] = ()
     waits: tuple[int, ...] = ()
+    files: tuple[str, ...] = ()
+    items: tuple[tuple[int, str, str, datetime], ...] = ()
 
 
 def _moment(when: datetime | None) -> str:
@@ -156,14 +202,35 @@ def _job_line(candidate: JobCandidate) -> str:
     )
 
 
+def _megabytes(size: int) -> str:
+    return f"{size / 1_000_000:.1f}".replace(".", ",") + " MB"
+
+
+def _months(months: int) -> str:
+    return f"{months} mes" if months == 1 else f"{months} meses"
+
+
 def overview_text(overview: Overview) -> str:
     """El conteo por categoría, o que no hay nada."""
-    if not (overview.teles or overview.jobs or overview.leftovers):
+    if not (
+        overview.teles or overview.jobs or overview.leftovers or overview.history
+        or overview.cache or overview.lists
+    ):
         return "🧹 No hay nada para depurar."
-    lines = ["🧹 Para depurar:", f"📺 Teles: {overview.teles}", f"⏰ Avisos: {overview.jobs}"]
+    jobs = f"⏰ Avisos: {overview.jobs}"
     if overview.leftovers:
-        lines[-1] += f", más {overview.leftovers} restos de lo que ya sonó"
-    return "\n".join(lines)
+        jobs += f", más {overview.leftovers} restos de lo que ya sonó"
+    lists = f"🛒 Listas: {overview.lists} de hace más de treinta días"
+    if overview.undated:
+        lists += f", y {overview.undated} sin fecha que no se tocan"
+    return "\n".join([
+        "🧹 Para depurar:",
+        f"📺 Teles: {overview.teles}",
+        jobs,
+        f"📜 Historial: {overview.history} de hace más de un mes",
+        f"🔊 Audio: {overview.cache} ({_megabytes(overview.cache_bytes)})",
+        lists,
+    ])
 
 
 def _teles_text(teles: tuple[TeleCandidate, ...]) -> str:
@@ -186,11 +253,59 @@ def _jobs_text(
     return "\n".join(lines)
 
 
+def _history_text(months: int, before: datetime, rows: int) -> str:
+    day = before.strftime("%d/%m/%Y")
+    if not rows:
+        return f"📜 No hay historial cerrado de antes del {day}."
+    return (
+        f"📜 Historial: dejo {_months(months)} y borro {rows} cerradas de antes del {day}."
+        " Lo que sigue abierto queda."
+    )
+
+
+def _cache_text(files: tuple[CacheFile, ...]) -> str:
+    if not files:
+        return "🔊 No hay audio para borrar."
+    partial = sum(1 for file in files if file.partial)
+    size = _megabytes(sum(file.size for file in files))
+    return (
+        f"🔊 Audio para borrar: {len(files) - partial} audios sin usar hace más de treinta días"
+        f" y {partial} a medio hacer, {size}."
+    )
+
+
+def _lists_text(items: tuple[tuple[int, str, str, datetime], ...], undated: int) -> str:
+    if items:
+        lines = ["🛒 De las listas, para sacar:"] + [
+            f"· {name}: {item} (desde el {at.strftime('%d/%m')})" for _id, name, item, at in items
+        ]
+    else:
+        lines = ["🛒 No hay ítems de hace más de treinta días."]
+    if undated:
+        lines.append(f"Hay {undated} sin fecha, de antes de que se anotara: esos no se tocan.")
+    return "\n".join(lines)
+
+
 def _done_text(deleted: int, shown: int) -> str:
     text = f"🧹 Borré {deleted} de {shown}."
     if deleted < shown:
         text += " El resto cambió desde que lo viste y quedó."
     return text
+
+
+def _unused(path: Path, now: datetime) -> CacheFile | None:
+    """El archivo si es un audio sin usar o uno a medio hacer que ya no termina; si no, None."""
+    partial = ".partial" in path.suffixes
+    if not partial and path.suffix not in CACHED:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    limit = PARTIAL_STALE if partial else CACHE_UNUSED
+    if path.is_file() and now - datetime.fromtimestamp(stat.st_mtime) > limit:
+        return CacheFile(path.name, stat.st_size, partial)
+    return None
 
 
 class Cleaner:
@@ -206,6 +321,8 @@ class Cleaner:
         ringing=None,
         screens=None,
         tele=None,
+        lists=None,
+        cache_dir: Path | str | None = None,
         clock: Callable[[], datetime] = datetime.now,
         token: Callable[[], str] = lambda: secrets.token_hex(4),
     ):
@@ -219,6 +336,9 @@ class Cleaner:
         self.screens = screens
         # El registro de las teles con su app; None sin API.
         self.tele = tele
+        self.lists = lists
+        # El cache de síntesis que sirve el MediaServer; None si no hay.
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
         self.clock = clock
         self.token = token
         self._plans: dict[str, Plan] = {}
@@ -295,6 +415,29 @@ class Cleaner:
             if now - wait.fired_at > KEEP and wait.job_id not in skip
         )
 
+    def _history_count(self, before: datetime) -> int:
+        return self.history.count_before(before) if self.history is not None else 0
+
+    def _cache(self, now: datetime) -> tuple[CacheFile, ...]:
+        """Los audios sin usar y los a medio hacer que ya no van a terminar."""
+        if self.cache_dir is None:
+            return ()
+        try:
+            paths = sorted(self.cache_dir.iterdir())
+        except OSError:
+            return ()
+        return tuple(file for file in (_unused(path, now) for path in paths) if file)
+
+    def _old_items(
+        self, now: datetime, list_name: str | None = None
+    ) -> tuple[tuple[int, str, str, datetime], ...]:
+        if self.lists is None:
+            return ()
+        return tuple(self.lists.older_than(now - LIST_STALE, list_name))
+
+    def _undated(self, list_name: str | None = None) -> int:
+        return self.lists.undated(list_name) if self.lists is not None else 0
+
     # --- lo que ve el chat ---
 
     def overview(self) -> Overview:
@@ -302,14 +445,29 @@ class Cleaner:
         now = self.clock()
         jobs = self._jobs(now)
         waits = self._stale_waits(now, (c.job.id for c in jobs))
+        files = self._cache(now)
         return Overview(
             teles=len(self._teles(now)),
             jobs=len(jobs),
             leftovers=len(self._stale_fired(now)) + len(waits),
+            history=self._history_count(months_ago(now, HISTORY_MIN_MONTHS)),
+            cache=len(files),
+            cache_bytes=sum(file.size for file in files),
+            lists=len(self._old_items(now)),
+            undated=self._undated(),
         )
 
-    def preview(self, chat_id: int, category: str) -> Preview:
-        """El detalle de una categoría; si hay algo, guarda el plan con su token."""
+    def preview(
+        self,
+        chat_id: int,
+        category: str,
+        months: int | None = None,
+        list_name: str | None = None,
+    ) -> Preview:
+        """El detalle de una categoría; si hay algo, guarda el plan con su token.
+
+        `months` es cuánto historial se conserva y `list_name` acota las listas a una.
+        """
         now = self.clock()
         if category == TELES:
             teles = self._teles(now)
@@ -325,6 +483,23 @@ class Cleaner:
             preview = Preview(
                 _jobs_text(jobs, fired, waits), None, plan.size, jobs=jobs, fired=fired,
                 waits=waits,
+            )
+        elif category == HISTORY:
+            if months is None or not HISTORY_MIN_MONTHS <= months <= HISTORY_MAX_MONTHS:
+                raise ValueError(f"meses fuera de rango: {months}")
+            before = months_ago(now, months)
+            rows = self._history_count(before)
+            plan = Plan("", chat_id, category, now, before=before, rows=rows)
+            preview = Preview(_history_text(months, before, rows), None, plan.size)
+        elif category == CACHE:
+            files = self._cache(now)
+            plan = Plan("", chat_id, category, now, files=tuple(f.name for f in files))
+            preview = Preview(_cache_text(files), None, plan.size, files=plan.files)
+        elif category == LISTS:
+            items = self._old_items(now, list_name)
+            plan = Plan("", chat_id, category, now, items=tuple(item[0] for item in items))
+            preview = Preview(
+                _lists_text(items, self._undated(list_name)), None, plan.size, items=items
             )
         else:
             raise ValueError(f"categoría desconocida: {category}")
@@ -346,6 +521,15 @@ class Cleaner:
             still = {candidate.alias for candidate in self._teles(now)}
             deleted = sum(
                 self.tele.forget(alias) for alias in plan.teles if alias in still
+            )
+        elif plan.category == HISTORY:
+            deleted = self.history.delete_before(plan.before, plan.created)
+        elif plan.category == CACHE:
+            deleted = self._purge_cache(plan, now)
+        elif plan.category == LISTS:
+            still = {item[0] for item in self._old_items(now)}
+            deleted = self.lists.remove_old(
+                (item for item in plan.items if item in still), now - LIST_STALE
             )
         else:
             deleted = self._purge_jobs(plan, now)
@@ -379,6 +563,21 @@ class Cleaner:
             for job_id in plan.waits
             if job_id in waits
         )
+        return deleted
+
+    def _purge_cache(self, plan: Plan, now: datetime) -> int:
+        """Borra los audios mostrados que siguen sin usarse."""
+        still = {file.name for file in self._cache(now)}
+        deleted = 0
+        for name in plan.files:
+            path = self.cache_dir / name
+            if name not in still or _unused(path, now) is None:
+                continue
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
+            deleted += 1
         return deleted
 
     def _take(self, chat_id: int, token: str, now: datetime) -> Plan | None:

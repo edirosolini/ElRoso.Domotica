@@ -2205,3 +2205,32 @@ def test_with_the_api_the_cleaner_shares_the_tele_link_and_the_screens(
     preview = cleaner.preview(42, "teles")
     assert seen["commands"].press(42, f"depurar ok {preview.token}") == "🧹 Borré 1 de 1."
     assert main.TeleStore(tmp_path / "jobs.db").get("vieja") is None
+
+
+def test_the_cleaner_cleans_the_audio_cache_the_lists_and_the_history_of_the_house(
+    wired, tmp_path, monkeypatch
+):
+    """El depurador borra del mismo cache que sintetiza y de las mismas listas y historial."""
+    import os
+
+    seen = _wired_commands(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, HOUSE))
+    cleaner = seen["cleaner"]
+    commands = seen["commands"]
+    old = main.datetime.now() - timedelta(days=60)
+
+    wav = tmp_path / "cache" / "viejo.wav"
+    wav.write_bytes(b"\0" * 10)
+    os.utime(wav, (old.timestamp(), old.timestamp()))
+    main.ListStore(tmp_path / "jobs.db", clock=lambda: old).add("compras", ["leche"])
+    history = main.HistoryStore(tmp_path / "jobs.db")
+    history.record(7, 42, "reminder", "daily", "la pastilla", old)
+    history.mark_done(7, old, "Cin")
+
+    for category, months in (("audio", None), ("listas", None), ("historial", 1)):
+        preview = cleaner.preview(42, category, months)
+        assert commands.press(42, f"depurar ok {preview.token}") == "🧹 Borré 1 de 1."
+
+    assert not wav.exists()
+    assert main.ListStore(tmp_path / "jobs.db").items("compras") == []
+    assert history.count_before(main.datetime.now()) == 0

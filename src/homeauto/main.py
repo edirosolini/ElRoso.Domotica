@@ -1097,6 +1097,8 @@ def main() -> None:
         ringing=ringing,
         screens=pages.store if pages is not None else None,
         tele=tele_link,
+        lists=ListStore(db_path),
+        cache_dir=Path(CACHE_DIR),
         clock=datetime.now,
     )
 
