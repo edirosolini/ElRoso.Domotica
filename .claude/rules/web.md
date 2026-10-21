@@ -41,6 +41,12 @@ separada del transporte HTTP y se prueba sin red.
 `homeauto/web/` sirve cuatro páginas y sus datos en el mismo `ApiServer` de la API (puerto
 `API_PORT`, 8099), y **existe solo si la API arrancó**, o sea con `API_TOKEN`.
 
+- 🔴 **El CSS de cada página va bajo la clase de su `body`** (`.alarm-view`, y así con las demás).
+  Una regla suelta pisa las clases que `/api/events` les pone a los eventos de FullCalendar
+  (`casa`, `alarm`, `reminder`, `timer`, `past`, `google`, `feriado`, `ev`): el `.alarm` de la
+  vista de alarma estiraba cada alarma del calendario a `100vh` y la agenda las escondía detrás
+  de «+N más». `tests/web/test_app.py` lo sostiene.
+
 | Ruta | Qué es |
 | --- | --- |
 | `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes |
