@@ -9,12 +9,18 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import ar.elroso.domotica.tele.core.AckResult
+import ar.elroso.domotica.tele.core.AckState
 import ar.elroso.domotica.tele.core.Heartbeat
+import ar.elroso.domotica.tele.core.Order
+import ar.elroso.domotica.tele.core.OrderKind
+import ar.elroso.domotica.tele.core.OrderRunner
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
-/** Servicio en primer plano que registra la tele en el CT y late según `BeatSchedule`. */
+/** Servicio en primer plano que registra la tele, late según `BeatSchedule` y ejecuta las órdenes del CT. */
 class TeleService : Service() {
 
     companion object {
@@ -28,6 +34,7 @@ class TeleService : Service() {
     }
 
     private var executor: ScheduledExecutorService? = null
+    private var player: ExecutorService? = null
     private var foreground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -40,14 +47,31 @@ class TeleService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!foreground) return START_NOT_STICKY
         if (executor != null) return START_STICKY
+        val choice = Tele.choice(this)
+        val alias = choice.alias.orEmpty()
+        val runner = OrderRunner(
+            device = AndroidDevice(this),
+            ack = { seq, state -> acknowledge(alias, seq, state) },
+            log = Tele::log,
+        )
+        val plays = Executors.newSingleThreadExecutor()
         val heartbeat = Heartbeat.forChoice(
-            choice = Tele.choice(this),
+            choice = choice,
             api = Tele.api,
             version = Tele.version,
             caps = { Tele.caps(this) },
             log = Tele::log,
+            onAlarm = Kiosk::alarmChanged,
+            onOrders = { orders -> orders.forEach { dispatch(it, runner, plays) } },
+            onRepeated = { orders ->
+                orders.forEach {
+                    Tele.log("orden ${it.seq} repetida: vuelvo a confirmarla")
+                    runner.resend(it)
+                }
+            },
         )
         if (heartbeat == null) {
+            plays.shutdown()
             Tele.log("servicio sin tele elegida: no late")
             stopSelf()
             return START_NOT_STICKY
@@ -55,6 +79,7 @@ class TeleService : Service() {
         Tele.log("servicio arrancado, versión ${Tele.version.name}")
         val beats = Executors.newSingleThreadScheduledExecutor()
         executor = beats
+        player = plays
         beats.execute(object : Runnable {
             override fun run() {
                 val delay = try {
@@ -78,7 +103,30 @@ class TeleService : Service() {
         Tele.log("servicio detenido")
         executor?.shutdownNow()
         executor = null
+        player?.shutdownNow()
+        player = null
         super.onDestroy()
+    }
+
+    /** Ejecuta la orden: un `play` en el hilo de reproducción, el resto en el del latido. */
+    private fun dispatch(order: Order, runner: OrderRunner, plays: ExecutorService) {
+        Tele.log("orden ${order.seq}: ${order.kind.name.lowercase()}")
+        val run = Runnable {
+            try {
+                runner.run(order)
+            } catch (e: Exception) {
+                Tele.log("la orden ${order.seq} se rompió: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+        if (order.kind == OrderKind.PLAY) plays.execute(run) else run.run()
+    }
+
+    /** Le manda al CT el `ack` de la orden y loguea si no lo aceptó o no llegó. */
+    private fun acknowledge(alias: String, seq: Long, state: AckState) {
+        when (val result = Tele.api.ack(alias, seq, state)) {
+            is AckResult.Answered -> if (!result.accepted) Tele.log("el CT ya no esperaba la orden $seq (${state.wire})")
+            is AckResult.Failed -> Tele.log("no pude confirmar la orden $seq (${state.wire}): ${result.reason}")
+        }
     }
 
     /** Pasa a primer plano con su notificación; deja logueado si el sistema lo niega. */

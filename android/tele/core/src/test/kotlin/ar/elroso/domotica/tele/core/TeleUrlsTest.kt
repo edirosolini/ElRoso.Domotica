@@ -12,11 +12,18 @@ class TeleUrlsTest {
         assertEquals("http://casa.lan:8099/api/tele/setup", urls.setup)
         assertEquals("http://casa.lan:8099/api/tele/hello", urls.hello)
         assertEquals("http://casa.lan:8099/api/tele/comedor/poll", urls.poll("comedor"))
+        assertEquals("http://casa.lan:8099/api/tele/comedor/ack", urls.ack("comedor"))
+        assertEquals("http://casa.lan:8099/api/command", urls.command)
     }
 
     @Test
     fun buildsTheKiosk() {
         assertEquals("http://casa.lan:8099/pantalla?ver=1", urls.kiosk)
+    }
+
+    @Test
+    fun buildsTheAlarmView() {
+        assertEquals("http://casa.lan:8099/alarma?job=7", urls.alarm(7))
     }
 
     @Test

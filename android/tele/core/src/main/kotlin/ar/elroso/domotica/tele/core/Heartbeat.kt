@@ -11,6 +11,9 @@ class Heartbeat private constructor(
     private val caps: () -> List<String>,
     private val log: (String) -> Unit,
     private val schedule: BeatSchedule,
+    private val onAlarm: (Long?) -> Unit,
+    private val onOrders: (List<Order>) -> Unit,
+    private val onRepeated: (List<Order>) -> Unit,
 ) {
     companion object {
         /** Arma el latido de esa elección, o null si todavía no tiene tele. */
@@ -21,15 +24,19 @@ class Heartbeat private constructor(
             caps: () -> List<String>,
             log: (String) -> Unit,
             schedule: BeatSchedule = BeatSchedule(),
+            onAlarm: (Long?) -> Unit = {},
+            onOrders: (List<Order>) -> Unit = {},
+            onRepeated: (List<Order>) -> Unit = {},
         ): Heartbeat? {
             val alias = choice.alias?.takeIf { choice.ready } ?: return null
-            return Heartbeat(alias, api, version, caps, log, schedule)
+            return Heartbeat(alias, api, version, caps, log, schedule, onAlarm, onOrders, onRepeated)
         }
     }
 
     // Las capacidades que el CT ya tiene registradas; null si hay que saludar.
     private var announced: List<String>? = null
     private var alarm: Long? = null
+    private val inbox = OrderInbox()
 
     /** Saluda si hace falta, si no consulta la alarma; devuelve los milisegundos hasta el próximo latido. */
     fun tick(): Long {
@@ -56,7 +63,11 @@ class Heartbeat private constructor(
             if (result.id != alarm) {
                 alarm = result.id
                 log(if (result.id == null) "la tele ya no tiene alarma" else "alarma en la tele: ${result.id}")
+                onAlarm(result.id)
             }
+            val sorted = inbox.sort(result.orders)
+            if (sorted.repeated.isNotEmpty()) onRepeated(sorted.repeated)
+            if (sorted.fresh.isNotEmpty()) onOrders(sorted.fresh)
             schedule.succeeded()
         }
         PollResult.NotRegistered -> {

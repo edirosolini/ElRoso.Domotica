@@ -17,7 +17,7 @@ ACK_STATES = ("received", "done", "failed")
 # Estados de una orden que ya no cambian.
 CLOSED = ("done", "failed", "cancelled")
 # Órdenes que terminan al llegar a la app.
-DELIVERED_ONLY = ("show", "stop")
+DELIVERED_ONLY = ("show", "stop", "hide")
 # Cuántas órdenes cerradas se guardan por tele.
 KEEP_CLOSED = 32
 # Sin latido en este tiempo, la tele se da por muerta.

@@ -20,7 +20,7 @@ class TeleChoiceTest {
 
     @Test
     fun capsAnnounceOnlyWhatTheAppDoes() {
-        assertEquals(emptyList<String>(), Caps.of(overlay = false))
-        assertEquals(listOf("overlay"), Caps.of(overlay = true))
+        assertEquals(listOf("play"), Caps.of(overlay = false))
+        assertEquals(listOf("play", "show", "overlay"), Caps.of(overlay = true))
     }
 }

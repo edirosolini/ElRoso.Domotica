@@ -11,6 +11,8 @@ log = logging.getLogger(__name__)
 
 # Cuánto se espera a que la app diga que recibió una orden.
 ACK_TIMEOUT = 10
+# Segundos que la app puede tardar en sonar: `wakeTimeoutMs` más `settleMs` de `OrderRunner`.
+APP_WAKE_MARGIN = 13
 
 
 class TeleCaster:
@@ -23,12 +25,14 @@ class TeleCaster:
         link: TeleLink,
         ack_timeout: float = ACK_TIMEOUT,
         finish_timeout: float = FINISH_TIMEOUT,
+        wake_margin: float = APP_WAKE_MARGIN,
     ):
         self.alias = alias
         self.caster = caster
         self.link = link
         self.ack_timeout = ack_timeout
         self.finish_timeout = finish_timeout
+        self.wake_margin = wake_margin
         # Si lo último que sonó salió por Cast.
         self._by_cast = False
 
@@ -75,6 +79,24 @@ class TeleCaster:
         if not app or self._by_cast:
             self.caster.stop()
 
+    def hide(self) -> bool:
+        """Saca la vista de la app si está viva con `show`, y cierra DashCast si sigue abierto."""
+        by_app = False
+        if self.link.can(self.alias, "show"):
+            seq = self.link.send(self.alias, "hide")
+            state = self.link.wait(self.alias, seq, ("received",), self.ack_timeout)
+            by_app = state in ("received", "done")
+            if not by_app:
+                self.link.cancel(self.alias, seq)
+                log.warning("la app de %s no confirmó que sacó la vista (%s)", self.alias, state)
+        try:
+            return self.caster.hide() or by_app
+        except Exception as exc:  # noqa: BLE001
+            if not by_app:
+                raise
+            log.warning("no pude cerrar DashCast en %s: %s", self.alias, exc)
+            return True
+
     def set_volume(self, percent: int) -> None:
         self.caster.set_volume(percent)
 
@@ -82,6 +104,7 @@ class TeleCaster:
         self.caster.turn_off()
 
     def _finish_deadline(self, expected_seconds: float | None) -> float:
+        """Cuánto esperar el `done`: lo del Cast más lo que tarda la app en prender la tele."""
         if expected_seconds is None:
-            return self.finish_timeout
-        return min(expected_seconds + FINISH_MARGIN, self.finish_timeout)
+            return self.finish_timeout + self.wake_margin
+        return min(expected_seconds + FINISH_MARGIN, self.finish_timeout) + self.wake_margin

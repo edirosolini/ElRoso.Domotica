@@ -56,6 +56,60 @@ class ProtocolTest {
     }
 
     @Test
+    fun parsesPollOrders() {
+        val reply = Protocol.parsePoll(
+            """{"alarm": 7, "orders": [
+                {"seq": 11, "kind": "play", "url": "http://casa/a.wav", "min_volume": 90, "seconds": 2.5},
+                {"seq": 12, "kind": "show", "url": "http://casa/alarma?job=7"},
+                {"seq": 13, "kind": "stop"},
+                {"seq": 14, "kind": "hide", "extra": 1},
+                {"seq": 15, "kind": "play", "url": "http://casa/b.wav", "min_volume": null, "seconds": null}]}""",
+        )
+
+        assertEquals(
+            listOf(
+                Order(11, OrderKind.PLAY, "http://casa/a.wav", 90, 2.5),
+                Order(12, OrderKind.SHOW, "http://casa/alarma?job=7"),
+                Order(13, OrderKind.STOP),
+                Order(14, OrderKind.HIDE),
+                Order(15, OrderKind.PLAY, "http://casa/b.wav"),
+            ),
+            reply.orders,
+        )
+    }
+
+    @Test
+    fun pollWithoutOrdersHasNone() {
+        assertEquals(emptyList<Order>(), Protocol.parsePoll("""{"alarm": null}""").orders)
+    }
+
+    @Test
+    fun pollSkipsUnknownKindsAndBrokenOrders() {
+        val reply = Protocol.parsePoll(
+            """{"alarm": null, "orders": [
+                {"seq": 1, "kind": "dance"},
+                {"seq": "x", "kind": "stop"},
+                {"kind": "stop"},
+                "stop",
+                {"seq": 2, "kind": "stop"}]}""",
+        )
+
+        assertEquals(listOf(Order(2, OrderKind.STOP)), reply.orders)
+    }
+
+    @Test
+    fun encodesTheAck() {
+        assertEquals("""{"seq":11,"state":"received"}""", Protocol.encodeAck(11, AckState.RECEIVED))
+        assertEquals("""{"seq":11,"state":"done"}""", Protocol.encodeAck(11, AckState.DONE))
+        assertEquals("""{"seq":11,"state":"failed"}""", Protocol.encodeAck(11, AckState.FAILED))
+    }
+
+    @Test
+    fun encodesTheCommand() {
+        assertEquals("""{"chat_id":-22,"data":"callar 7"}""", Protocol.encodeCommand(-22, "callar 7"))
+    }
+
+    @Test
     fun readsTheErrorMessage() {
         assertEquals("Esa tele no tiene pantalla en la casa.", Protocol.parseError("""{"error": "Esa tele no tiene pantalla en la casa."}"""))
     }
