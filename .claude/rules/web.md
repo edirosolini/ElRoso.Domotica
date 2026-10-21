@@ -6,6 +6,7 @@ paths:
   - "src/homeauto/main.py"
   - "deploy/domotica-say"
   - "deploy/push-apk.sh"
+  - "deploy/tele-version.sh"
   - "tests/web/**"
   - "tests/test_api_server.py"
   - "tests/test_api_service.py"
@@ -57,6 +58,7 @@ separada del transporte HTTP y se prueba sin red.
 | `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` |
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 | `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader o con un explorador de archivos con acceso a la red. Ver **App de la tele** |
+| `GET /app/tele.json` | la versión del APK publicado, para que la app de la tele sepa si hay una nueva. Ver **App de la tele** |
 | `GET /api/tele/setup` | las teles con pantalla y los chats de la casa, para configurar la app de la tele |
 | `POST /api/tele/hello` | registra una tele con su versión y capacidades |
 | `GET /api/tele/<alias>/poll` | el latido de una tele, la alarma que suena en ella y sus órdenes pendientes. Ver **Registro en el CT**, en `.claude/rules/app-tele.md` |
@@ -285,22 +287,35 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
 
 ## App de la tele
 
-`WebApp._app()` sirve el APK de la tele en `GET /app/tele.apk`, con `AppShelf`
-(`web/apk.py`) leyendo de `$STATE_DIRECTORY/app` (`/var/lib/domotica/app/tele.apk`). Vive en
+`WebApp._app()` sirve el APK de la tele en `GET /app/tele.apk` y su versión en
+`GET /app/tele.json`, con `AppShelf` (`web/apk.py`) leyendo de `$STATE_DIRECTORY/app`
+(`/var/lib/domotica/app/`). Vive en
 `WebApp`, así que **existe solo si la API arrancó**, o sea con `API_TOKEN`.
 
-- 🔴 **Nombre fijo y lista cerrada** (`apk.FILES`). Un nombre fuera de la lista es un 404
-  «no existe» **sin tocar el disco**: no hay listado del directorio ni path traversal.
+- 🔴 **Nombres fijos y lista cerrada**: `apk.FILES` tiene `tele.apk` y `tele.json`, y cada uno
+  tiene en `APP_FILES` (`web/app.py`) su tipo, si es descarga y su 404. Un nombre fuera de la
+  lista es un 404 «no existe» **sin tocar el disco**: no hay listado del directorio ni path
+  traversal. Un archivo nuevo en `/app/` se suma a las dos.
 - **Se lee del disco en cada pedido**: un APK nuevo se baja sin reiniciar el servicio.
-- Sale con `Content-Disposition: attachment` y `Cache-Control: no-store`.
-- Sin el archivo, 404 «Todavía no hay app de la tele en la casa.». Otro método que no sea
-  `GET` es un 405 con `Allow: GET`; un error al leer que no sea «no existe» es un 500 y se
-  loguea.
+- Los dos salen con `Cache-Control: no-store`. El APK, como descarga
+  (`Content-Disposition: attachment`); `tele.json`, como `application/json` y sin attachment.
+- Sin el archivo, 404 con su mensaje: «Todavía no hay app de la tele en la casa.» o «Todavía no
+  hay versión de la app de la tele en la casa.». Otro método que no sea `GET` es un 405 con
+  `Allow: GET`; un error al leer que no sea «no existe» es un 500 y se loguea.
+- **`tele.json` es el contrato con la app**: `{"version_code", "version_name", "sha256",
+  "size"}`, del APK publicado. Lo arma `deploy/tele-version.sh` leyendo el APK con `aapt2` en la
+  imagen `domotica-tele-build`, sin red; sin esa imagen falla y pide correr antes
+  `android/tele/build.sh`. Rechaza un `versionName` fuera de `^[A-Za-z0-9._+-]{1,40}$` y un
+  `versionCode` que no sea un entero: el JSON se escribe sin escapar.
 - ⚠️ **No hay `HEAD`**: `api._Handler` no lo atiende y `http.server` contesta 501. Se agrega
   solo si Downloader lo necesita.
-- **El archivo es `root:root` 644 y `deploy/deploy.sh` no lo toca.** Lo sube
-  `deploy/push-apk.sh`, que lo instala como `.tmp` y lo reemplaza con un `mv` atómico, sin
-  reiniciar: una descarga en curso nunca ve un APK a medias.
+- **Los archivos son `root:root` 644 y `deploy/deploy.sh` no los toca.** Los sube
+  `deploy/push-apk.sh`, que genera `tele.json` antes de copiar nada, instala los dos como
+  `.tmp` y los reemplaza con un `mv` atómico cada uno, sin reiniciar: una descarga en curso
+  nunca ve un APK a medias.
+- 🔴 **Primero el APK y después `tele.json`.** Es orden obligatorio: la versión anunciada nunca
+  apunta a un APK viejo. Al revés, una tele que pregunta entre los dos `mv` ve una versión
+  que el APK servido todavía no es.
 - La app se firma con una clave de release fija, así que una versión nueva instala encima. Ver
   **La app Android**, en `.claude/rules/app-tele.md`.
 - El registro y el latido de la app están en **Registro en el CT**, y las órdenes en **Órdenes**,

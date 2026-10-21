@@ -773,16 +773,21 @@ La versión se sube a mano en `android/tele/version.properties`: `versionCode` t
 crecer para que la nueva instale encima. `TELE_HOUSE` cambia la URL de la casa a la que habla
 la app.
 
-El CT sirve el APK para bajarlo desde la misma tele. Para subir uno nuevo:
+El CT sirve el APK para bajarlo desde la misma tele, y su versión en `/app/tele.json`. Para
+subir uno nuevo:
 
 ```bash
 deploy/push-apk.sh <apk>              # usa 192.168.68.60 y el CT 300
 deploy/push-apk.sh <apk> <pve> <ctid>
 ```
 
-Lo deja en `/var/lib/domotica/app/tele.apk` sin reiniciar el servicio y muestra el sha256 de
-los dos lados. `deploy/deploy.sh` no lo toca. Sin `API_TOKEN` la descarga no existe, igual
-que la pantalla.
+Antes de copiar nada saca la versión del APK con `deploy/tele-version.sh`, que necesita la
+imagen Docker que deja `android/tele/build.sh`: sin ella, no sube. Deja el APK en
+`/var/lib/domotica/app/tele.apk` y después su versión en `/var/lib/domotica/app/tele.json`,
+sin reiniciar el servicio, y muestra el sha256 y la versión publicada. `deploy/deploy.sh` no
+los toca. Sin `API_TOKEN` la descarga no existe, igual que la pantalla.
+
+`deploy/tele-version.sh <apk>` solo imprime el `tele.json` de un APK, sin subir nada.
 
 ### En la tele
 
