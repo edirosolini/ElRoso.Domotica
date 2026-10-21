@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import unicodedata
@@ -12,6 +13,9 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from homeauto.correct import MEALS
+from homeauto.quiet import away_of
+
+log = logging.getLogger(__name__)
 
 LUNCH = "almuerzo"
 DINNER = "cena"
@@ -26,6 +30,9 @@ MAX_DISH = 80
 MAX_INGREDIENTS = 40
 # Lo que hay en cualquier alacena: no va a la lista de compras.
 PANTRY = ("sal", "aceite", "pimienta", "agua")
+
+MENU_SHOP = "🛒 Pasar a compras"
+MENU_OTHER = "🔄 Otra idea"
 
 WEEK_PROMPT = """Armá el menú de una semana para una casa de Argentina, de lunes {first} a
 domingo {last}.
@@ -290,6 +297,61 @@ class MealStore:
                     request, self.clock().isoformat(timespec="seconds"),
                 ),
             )
+
+
+class MealReminder:
+    """El aviso escrito antes de cada comida, con el plato del menú y sus botones."""
+
+    def __init__(
+        self,
+        store: MealStore,
+        planner: MealPlanner,
+        meals: tuple[str, ...],
+        quiet=None,
+        clock: Callable[[], datetime] = datetime.now,
+    ):
+        self.store = store
+        self.planner = planner
+        self.meals = meals
+        self.quiet = quiet
+        self.clock = clock
+
+    def text_for(
+        self, now: datetime, meal: str
+    ) -> tuple[str, tuple[tuple[str, str], ...]] | None:
+        """El aviso de esa comida de hoy y sus botones, o None si no hay nada que mandar."""
+        if meal not in self.meals or (self.quiet is not None and away_of(self.quiet, now)):
+            return None
+        today = now.date()
+        dish = self.store.get(today, meal)
+        if dish is None and self._plan_week(week_of(today)):
+            dish = self.store.get(today, meal)
+        if dish is None:
+            return None
+        text = (
+            f"🍽 Idea para {'la' if meal == DINNER else 'el'} {meal}: {dish.dish}.\n"
+            f"Lleva: {', '.join(dish.ingredients)}."
+        )
+        actions = (
+            (MENU_SHOP, f"menu compras {today.isoformat()} {meal}"),
+            (MENU_OTHER, f"menu otra {today.isoformat()} {meal}"),
+        )
+        return text, actions
+
+    def _plan_week(self, start: date) -> bool:
+        """Arma y guarda la semana si falta y hubo menú la anterior; True si la armó."""
+        if self.store.week(start):
+            return False
+        last = self.store.week(start - timedelta(days=7))
+        if not last:
+            return False
+        try:
+            week = self.planner.plan(start, self.meals, avoid=[m.dish for m in last])
+        except MealError as exc:
+            log.warning("no pude armar el menú para el aviso: %s", exc)
+            return False
+        self.store.save_week(start, week)
+        return True
 
 
 def _dump(ingredients: tuple[str, ...]) -> str:

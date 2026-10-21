@@ -20,6 +20,7 @@ class FakeJobQueue:
         self.repeating = []
         self.daily = []
         self.days = {}
+        self.times = {}
         self.callbacks = {}
         self.once = []
 
@@ -30,6 +31,7 @@ class FakeJobQueue:
     def run_daily(self, callback, time, days=(0, 1, 2, 3, 4, 5, 6), name=None):
         self.daily.append(name)
         self.days[name] = days
+        self.times[name] = time
         self.callbacks[name] = callback
 
     def run_once(self, callback, when, name=None):
@@ -1907,3 +1909,71 @@ def test_the_wired_menu_is_made_saved_and_changed_on_the_one_database(wired, tmp
     assert [(chat, text.split(":")[0]) for chat, text, _ in _FakeNotifier.sent] == [
         (77, "🍽 Eze cambió la cena del miércoles 21/10")
     ]
+
+
+# --- el aviso antes de cada comida ---
+
+
+def test_each_meal_reminder_is_scheduled_at_its_configured_hour(wired, tmp_path, monkeypatch):
+    run_main(
+        monkeypatch,
+        config_file(tmp_path, "LLM_API_KEY=k\nMENU_LUNCH_AT=11:15\nMENU_DINNER_AT=18:00\n"),
+    )
+
+    lunch, dinner = wired.job_queue.times["menu-lunch"], wired.job_queue.times["menu-dinner"]
+    assert (lunch.hour, lunch.minute) == (11, 15)
+    assert (dinner.hour, dinner.minute) == (18, 0)
+    assert lunch.tzinfo is not None and dinner.tzinfo is not None
+
+
+def test_a_meal_turned_off_has_no_reminder(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "LLM_API_KEY=k\nMENU_LUNCH_AT=off\n"))
+
+    assert "menu-lunch" not in wired.job_queue.daily
+    assert "menu-dinner" in wired.job_queue.daily
+
+
+def test_without_a_key_no_meal_reminder_is_scheduled(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert "menu-lunch" not in wired.job_queue.daily
+    assert "menu-dinner" not in wired.job_queue.daily
+
+
+async def test_the_meal_reminder_runs_off_the_loop_and_writes_to_everyone_with_buttons(
+    wired, tmp_path, monkeypatch
+):
+    """🔴 El aviso sale del menú guardado y sus botones andan con `/menu`."""
+    from homeauto.meals import Meal, week_of
+
+    monkeypatch.setattr(main, "ChatNotifier", _FakeNotifier)
+    seen = _wired_commands(monkeypatch)
+    threaded = []
+    real_to_thread = main.asyncio.to_thread
+
+    async def to_thread(func, *args, **kwargs):
+        threaded.append(func)
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr(main.asyncio, "to_thread", to_thread)
+    run_main(monkeypatch, config_file(tmp_path, HOUSE + "LLM_API_KEY=k\n"))
+    seen["meal_planner"].model = _week_reply
+    today = main.datetime.now().date()
+    seen["meal_store"].save_week(
+        week_of(today), [Meal(today, "cena", "Tarta de choclo", ("choclo", "huevos"))]
+    )
+
+    await wired.job_queue.callbacks["menu-dinner"](None)
+
+    assert threaded
+    assert [chat for chat, _, _ in _FakeNotifier.sent] == [42, 77]
+    _chat, text, actions = _FakeNotifier.sent[0]
+    assert text == "🍽 Idea para la cena: Tarta de choclo.\nLleva: choclo, huevos."
+    assert [data for _label, data in actions] == [
+        f"menu compras {today.isoformat()} cena",
+        f"menu otra {today.isoformat()} cena",
+    ]
+
+    assert "choclo" in seen["commands"].press(42, actions[0][1], who="Eze")
+    seen["commands"].press(42, actions[1][1], who="Eze")
+    assert seen["meal_store"].get(today, "cena").dish == "Tarta de acelga"

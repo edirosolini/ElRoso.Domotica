@@ -16,6 +16,7 @@ from homeauto.meals import (
     Meal,
     MealError,
     MealPlanner,
+    MealReminder,
     MealStore,
     left_today,
     served,
@@ -303,3 +304,115 @@ def test_a_broken_insert_saves_nothing(store):
         store.save_week(MONDAY, broken)
 
     assert store.week(MONDAY)[0].dish == "Bueno 0 almuerzo"
+
+
+# --- el aviso antes de cada comida -------------------------------------------
+
+TUESDAY_LUNCH = datetime(2026, 10, 20, 11, 0)
+
+
+class Away:
+    """Un silencio con la forma de `Hush`, de vacaciones o no."""
+
+    def __init__(self, away=False):
+        self.away = away
+
+    def is_away(self, moment=None):
+        return self.away
+
+    def is_quiet(self, moment):
+        return True
+
+
+def reminder(store, model=None, quiet=None, meals=BOTH):
+    model = model or model_saying(week_json(dish="Nuevo {i}"))
+    return MealReminder(
+        store=store, planner=MealPlanner(model), quiet=quiet, meals=meals,
+        clock=lambda: TUESDAY_LUNCH,
+    )
+
+
+def test_the_reminder_writes_the_dish_and_what_it_takes(store):
+    store.save_week(MONDAY, a_week())
+    store.replace(Meal(MONDAY + timedelta(days=1), LUNCH, "Milanesas con puré",
+                       ("carne", "pan rallado", "huevo", "papa")))
+
+    text, actions = reminder(store).text_for(TUESDAY_LUNCH, LUNCH)
+
+    assert text == (
+        "🍽 Idea para el almuerzo: Milanesas con puré.\n"
+        "Lleva: carne, pan rallado, huevo, papa."
+    )
+    assert actions == (
+        ("🛒 Pasar a compras", "menu compras 2026-10-20 almuerzo"),
+        ("🔄 Otra idea", "menu otra 2026-10-20 almuerzo"),
+    )
+
+
+def test_the_dinner_reminder_says_la_cena(store):
+    store.save_week(MONDAY, a_week())
+
+    text, actions = reminder(store).text_for(TUESDAY_LUNCH.replace(hour=17, minute=30), DINNER)
+
+    assert text.startswith("🍽 Idea para la cena: Plato 1 cena.\n")
+    assert actions[1] == ("🔄 Otra idea", "menu otra 2026-10-20 cena")
+
+
+def test_the_buttons_fit_in_telegram(store):
+    store.save_week(MONDAY, a_week())
+
+    _text, actions = reminder(store).text_for(TUESDAY_LUNCH, LUNCH)
+
+    assert all(len(data.encode("utf-8")) <= 64 for _label, data in actions)
+
+
+def test_without_this_week_it_plans_it_avoiding_last_week(store):
+    last = MONDAY - timedelta(days=7)
+    store.save_week(last, a_week(last, dish="Viejo"))
+    model = model_saying(week_json(dish="Nuevo {i}"))
+
+    text, _actions = reminder(store, model=model).text_for(TUESDAY_LUNCH, LUNCH)
+
+    assert "Nuevo 1a" in text
+    assert "Viejo 0 almuerzo" in model.prompts[0]
+    assert len(store.week(MONDAY)) == 14
+
+
+def test_without_any_menu_it_writes_nothing(store):
+    model = model_saying(week_json())
+
+    assert reminder(store, model=model).text_for(TUESDAY_LUNCH, LUNCH) is None
+    assert model.prompts == []
+    assert store.week(MONDAY) == []
+
+
+def test_on_vacation_it_writes_nothing(store):
+    store.save_week(MONDAY, a_week())
+
+    assert reminder(store, quiet=Away(away=True)).text_for(TUESDAY_LUNCH, LUNCH) is None
+
+
+def test_quiet_hours_do_not_stop_it_because_it_is_only_written(store):
+    store.save_week(MONDAY, a_week())
+
+    assert reminder(store, quiet=Away(away=False)).text_for(TUESDAY_LUNCH, LUNCH) is not None
+
+
+def test_a_model_that_fails_writes_nothing_and_saves_nothing(store, caplog):
+    last = MONDAY - timedelta(days=7)
+    store.save_week(last, a_week(last))
+
+    def broken(prompt):
+        raise TimeoutError("sin respuesta")
+
+    assert reminder(store, model=broken).text_for(TUESDAY_LUNCH, LUNCH) is None
+    assert store.week(MONDAY) == []
+    assert "menú" in caplog.text
+
+
+def test_a_meal_missing_from_a_saved_week_writes_nothing(store):
+    store.save_week(MONDAY, [m for m in a_week() if m.meal == DINNER])
+    model = model_saying(week_json())
+
+    assert reminder(store, model=model).text_for(TUESDAY_LUNCH, LUNCH) is None
+    assert model.prompts == []
