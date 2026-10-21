@@ -242,7 +242,8 @@ del wav de Piper. Hay tres:
   despertador, a 90, y repiten hasta que alguien los apague o pase la media hora.
 - **Suena lo que interrumpe**: alarmas, recordatorios y timers (`Announcer`), todo
   `announce(urgent=True)` —monitor y API— y el re-aviso de una caída, que pide los tres beeps
-  con `chime` sin ser urgente. El corte de internet suena con el beep suave. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
+  con `chime` sin ser urgente. El corte de internet y el re-aviso de un recordatorio
+  (`Announcer.nag()`) suenan con el beep suave. El clima, la agenda, el resumen, `/decir` y `/llamar` no. En horario de
   descanso no se habla, así que tampoco suena.
 
 ## Cache de audio
