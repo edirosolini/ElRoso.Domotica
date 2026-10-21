@@ -47,17 +47,29 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   se acaban**.
 - **Lo que espera un «Hecho» vence al día** (`awaiting.KEEP`): se poda cada vez que suena otro.
 - 🔴 **Sin «Hecho», se vuelve a avisar** a los cinco, diez y quince minutos (`NAG_DELAY`,
-  `NAG_LIMIT`): «🔔 Sigue pendiente: «…»». Un recordatorio que sonó una vez y nadie tocó
+  `NAG_LIMIT`): «🔔 Sigue pendiente: «…»», o con nombre «🔔 Enano, sigue pendiente: «tomar
+  medicación»» (el mismo nombre que lo hablado, de `announcer.nag_call()`). Un recordatorio que sonó una vez y nadie tocó
   quedaba olvidado, que es justo lo que no puede pasar con una medicación.
-- **El re-aviso es solo chat y solo trae «Hecho».** No suena, no pasa por el pulidor y no
-  ofrece posponer: es insistir, no un segundo aviso. Va a los chats del aviso, el último
-  escala (ver **Para quién suena**), y **sale también en descanso**, porque no despierta a nadie.
+- **El re-aviso escrito solo trae «Hecho».** No ofrece posponer: es insistir, no un segundo
+  aviso. Va a los chats del aviso, el último escala (ver **Para quién suena**), y **sale
+  también en descanso**, porque no despierta a nadie.
+- 🔴 **Cada re-aviso además se dice en el parlante**, pedido del dueño del 2026-10-21: un
+  recordatorio que solo insistía por escrito no lo escuchaba nadie en la casa.
+  `Reminders._say_nag()` arma el job con la foto de `awaiting_done` y lo dice
+  `Announcer.nag()`, con el beep suave y el piso del equipo (sesenta), **sin pulidor**:
+  «<Nombre>, sigue pendiente: <mensaje>.» o «Sigue pendiente: <mensaje>.». El nombre es el
+  del turno, si no el del «[Nombre]», si no el de la asignación (`para todos` dice «Todos»).
+- **Suena en los equipos del aviso**: `awaiting_done.devices` guarda los que tenía el job al
+  sonar. Una espera de antes de esa columna usa el equipo del job y, si ya no existe, el de
+  siempre.
+- **En descanso, silencio o vacaciones no se dice**, pero el chat sale igual. Un parlante que
+  falla solo se loguea: no frena el chat ni el próximo re-aviso.
 - **«Hecho», posponer y `/cancelar` lo cortan.** Los tres sacan el job de `awaiting_done` y
   desagendan su timer.
 - 🔴 **El timer del re-aviso usa la clave `nag:<id>`, no la del job.** Un recordatorio diario
   se rearma con `str(id)` al sonar: con la misma clave, el rearme pisaría el re-aviso.
 - **Sobrevive un reinicio**: `nags` y `next_nag` viven en `awaiting_done`. Al arrancar, un
-  re-aviso atrasado sale **una vez** y retoma el ritmo; pasado `SNOOZE_WINDOW` desde que sonó
+  re-aviso atrasado sale **una vez**, escrito y dicho, y retoma el ritmo; pasado `SNOOZE_WINDOW` desde que sonó
   ya no sale. Las columnas entran por `_add_missing_columns`, y lo que esperaba un «Hecho»
   antes de existir queda con `next_nag` vacío: **no re-avisa**.
 - ⚠️ **`/cancelar` de un `/timer` que ya sonó contesta «No encontré»**: el job se borra al
@@ -300,9 +312,10 @@ como un llamado: «[Papá] tomar medicación» suena «Papá, tomar medicación�
   vacío, sin cerrar, con un espacio adelante o con una coma adentro queda como se escribió.
 - **En `jobs` el mensaje se guarda con los corchetes**; la transformación es solo al anunciar.
 - ⚠️ **Fuera del aviso, todo lo escrito muestra el mensaje con los corchetes**: el chat de
-  «⏰ Sigue sonando» (lo hablado de la repetición sí sale «Papá, …»), «🔔 Sigue pendiente»,
+  «⏰ Sigue sonando» (lo hablado sí sale «Papá, …»),
   «⏰ Dejé de sonar», `/lista`, `/turnos`, los avisos a los demás chats, el resumen semanal,
-  `/control` y la pantalla, incluida la vista de alarma de la tele.
+  `/control` y la pantalla, incluida la vista de alarma de la tele. «🔔 Sigue pendiente» es la
+  excepción: lleva el nombre adelante («🔔 Papá, sigue pendiente: «tomar la pastilla»»).
 
 ## Para quién suena
 

@@ -204,8 +204,10 @@ quién la apagó; posponer, `/cancelar` o borrarla también cortan la repetició
 medicación, salir al colegio— y el timer es de una sola vez; los dos suenan con un beep suave
 y traen «✅ Hecho» además de posponer. «Hecho» vale desde cualquier chat y les avisa a los demás chats quién lo
 marcó, y ya no se puede posponer. Si nadie lo toca, el chat insiste a los 5, 10 y 15
-minutos con «🔔 Sigue pendiente», solo escrito y solo con «Hecho», también en horario de
-descanso; «Hecho», posponer o `/cancelar` lo cortan. Un recordatorio sin días no se agenda:
+minutos con «🔔 Sigue pendiente» (con el nombre adelante si era para alguien: «🔔 Enano, sigue
+pendiente: …»), solo con «Hecho», y el parlante lo dice con el beep suave:
+«Sigue pendiente: tomar la pastilla.», con el nombre adelante si era para alguien. En descanso,
+silencio o vacaciones solo se escribe. «Hecho», posponer o `/cancelar` lo cortan. Un recordatorio sin días no se agenda:
 para algo de una sola vez está `/timer`.
 
 **Pastillas que se acaban.** `/pastillas 7 enalapril 30` ata el recordatorio #7 a un remedio
@@ -240,8 +242,8 @@ nadie en particular.
 **Llamar a alguien en el aviso.** Un mensaje que empieza con el nombre entre corchetes,
 `/recordar diaria 9:00 [Papá] tomar medicación`, suena y se escribe «Papá, tomar medicación».
 El nombre va solo con letras y espacios, al principio; cualquier otro corchete queda como se
-escribió. Los re-avisos («Sigue sonando», «Sigue pendiente») y `/lista` lo siguen mostrando
-entre corchetes.
+escribió. Lo escrito de «Sigue sonando» y `/lista` lo siguen mostrando entre corchetes; lo
+dicho sale «Papá, …», y «Sigue pendiente» lo escribe con el nombre adelante.
 
 Los timers, las alarmas y los recordatorios se guardan en SQLite y **sobreviven un reinicio**. Lo que venció
 mientras el servicio estaba caído se anuncia al arrancar, en vez de perderse.

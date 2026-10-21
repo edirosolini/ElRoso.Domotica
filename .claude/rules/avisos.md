@@ -45,7 +45,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | alarmas, recordatorios y timers | los chats del aviso según su asignación: todos, o solo el de la persona asignada con Telegram; con posponer, la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
 | repetición de una alarma sin apagar | los chats del aviso, en cada repetición y solo con «🔕 Apagar», también en descanso; «Dejé de sonar» al tope, a todos si era de una persona |
 | alarma apagada o «Hecho» | los demás chats del aviso: «🔕 <nombre> apagó la alarma» / «✅ <nombre> marcó hecho» |
-| re-aviso de un recordatorio o timer sin «Hecho» | los chats del aviso, solo por chat y solo con «Hecho»; el último, a todos si era de una persona |
+| re-aviso de un recordatorio o timer sin «Hecho» | los chats del aviso, solo con «Hecho»; el último, a todos si era de una persona. Además se dice en los equipos del aviso, salvo en descanso, silencio o vacaciones |
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
 | algo programado que un feriado saltea | los chats del aviso, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
 | corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
