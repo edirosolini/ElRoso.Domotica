@@ -123,6 +123,15 @@ class AwaitingStore:
             ).fetchall()
         return [_row_to_waiting(row) for row in rows]
 
+    def drop_before(self, job_id: int, cutoff: datetime) -> bool:
+        """Saca el job de la espera solo si sonó antes de `cutoff`; True si lo sacó."""
+        with self._connect() as conn:
+            deleted = conn.execute(
+                "DELETE FROM awaiting_done WHERE job_id = ? AND fired_at < ?",
+                (job_id, cutoff.isoformat()),
+            )
+        return deleted.rowcount > 0
+
     def take(self, job_id: int) -> str | None:
         """El mensaje del job, sacándolo de la espera; None si ya no esperaba."""
         with self._connect() as conn:

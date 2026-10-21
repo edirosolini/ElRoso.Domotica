@@ -417,3 +417,47 @@ def test_cancel_from_the_screen_closes_the_wait_and_writes_the_history(screen):
     assert str(job.id) not in timer.armed
     [entry] = history.between(NOW - timedelta(days=1), NOW + timedelta(days=2))
     assert entry.closed == "cancel"
+
+
+class RecordingTimer(FakeTimer):
+    """Timer de prueba que además anota cada clave que se desagenda."""
+
+    def __init__(self):
+        super().__init__()
+        self.unscheduled = []
+
+    def unschedule(self, key):
+        self.unscheduled.append(key)
+        super().unschedule(key)
+
+
+def test_cancel_by_anyone_unschedules_the_job_its_ring_and_its_nag(tmp_path):
+    timer = RecordingTimer()
+    reminders = Reminders(store=Store(tmp_path / "jobs.db"), timer=timer, announce=lambda job: None)
+    job = reminders.add(OWNER, SOON, "arriba", repeat=DAILY)
+
+    assert reminders.cancel(None, job.id, any_owner=True) is True
+
+    assert {str(job.id), f"ring:{job.id}", f"nag:{job.id}"} <= set(timer.unscheduled)
+
+
+def test_forget_wait_drops_an_old_wait_and_unschedules_its_nag(tmp_path):
+    timer = RecordingTimer()
+    awaiting = AwaitingStore(tmp_path / "jobs.db")
+    reminders = Reminders(
+        store=Store(tmp_path / "jobs.db"), timer=timer, announce=lambda job: None,
+        awaiting=awaiting,
+    )
+    awaiting.remember(7, "la pastilla", NOW)
+
+    assert reminders.forget_wait(7, NOW) is False
+    assert awaiting.get(7) is not None
+    assert reminders.forget_wait(7, NOW + timedelta(seconds=1)) is True
+    assert awaiting.get(7) is None
+    assert "nag:7" in timer.unscheduled
+
+
+def test_forget_wait_without_a_wait_store_is_false(parts):
+    reminders, *_ = parts
+
+    assert reminders.forget_wait(7, NOW) is False

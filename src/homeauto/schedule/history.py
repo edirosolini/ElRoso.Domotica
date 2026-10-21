@@ -160,6 +160,16 @@ class HistoryStore:
             ).fetchall()
         return [_row_to_entry(row) for row in rows]
 
+    def latest(self, job_id: int, count: int) -> list[Entry]:
+        """Las últimas `count` filas del job, de la más nueva a la más vieja, sin las de feriado."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM fired_history WHERE job_id = ? AND (closed IS NULL OR closed != ?)"
+                " ORDER BY fired_at DESC, id DESC LIMIT ?",
+                (job_id, HOLIDAY, count),
+            ).fetchall()
+        return [_row_to_entry(row) for row in rows]
+
     def _update(self, job_id: int, assignments: str, values: tuple = ()) -> bool:
         with self._connect() as conn:
             changed = conn.execute(

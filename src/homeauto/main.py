@@ -34,6 +34,7 @@ from homeauto.api import ApiServer, ApiService
 from homeauto.bot.commands import Commands, with_actions
 from homeauto.bible import VerseOfTheDay
 from homeauto.briefing import Briefing
+from homeauto.cleanup import Cleaner
 from homeauto.closing import Closing
 from homeauto.weekly import Weekly
 from homeauto.economy import EconomyClient
@@ -181,6 +182,7 @@ SPEAK_COMMANDS = ("hablar",)
 VACATION_COMMANDS = ("vacaciones",)
 TURNS_COMMANDS = ("turnos",)
 MENU_COMMANDS = ("menu",)
+PURGE_COMMANDS = ("depurar",)
 ALL_COMMANDS = (
     START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
@@ -189,7 +191,7 @@ ALL_COMMANDS = (
     + ASK_COMMANDS + CALC_COMMANDS
     + ADD_COMMANDS + SHOPPING_COMMANDS + TODO_COMMANDS + REMOVE_COMMANDS
     + TRANSLATE_COMMANDS + POSTPONE_COMMANDS + PILLS_COMMANDS + VACATION_COMMANDS
-    + TURNS_COMMANDS + MENU_COMMANDS
+    + TURNS_COMMANDS + MENU_COMMANDS + PURGE_COMMANDS
 )
 
 # Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
@@ -790,6 +792,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
         (VACATION_COMMANDS, commands.vacation),
         (TURNS_COMMANDS, commands.turns),
         (MENU_COMMANDS, commands.menu),
+        (PURGE_COMMANDS, commands.purge),
     )
     for names, run_command in routes:
         app.add_handler(CommandHandler(list(names), handler(run_command)))
@@ -1064,6 +1067,18 @@ def main() -> None:
 
     meal_store = MealStore(db_path)
     meal_planner = build_meal_planner(config)
+    # Las teles se depuran solo con API: sin ella no hay registro de teles ni pantallas.
+    cleaner = Cleaner(
+        config=config,
+        reminders=reminders,
+        history=history,
+        fired=fired,
+        awaiting=awaiting,
+        ringing=ringing,
+        screens=pages.store if pages is not None else None,
+        tele=tele_link,
+        clock=datetime.now,
+    )
 
     commands = Commands(
         config=config,
@@ -1086,6 +1101,7 @@ def main() -> None:
         screens=screens,
         meal_store=meal_store,
         meal_planner=meal_planner,
+        cleaner=cleaner,
         tell_others=lambda chat_id, text: _tell_alert_chats(
             notifier, config.allowed_chat_ids, chat_id, text
         ),

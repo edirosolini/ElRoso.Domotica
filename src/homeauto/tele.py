@@ -131,6 +131,11 @@ class TeleStore:
             rows = conn.execute("SELECT * FROM teles ORDER BY alias").fetchall()
         return [_row_to_tele(row) for row in rows]
 
+    def remove(self, alias: str) -> bool:
+        """Borra la tele; False si no estaba."""
+        with self._connect() as conn:
+            return conn.execute("DELETE FROM teles WHERE alias = ?", (alias,)).rowcount > 0
+
 
 @dataclass
 class _Order:
@@ -264,6 +269,19 @@ class TeleLink:
                 if left <= 0:
                     return None
                 self._changed.wait(left)
+
+    def forget(self, alias: str) -> bool:
+        """Borra de memoria y de disco una tele que no está viva; False si está viva o no existía."""
+        alias = normalize(alias)
+        if self.alive(alias):
+            return False
+        with self._changed:
+            self._beats.pop(alias, None)
+            self._written.pop(alias, None)
+            self._caps.pop(alias, None)
+            self._orders.pop(alias, None)
+            self._changed.notify_all()
+        return self.store.remove(alias)
 
     def _known(self, alias: str) -> bool:
         """Si la tele está registrada; la primera vez trae de disco su último latido."""

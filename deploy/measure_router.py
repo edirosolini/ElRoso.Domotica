@@ -64,6 +64,7 @@ CASES = (
     ("armá otro menú sin carne", "menu", "nuevo"),
     ("pasá a compras lo del menú de la semana", "menu", "compras semana"),
     ("agregá milanesas a compras", "agregar", "milanesas"),
+    ("limpiá las teles viejas", "depurar", "teles"),
 )
 
 

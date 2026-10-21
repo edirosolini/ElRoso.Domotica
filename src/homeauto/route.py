@@ -25,7 +25,7 @@ ROUTABLE = (
     "volumen", "parar", "apagar", "clima", "agenda", "estado", "equipos",
     "usar", "preguntar", "calcular",
     "agregar", "compras", "pendientes", "sacar", "traducir", "posponer", "pastillas",
-    "vacaciones", "turnos", "pantalla", "menu",
+    "vacaciones", "turnos", "pantalla", "menu", "depurar",
 )
 
 # Lo que dice la persona entra literal en estos, así que no se puede reescribir.
@@ -88,6 +88,8 @@ Comandos y qué lleva cada uno:
   o "hasta 25/10 18:00"; "off" para cortarlas; sin argumento, cómo están
 - turnos: el número de lo programado y los nombres que se turnan una semana cada uno,
   así: "7 Cin, Die"; "7 off" para cortarlo; sin argumento, los turnos
+- depurar: limpiar lo que sobra en la casa; "teles" para las teles viejas, "avisos" para
+  las alarmas y recordatorios que ya no sirven; sin argumento, cuánto hay de cada cosa
 
 Reglas:
 - Si el mensaje es una pregunta, o no encaja claramente en ningún comando, contestá
@@ -187,6 +189,10 @@ ARGUMENTO: en recamara
 Mensaje: mostrame la agenda
 COMANDO: agenda
 ARGUMENTO:
+
+Mensaje: limpiá las teles viejas
+COMANDO: depurar
+ARGUMENTO: teles
 
 Contestá solo con dos líneas:
 COMANDO: <nombre o ninguno>

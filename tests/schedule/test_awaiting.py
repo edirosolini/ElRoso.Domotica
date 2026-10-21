@@ -28,3 +28,14 @@ def test_all_does_not_take_anything_out(tmp_path):
 
 def test_all_is_empty_when_nothing_waits(tmp_path):
     assert AwaitingStore(tmp_path / "jobs.db").all() == []
+
+
+def test_drop_before_only_takes_out_what_rang_before_the_cutoff(tmp_path):
+    store = AwaitingStore(tmp_path / "jobs.db")
+    store.remember(7, "pastilla", AT)
+
+    assert store.drop_before(7, AT) is False
+    assert store.get(7) is not None
+    assert store.drop_before(7, AT.replace(minute=1)) is True
+    assert store.get(7) is None
+    assert store.drop_before(7, AT.replace(minute=1)) is False
