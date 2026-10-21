@@ -5,6 +5,8 @@ import android.provider.Settings
 import android.util.Log
 import ar.elroso.domotica.tele.core.AppVersion
 import ar.elroso.domotica.tele.core.Caps
+import ar.elroso.domotica.tele.core.Offer
+import ar.elroso.domotica.tele.core.OfferLog
 import ar.elroso.domotica.tele.core.TeleApi
 import ar.elroso.domotica.tele.core.TeleChoice
 import ar.elroso.domotica.tele.core.TeleUrls
@@ -15,9 +17,13 @@ object Tele {
     private const val PREFS = "tele"
     private const val KEY_ALIAS = "alias"
     private const val KEY_CHAT = "chat_id"
+    private const val KEY_OFFER_CODE = "offer_code"
+    private const val KEY_OFFER_AT = "offer_at"
+    private const val KEY_REJECTED = "rejected_code"
 
     val urls = TeleUrls(BuildConfig.HOUSE_URL)
-    val api = TeleApi(HttpTransport(), urls)
+    val transport = HttpTransport()
+    val api = TeleApi(transport, urls)
     val version = AppVersion(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
 
     fun log(event: String) {
@@ -40,4 +46,25 @@ object Tele {
 
     /** Lo que la app sabe hacer hoy en este equipo. */
     fun caps(context: Context): List<String> = Caps.of(overlay = Settings.canDrawOverlays(context))
+
+    /** Si el sistema deja a la app pedir instalar paquetes. */
+    fun canInstall(context: Context): Boolean = context.packageManager.canRequestPackageInstalls()
+
+    /** La última versión ofrecida para instalar, guardada en `SharedPreferences`. */
+    fun offers(context: Context): OfferLog = object : OfferLog {
+        private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+        override fun last(): Offer? =
+            if (prefs.contains(KEY_OFFER_CODE)) Offer(prefs.getInt(KEY_OFFER_CODE, 0), prefs.getLong(KEY_OFFER_AT, 0)) else null
+
+        override fun save(offer: Offer) {
+            prefs.edit().putInt(KEY_OFFER_CODE, offer.versionCode).putLong(KEY_OFFER_AT, offer.at).apply()
+        }
+
+        override fun rejected(): Int? = if (prefs.contains(KEY_REJECTED)) prefs.getInt(KEY_REJECTED, 0) else null
+
+        override fun reject(versionCode: Int) {
+            prefs.edit().putInt(KEY_REJECTED, versionCode).apply()
+        }
+    }
 }

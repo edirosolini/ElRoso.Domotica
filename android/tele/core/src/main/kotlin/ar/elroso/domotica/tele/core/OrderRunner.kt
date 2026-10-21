@@ -48,6 +48,11 @@ class OrderRunner(
     @Volatile
     private var stops = 0
 
+    /** Si hay un `play` en curso, desde que prende la tele hasta que termina. */
+    @Volatile
+    var playing = false
+        private set
+
     fun run(order: Order) {
         answer(order.seq, AckState.RECEIVED)
         when (order.kind) {
@@ -85,6 +90,15 @@ class OrderRunner(
 
     private fun play(order: Order) {
         val url = order.url ?: return fail(order, "orden play sin url")
+        playing = true
+        try {
+            playAt(order, url)
+        } finally {
+            playing = false
+        }
+    }
+
+    private fun playAt(order: Order, url: String) {
         val generation = stops
         val asleep = !device.interactive
         device.wake()

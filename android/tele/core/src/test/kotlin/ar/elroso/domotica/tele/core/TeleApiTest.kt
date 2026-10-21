@@ -155,4 +155,30 @@ class TeleApiTest {
         assertEquals(CommandResult.Failed("HTTP 400: Ese chat no es de la casa."), api.command(1, "callar 7"))
         assertEquals(CommandResult.Failed("sin red"), api.command(1, "callar 7"))
     }
+
+    @Test
+    fun releaseReadsThePublishedVersion() {
+        transport.reply(200, """{"version_code": 6, "version_name": "0.3.0", "sha256": "abababababababababababababababababababababababababababababababab", "size": 10}""")
+
+        assertEquals(ReleaseResult.Published(Release(6, "0.3.0", "abababababababababababababababababababababababababababababababab", 10)), api.release())
+        assertEquals(listOf("GET http://casa/app/tele.json"), transport.requests)
+    }
+
+    @Test
+    fun releaseNotFoundIsUnpublished() {
+        transport.reply(404, "")
+
+        assertEquals(ReleaseResult.Unpublished, api.release())
+    }
+
+    @Test
+    fun releaseThatFailsSaysWhy() {
+        transport.fail()
+        transport.reply(500, "")
+        transport.reply(200, """{"version_code": 6}""")
+
+        assertEquals(ReleaseResult.Failed("sin red"), api.release())
+        assertEquals(ReleaseResult.Failed("HTTP 500"), api.release())
+        assertEquals(ReleaseResult.Failed("tele.json inválido"), api.release())
+    }
 }

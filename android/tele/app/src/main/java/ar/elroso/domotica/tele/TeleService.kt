@@ -9,12 +9,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.os.PowerManager
 import ar.elroso.domotica.tele.core.AckResult
 import ar.elroso.domotica.tele.core.AckState
 import ar.elroso.domotica.tele.core.Heartbeat
 import ar.elroso.domotica.tele.core.Order
 import ar.elroso.domotica.tele.core.OrderKind
 import ar.elroso.domotica.tele.core.OrderRunner
+import ar.elroso.domotica.tele.core.UpdatePolicy
+import ar.elroso.domotica.tele.core.Updater
+import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -26,6 +30,9 @@ class TeleService : Service() {
     companion object {
         private const val CHANNEL = "tele"
         private const val NOTIFICATION_ID = 1
+        // Cuándo se busca una versión nueva: al rato de arrancar y después cada hora.
+        private const val UPDATE_FIRST_MS = 30_000L
+        private const val UPDATE_EVERY_MS = 3_600_000L
 
         /** Arranca el servicio; lanza si el sistema no lo permite desde donde se llama. */
         fun start(context: Context) {
@@ -35,6 +42,7 @@ class TeleService : Service() {
 
     private var executor: ScheduledExecutorService? = null
     private var player: ExecutorService? = null
+    private var updates: ScheduledExecutorService? = null
     private var foreground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -91,6 +99,7 @@ class TeleService : Service() {
                 if (!beats.isShutdown) beats.schedule(this, delay, TimeUnit.MILLISECONDS)
             }
         })
+        updates = scheduleUpdates(runner)
         return START_STICKY
     }
 
@@ -105,7 +114,35 @@ class TeleService : Service() {
         executor = null
         player?.shutdownNow()
         player = null
+        updates?.shutdownNow()
+        updates = null
         super.onDestroy()
+    }
+
+    /** Agenda la búsqueda de versiones nuevas en un hilo propio, aparte del latido. */
+    private fun scheduleUpdates(runner: OrderRunner): ScheduledExecutorService {
+        val updater = Updater(
+            api = Tele.api,
+            urls = Tele.urls,
+            policy = UpdatePolicy(Tele.version.code, Tele.offers(this)),
+            source = Tele.transport,
+            installer = SessionInstaller(this),
+            target = File(cacheDir, "update.apk"),
+            alarm = { Kiosk.alarm },
+            playing = { runner.playing },
+            awake = { getSystemService(PowerManager::class.java).isInteractive },
+            allowed = { Tele.canInstall(this) },
+            log = Tele::log,
+        )
+        val checks = Executors.newSingleThreadScheduledExecutor()
+        checks.scheduleWithFixedDelay({
+            try {
+                updater.check()
+            } catch (e: Exception) {
+                Tele.log("la búsqueda de actualización falló: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }, UPDATE_FIRST_MS, UPDATE_EVERY_MS, TimeUnit.MILLISECONDS)
+        return checks
     }
 
     /** Ejecuta la orden: un `play` en el hilo de reproducción, el resto en el del latido. */

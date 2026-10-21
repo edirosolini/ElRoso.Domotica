@@ -248,4 +248,27 @@ class OrderRunnerTest {
         assertEquals(listOf("7 received"), acks)
         assertEquals(emptyList<String>(), device.calls)
     }
+
+    @Test
+    fun aPlayIsInCourseFromWakingUntilItEnds() {
+        val seen = mutableListOf<Boolean>()
+        device.wakesAfterMs = 1_000
+        onSleep = { seen += runner.playing }
+        device.onPlay = { seen += runner.playing }
+
+        assertEquals(false, runner.playing)
+        runner.run(play)
+
+        assertEquals(true, seen.isNotEmpty() && seen.all { it })
+        assertEquals(false, runner.playing)
+    }
+
+    @Test
+    fun aPlayThatFailsIsNoLongerInCourse() {
+        device.playWorks = false
+
+        runner.run(play)
+
+        assertEquals(false, runner.playing)
+    }
 }

@@ -118,4 +118,27 @@ class ProtocolTest {
     fun errorOfABodyThatIsNotJsonIsNull() {
         assertNull(Protocol.parseError("<html>"))
     }
+
+    @Test
+    fun parsesTheReleaseIgnoringUnknownFields() {
+        val body = """{"version_code": 6, "version_name": "0.3.0", "sha256": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB", "size": 1234, "nuevo": 1}"""
+
+        assertEquals(Release(6, "0.3.0", "abababababababababababababababababababababababababababababababab", 1234), Protocol.parseRelease(body))
+    }
+
+    @Test
+    fun anInvalidReleaseIsNull() {
+        val good = """"version_name": "0.3.0", "sha256": "abababababababababababababababababababababababababababababababab", "size": 1234"""
+        assertNull(Protocol.parseRelease("<html>"))
+        assertNull(Protocol.parseRelease("[]"))
+        assertNull(Protocol.parseRelease("{$good}"))
+        assertNull(Protocol.parseRelease("""{"version_code": "6", $good}"""))
+        assertNull(Protocol.parseRelease("""{"version_code": true, $good}"""))
+        assertNull(Protocol.parseRelease("""{"version_code": -1, $good}"""))
+        assertNull(Protocol.parseRelease("""{"version_code": 6, "version_name": 3, "sha256": "abababababababababababababababababababababababababababababababab", "size": 1234}"""))
+        assertNull(Protocol.parseRelease("""{"version_code": 6, "version_name": "0.3.0", "sha256": "abc", "size": 1234}"""))
+        assertNull(Protocol.parseRelease("""{"version_code": 6, "version_name": "0.3.0", "sha256": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "size": 1234}"""))
+        assertNull(Protocol.parseRelease("""{"version_code": 6, "version_name": "0.3.0", "sha256": "abababababababababababababababababababababababababababababababab", "size": 0}"""))
+        assertNull(Protocol.parseRelease("""{"version_code": 6, "version_name": "0.3.0", "sha256": "abababababababababababababababababababababababababababababababab"}"""))
+    }
 }

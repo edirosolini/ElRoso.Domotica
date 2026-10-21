@@ -44,6 +44,13 @@ sealed interface CommandResult {
     data class Failed(val reason: String) : CommandResult
 }
 
+/** Cómo terminó la consulta de `tele.json`. */
+sealed interface ReleaseResult {
+    data class Published(val release: Release) : ReleaseResult
+    data object Unpublished : ReleaseResult
+    data class Failed(val reason: String) : ReleaseResult
+}
+
 /** Las rutas de la tele en el CT y el comando de la pantalla de control. */
 class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
 
@@ -92,6 +99,17 @@ class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
         }
         if (reply.status != 200) return CommandResult.Failed(describe(reply))
         return CommandResult.Replied(parse({ Protocol.parseCommand(reply.body) }) { return CommandResult.Failed(it) })
+    }
+
+    /** La versión de la app publicada en el CT. */
+    fun release(): ReleaseResult {
+        val reply = send({ transport.get(urls.release) }) { return ReleaseResult.Failed(it) }
+        return when (reply.status) {
+            200 -> Protocol.parseRelease(reply.body)?.let { ReleaseResult.Published(it) }
+                ?: ReleaseResult.Failed("tele.json inválido")
+            404 -> ReleaseResult.Unpublished
+            else -> ReleaseResult.Failed(describe(reply))
+        }
     }
 
     private inline fun send(request: () -> HttpReply, onFailure: (String) -> Nothing): HttpReply = try {
