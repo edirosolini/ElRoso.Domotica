@@ -153,3 +153,41 @@ def test_the_cache_expires():
     reused.between(day(2026, 8, 31), day(2026, 9, 1))
 
     assert len(reused.calls) == 2
+
+
+SECRET_URL = "https://calendar.google.com/calendar/ical/casa/private-SECRETO123/basic.ics"
+
+
+def _http_error(status):
+    import requests
+
+    response = requests.Response()
+    response.status_code = status
+    response.url = SECRET_URL
+    return requests.HTTPError(f"{status} Client Error: Not Found for url: {SECRET_URL}", response=response)
+
+
+def test_an_http_failure_is_logged_without_the_private_url(caplog):
+    sources = {"personal": "https://a/a.ics", "familia": SECRET_URL}
+    partial = client(sources, {"personal": ICS, "familia": _http_error(404)})
+
+    with caplog.at_level("DEBUG"):
+        partial.between(day(2026, 8, 30), day(2026, 8, 31))
+
+    assert "SECRETO123" not in caplog.text
+    assert "familia" in caplog.text and "HTTP 404" in caplog.text
+    assert not any("SECRETO123" in problem for problem in partial.last_problems)
+
+
+def test_a_network_failure_is_logged_without_the_private_url(caplog):
+    import requests
+
+    boom = requests.ConnectionError(f"Max retries exceeded with url: {SECRET_URL}")
+    broken = client({"familia": SECRET_URL}, {"familia": boom})
+
+    with caplog.at_level("DEBUG"), pytest.raises(CalendarError) as raised:
+        broken.between(day(2026, 8, 30), day(2026, 8, 31))
+
+    assert "SECRETO123" not in caplog.text
+    assert "SECRETO123" not in str(raised.value)
+    assert "familia" in caplog.text and "ConnectionError" in caplog.text
