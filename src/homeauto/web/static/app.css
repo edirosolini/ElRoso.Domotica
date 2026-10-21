@@ -70,6 +70,14 @@ button { font: inherit; color: inherit; }
 .compras-card { grid-area: lists1; }
 .pendientes-card { grid-area: lists2; }
 .list-card { overflow: hidden; }
+/* Con la idea del menú, una fila más a la derecha de «Hoy». */
+.board.has-meal { grid-template-rows: auto auto auto 1fr;
+  grid-template-areas: "clock weather next" "today today meal" "today today lists1" "today today lists2"; }
+.meal-card { grid-area: meal; overflow: hidden; }
+.meal-items { list-style: none; margin: 8px 0 0; padding: 0; }
+.meal-items li { padding: clamp(4px, .8vh, 8px) 0; font-size: clamp(16px, 2.4vh, 26px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meal-items li.on { font-weight: 600; }
+.meal-items li.past { opacity: .45; }
 .kiosk .problems { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); margin: 0; font-size: 14px; }
 .kiosk .problems:empty { display: none; }
 /* Solo lectura, en la tele: sin campos para agregar ni círculos para tachar. */
@@ -114,6 +122,8 @@ button { font: inherit; color: inherit; }
 @media (orientation: portrait) {
   .board { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto 1fr auto;
     grid-template-areas: "clock clock" "weather next" "today today" "today today" "lists1 lists2"; }
+  .board.has-meal { grid-template-rows: auto auto auto auto 1fr auto;
+    grid-template-areas: "clock clock" "weather next" "meal meal" "today today" "today today" "lists1 lists2"; }
 }
 
 /* Agenda */

@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from homeauto import main, polish
+from homeauto.meals import DINNER, LUNCH, Meal
 from homeauto.web.app import Request
 
 
@@ -1234,6 +1235,22 @@ def test_the_screen_reads_the_one_database(wired, tmp_path, monkeypatch):
     assert screen["weather"] is None
     assert isinstance(screen["quiet"], bool)
     assert board.quiet.until() is None
+
+
+def test_the_screen_shows_the_meal_idea_from_the_one_database(wired, tmp_path, monkeypatch):
+    web = _wired_web(monkeypatch, tmp_path, "MENU_LUNCH_AT=off\n")
+    board = web.board
+    today = main.datetime.now().date()
+    board.meals.replace(Meal(today, LUNCH, "Milanesas", ("carne",)))
+    board.meals.replace(Meal(today + timedelta(days=1), LUNCH, "Ñoquis", ("papas",)))
+    board.meals.replace(Meal(today, DINNER, "Tarta", ("acelga",)))
+    board.meals.replace(Meal(today + timedelta(days=1), DINNER, "Pizza", ("harina",)))
+
+    meal = board.screen()["meal"]
+
+    assert board.meals.db_path == tmp_path / "jobs.db"
+    assert board.served == ("cena",)
+    assert [item["meal"] for item in meal["items"]] == ["cena"]
 
 
 def test_the_screen_shows_the_configured_calendars(wired, tmp_path, monkeypatch):

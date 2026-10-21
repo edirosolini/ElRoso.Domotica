@@ -1,13 +1,16 @@
 """Las rutas de la pantalla, sin servidor HTTP de por medio."""
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
 
+from homeauto.meals import LUNCH, Meal, MealStore
+from homeauto.schedule.history import HistoryStore
+from homeauto.schedule.store import Store
 from homeauto.web.app import FULLCALENDAR, STATIC_DIR, Request, WebApp
-from homeauto.web.board import RangeError
+from homeauto.web.board import Board, RangeError
 from homeauto.web.jobs import NotFound, ReadOnly, WebError
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
@@ -374,6 +377,20 @@ def test_the_board_feed_is_the_screen(app):
     assert response.headers["Cache-Control"] == "no-store"
     assert body_json(response)["quiet"] is True
     assert body_json(response)["lists"] == {"compras": ["leche"]}
+
+
+def test_the_board_feed_carries_the_meal_idea(tmp_path):
+    db = tmp_path / "jobs.db"
+    meals = MealStore(db)
+    meals.replace(Meal(date(2026, 10, 21), LUNCH, "Milanesas con puré", ("carne",)))
+    app = WebApp(Board(store=Store(db), history=HistoryStore(db),
+                       clock=lambda: datetime(2026, 10, 21, 10, 0), timezone=TZ, meals=meals))
+
+    meal = body_json(get(app, "/api/board"))["meal"]
+
+    assert meal == {"day": "2026-10-21", "tomorrow": False, "items": [
+        {"meal": "almuerzo", "label": "Almuerzo", "dish": "Milanesas con puré", "state": "next"},
+    ]}
 
 
 # --- /static ---

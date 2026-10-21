@@ -11,7 +11,7 @@
 <script src="/static/kiosk.js" defer></script>
 </head>
 <body class="kiosk">
-<main class="board">
+<main id="board" class="board">
   <section class="card clock-card">
     <div id="time" class="time">--:--</div>
     <div id="date" class="date"></div>
@@ -40,6 +40,11 @@
   <section class="card today-card">
     <div class="card-head"><h2>Hoy</h2><span id="count-today" class="count">0</span></div>
     <ul id="today" class="timeline"></ul>
+  </section>
+
+  <section id="meal-card" class="card meal-card" hidden>
+    <div id="meal-title" class="eyebrow">🍽 Idea para hoy</div>
+    <ul id="meal-items" class="meal-items"></ul>
   </section>
 
   <section class="card list-card compras-card">
