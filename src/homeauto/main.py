@@ -93,6 +93,7 @@ from homeauto.watch.seq_watcher import SeqWatcher
 from homeauto.watch.status import StatusStore
 from homeauto.watch.uplink import Uplink
 from homeauto.weather import RainWatcher, WeatherClient, WeatherWatcher
+from homeauto.web.apk import AppShelf
 from homeauto.web.app import WebApp
 from homeauto.web.control import ControlService
 from homeauto.web.board import Board
@@ -1154,6 +1155,7 @@ def main() -> None:
                     chat_ids=config.allowed_chat_ids,
                     clock=datetime.now,
                 ),
+                apps=AppShelf(STATE_DIR / "app"),
             ),
         )
     else:

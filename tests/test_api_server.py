@@ -1,4 +1,5 @@
 import json
+import os
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -8,6 +9,7 @@ import pytest
 from homeauto.api import ApiServer, ApiService
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.store import Store
+from homeauto.web.apk import AppShelf
 from homeauto.web.app import Response, WebApp
 from homeauto.web.board import Board
 
@@ -297,3 +299,25 @@ def test_the_real_screen_is_served_with_its_policy(tmp_path):
         server.stop()
 
 
+def test_the_tv_app_arrives_whole_through_the_real_server(tmp_path):
+    """Un APK de dos megas llega entero, con su largo y su tipo."""
+    apk = os.urandom(2 * 1024 * 1024 + 17)
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "tele.apk").write_bytes(apk)
+    board = Board(
+        store=Store(tmp_path / "jobs.db"),
+        history=HistoryStore(tmp_path / "jobs.db"),
+        clock=lambda: datetime(2026, 10, 5, 12, 0),
+    )
+    web = WebApp(board, apps=AppShelf(tmp_path / "app"))
+    server = ApiServer(_service(), port=0, host="127.0.0.1", web=web)
+    server.start()
+    try:
+        url = f"http://127.0.0.1:{server.actual_port}/app/tele.apk?v=2"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            assert response.status == 200
+            assert response.headers["Content-Length"] == str(len(apk))
+            assert response.headers["Content-Type"] == "application/vnd.android.package-archive"
+            assert response.read() == apk
+    finally:
+        server.stop()
