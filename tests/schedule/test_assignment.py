@@ -236,11 +236,11 @@ def test_the_nags_go_to_its_audience_and_the_last_one_to_everyone(house):
 
     for _ in range(NAG_LIMIT - 1):
         run(house, key)
-        assert told_to(house, "Sigue pendiente") == [CHINA_CHAT]
+        assert told_to(house, "China, sigue pendiente") == [CHINA_CHAT]
         house["told"].clear()
     run(house, key)
 
-    assert told_to(house, "Sigue pendiente") == sorted(CHATS)
+    assert told_to(house, "China, sigue pendiente") == sorted(CHATS)
 
 
 def test_a_nag_for_nobody_goes_to_everyone(house):
@@ -259,7 +259,7 @@ def test_after_a_restart_the_nag_reads_the_photo_not_the_job(house):
     house["clock"].now = SOON + NAG_DELAY
     house["build"]().start(house["clock"].now)
 
-    assert told_to(house, "Sigue pendiente") == [CHINA_CHAT]
+    assert told_to(house, "China, sigue pendiente") == [CHINA_CHAT]
 
 
 # --- «Hecho» y «Apagar» -----------------------------------------------------------

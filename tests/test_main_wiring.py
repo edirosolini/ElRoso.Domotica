@@ -1063,6 +1063,16 @@ def test_a_reminder_nags_with_only_the_done_button(wired, tmp_path, monkeypatch)
     assert callable(reminders["notify"])
 
 
+def test_a_reminder_nags_out_loud_with_the_announcer(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    say_nag = reminders["say_nag"]
+    assert say_nag.__self__ is reminders["announce"], "dice el re-aviso con los equipos del anunciador"
+    assert say_nag.__func__ is main.Announcer.nag
+
+
 def test_what_rang_is_kept_in_the_history_of_the_one_database(wired, tmp_path, monkeypatch):
     reminders = _spy_init(monkeypatch, main.Reminders)
 

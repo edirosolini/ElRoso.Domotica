@@ -988,6 +988,7 @@ def main() -> None:
         history=history,
         ringing=ringing,
         stop_audio=announcer.stop,
+        say_nag=announcer.nag,
         notify=notifier,
         chat_ids=config.allowed_chat_ids,
         nag_actions=DONE_ACTIONS,
