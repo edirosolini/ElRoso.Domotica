@@ -10,6 +10,7 @@ from homeauto.bot.commands import CHATLESS_BUTTONS, with_actions
 from homeauto.people import display_name
 from homeauto.schedule.awaiting import KEEP
 from homeauto.schedule.reminders import SNOOZE_WINDOW
+from homeauto.web.board import for_name, person_names
 from homeauto.web.jobs import ReadOnly, WebError
 
 log = logging.getLogger(__name__)
@@ -99,24 +100,28 @@ class ControlService:
         }
 
     def _ringing(self) -> list[dict]:
+        names = person_names(self.household)
         return [
             {
                 "job_id": ring.job_id,
                 "message": ring.message,
                 "since": ring.fired_at.isoformat(),
                 "rings": ring.rings,
+                "for": for_name(ring.assignee, ring.assignee_id, names),
                 "actions": _actions([(OFF[0], OFF[1].format(job=ring.job_id))]),
             }
             for ring in self.ringing.all()
         ]
 
     def _awaiting(self, now: datetime) -> list[dict]:
+        names = person_names(self.household)
         return [
             {
                 "job_id": wait.job_id,
                 "message": wait.message,
                 "since": wait.fired_at.isoformat(),
                 "nags": wait.nags,
+                "for": for_name(wait.assignee, wait.assignee_id, names),
                 "actions": _actions([(DONE[0], DONE[1].format(job=wait.job_id))]),
             }
             for wait in self.awaiting.all()
@@ -132,6 +137,7 @@ class ControlService:
             "message": last.message,
             "kind": last.kind,
             "since": last.at.isoformat(),
+            "for": for_name(last.assignee, last.assignee_id, person_names(self.household)),
             "actions": _actions(SNOOZE),
         }
 

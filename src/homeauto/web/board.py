@@ -9,6 +9,7 @@ from typing import Callable
 
 from homeauto.lists import LISTS
 from homeauto.meals import DINNER, LUNCH, MEAL_ENDS, upcoming
+from homeauto.schedule.store import EVERYONE, PERSON
 from homeauto.schedule.month import (
     ALARM_ITEM,
     REMINDER_ITEM,
@@ -41,6 +42,8 @@ KIND_ICONS = {ALARM_ITEM: "⏰", REMINDER_ITEM: "📌", TIMER_ITEM: "⏲️"}
 KIND_COLORS = {ALARM_ITEM: "#d93025", REMINDER_ITEM: "#1a73e8", TIMER_ITEM: "#e37400"}
 PAST_COLOR = "#9aa0a6"
 HOUSE_NAME = "La casa"
+# Cómo se muestra un aviso para todos.
+EVERYONE_LABEL = "todos"
 
 # El ícono de cada código WMO de Open-Meteo; lo que no figura es cielo variable.
 SKY_ICONS = (
@@ -98,10 +101,33 @@ def marks(item: Item) -> list[str]:
     return found
 
 
-def _house_event(item: Item) -> dict:
+def person_names(household) -> dict[int, str]:
+    """El nombre de cada persona del padrón por id; ninguno sin padrón o si no contesta."""
+    if household is None:
+        return {}
+    try:
+        return {person.id: person.name for person in household.list()}
+    except Exception:  # noqa: BLE001
+        log.warning("no pude leer el padrón", exc_info=True)
+        return {}
+
+
+def for_name(assignee: str, assignee_id: int | None, names: dict[int, str]) -> str | None:
+    """Para quién es, para mostrarlo: la persona, «todos», o None si es de nadie o ya no está."""
+    if assignee == EVERYONE:
+        return EVERYONE_LABEL
+    if assignee == PERSON and assignee_id is not None:
+        return names.get(assignee_id)
+    return None
+
+
+def _house_event(item: Item, names: dict[int, str]) -> dict:
     """Un ítem de la casa en el formato de evento de FullCalendar."""
     found = marks(item)
+    whom = for_name(item.assignee, item.assignee_id, names)
     title = f"{KIND_ICONS[item.kind]} {item.message}"
+    if whom:
+        title = f"{title} · para {whom}"
     if found:
         title = f"{title} · {' '.join(found)}"
     return {
@@ -120,6 +146,9 @@ def _house_event(item: Item) -> dict:
             "holiday": item.holiday,
             "label": f"{KIND_ICONS[item.kind]} {item.message}",
             "ending": _ending(item, found),
+            "assignee": item.assignee,
+            "assignee_id": item.assignee_id,
+            "for": whom,
         },
     }
 
@@ -155,6 +184,7 @@ class Board:
         ringing=None,
         meals=None,
         served: tuple[str, ...] = (LUNCH, DINNER),
+        household=None,
     ):
         self.store = store
         self.history = history
@@ -171,6 +201,8 @@ class Board:
         # El menú guardado y las comidas que no están en `off`.
         self.meals = meals
         self.served = served
+        # El padrón, para el nombre de la persona de cada aviso.
+        self.household = household
         self._lock = threading.Lock()
         self._calendar_cache: dict[tuple[datetime, datetime], tuple[datetime, list, list]] = {}
         self._weather_cache: tuple[datetime, dict] | None = None
@@ -193,7 +225,8 @@ class Board:
             raise RangeError(f"el rango no puede pasar de {MAX_RANGE.days} días")
 
         now = self.clock()
-        timed = [(item.at, _house_event(item)) for item in self._house(start, end, now)]
+        names = person_names(self.household)
+        timed = [(item.at, _house_event(item, names)) for item in self._house(start, end, now)]
         google, problems = self._google(start, end, now)
         timed.extend(google)
         timed.extend(self._holidays(start, end))
@@ -305,6 +338,10 @@ class Board:
             "now": self._stamp(self.clock()),
             "ringing": found is not None,
             "message": found.message if found is not None else None,
+            "for": (
+                for_name(found.assignee, found.assignee_id, person_names(self.household))
+                if found is not None else None
+            ),
         }
 
     def screen(self) -> dict:
@@ -393,6 +430,7 @@ class Board:
                     "color": event["color"],
                     "label": props.get("label", event["title"]),
                     "mark": props.get("ending", ""),
+                    "for": props.get("for"),
                 }
             )
         return today, list(found["problems"])

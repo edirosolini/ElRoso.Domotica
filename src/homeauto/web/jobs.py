@@ -14,12 +14,16 @@ from homeauto.schedule.month import item_kind
 from homeauto.schedule.spec import (
     SpecError, check_skip_holidays, classify, repetition_label, resolve,
 )
-from homeauto.schedule.store import MONTHLY, WEEKLY, Job, on_monthday
-from homeauto.web.board import KIND_ICONS
+from homeauto.schedule.store import (
+    ASSIGNEES, MONTHLY, NOBODY, PERSON, WEEKLY, Job, on_monthday,
+)
+from homeauto.web.board import KIND_ICONS, for_name, person_names
 
 log = logging.getLogger(__name__)
 
 MAX_MESSAGE = 500
+# El chat de un aviso cuyo autor no tiene Telegram; ningún chat real es cero.
+NO_CHAT = 0
 
 
 class WebError(Exception):
@@ -143,16 +147,14 @@ class JobsService:
 
     def create(self, payload: dict) -> dict:
         self._check_writable()
-        author = payload.get("author")
-        if type(author) is not int or author not in self.chat_ids:
-            raise WebError("Elegí a nombre de quién va el aviso.")
+        chat_id, author_id = self._author(payload)
         fields = self._fields(payload)
+        fields.update(self._assignee(payload) or {"assignee": NOBODY, "assignee_id": None})
         try:
-            job = self.reminders.add(author, **fields)
+            job = self.reminders.add(chat_id, author_id=author_id, **fields)
         except ValueError as exc:
             raise WebError(str(exc)) from None
-        name = display_name(author, self._names())
-        self._tell(f"🖥️ {name} programó desde la pantalla {self._describe(job)}",
+        self._tell(f"🖥️ {self._author_name(job)} programó desde la pantalla {self._describe(job)}",
                    (cancel_action(job.id),))
         return self._as_dict(job)
 
@@ -163,6 +165,7 @@ class JobsService:
         if previous is None:
             raise NotFound(f"No existe el aviso #{job_id}.")
         fields = self._fields(payload, previous)
+        fields.update(self._assignee(payload) or {})
         try:
             job = self.reminders.update(job_id, **fields)
         except ValueError as exc:
@@ -211,6 +214,48 @@ class JobsService:
 
     def _names(self) -> dict[int, str]:
         return self.people_store.names() if self.people_store is not None else {}
+
+    def _person(self, person_id: object) -> Person | None:
+        if type(person_id) is not int or self.household is None:
+            return None
+        return self.household.get(person_id)
+
+    def _author(self, payload: dict) -> tuple[int, int | None]:
+        """El chat y la persona a cuyo nombre va el aviso: un chat de la casa o una del padrón."""
+        chat_id, person_id = payload.get("author"), payload.get("author_id")
+        if chat_id is not None and person_id is not None:
+            raise WebError("Mandá el chat o la persona, no los dos.")
+        if person_id is not None:
+            person = self._person(person_id)
+            if person is None:
+                raise WebError("Elegí a nombre de quién va el aviso.")
+            return (person.chat_id if person.chat_id is not None else NO_CHAT), person.id
+        if type(chat_id) is not int or chat_id not in self.chat_ids:
+            raise WebError("Elegí a nombre de quién va el aviso.")
+        person = self.household.by_chat(chat_id) if self.household is not None else None
+        return chat_id, person.id if person is not None else None
+
+    def _assignee(self, payload: dict) -> dict | None:
+        """Para quién es, validado contra el padrón; None si el pedido no lo dice."""
+        if "assignee" not in payload:
+            return None
+        assignee, person_id = payload.get("assignee"), payload.get("assignee_id")
+        if assignee not in ASSIGNEES:
+            raise WebError("Elegí para quién es el aviso.")
+        if assignee != PERSON:
+            if person_id is not None:
+                raise WebError("Solo un aviso para una persona lleva a quién.")
+            return {"assignee": assignee, "assignee_id": None}
+        if self._person(person_id) is None:
+            raise WebError("No existe esa persona en la casa.")
+        return {"assignee": assignee, "assignee_id": person_id}
+
+    def _author_name(self, job: Job) -> str:
+        """El nombre del autor: la persona del padrón, o el del chat como lo ve Telegram."""
+        person = self._person(job.author_id)
+        if person is None and job.chat_id != NO_CHAT and self.household is not None:
+            person = self.household.by_chat(job.chat_id)
+        return person.name if person is not None else display_name(job.chat_id, self._names())
 
     def _fields(self, payload: dict, previous: Job | None = None) -> dict:
         """Lo que pide el formulario, validado para el store; `previous` es el job editado."""
@@ -267,8 +312,17 @@ class JobsService:
             "skip_holidays": job.skip_holidays,
             "device": job.device or "",
             "author": job.chat_id,
-            "author_name": display_name(job.chat_id, self._names()),
+            "author_id": job.author_id,
+            "author_name": self._author_name(job),
+            "assignee": job.assignee,
+            "assignee_id": job.assignee_id,
+            "assignee_name": self._assignee_name(job),
         }
+
+    def _assignee_name(self, job: Job) -> str | None:
+        """El nombre de la persona del aviso; None si es de nadie, de todos o ya no está."""
+        person = self._person(job.assignee_id) if job.assignee == PERSON else None
+        return person.name if person is not None else None
 
     def _describe(self, job: Job) -> str:
         """El aviso en una línea de chat: ícono, número, cuándo, repetición y mensaje."""
@@ -279,6 +333,9 @@ class JobsService:
             text += f" · {repetition}"
         if job.device:
             text += f" · {job.device}"
+        whom = for_name(job.assignee, job.assignee_id, person_names(self.household))
+        if whom:
+            text += f" · para {whom}"
         return f"{text} — «{job.message}»"
 
     def _tell(self, text: str, actions: tuple[tuple[str, str], ...]) -> None:

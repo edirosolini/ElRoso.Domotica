@@ -96,7 +96,7 @@ def test_a_ringing_alarm_comes_with_its_off_button(db):
 
     assert live["ringing"] == [{
         "job_id": 17, "message": "arriba", "since": "2026-10-19T11:58:00", "rings": 0,
-        "actions": [{"label": "🔕 Apagar", "data": "callar 17"}],
+        "for": None, "actions": [{"label": "🔕 Apagar", "data": "callar 17"}],
     }]
 
 
@@ -410,3 +410,26 @@ def test_live_for_a_person_that_is_not_in_the_padron_is_refused(db, house, perso
 def test_without_a_padron_a_person_is_refused(db, commands):
     with pytest.raises(ReadOnly):
         make(db, commands=commands).run({"person_id": 1, "data": "callar 3"})
+
+
+def test_what_rings_and_what_waits_say_who_they_are_for(db, house):
+    china = house.add("China")
+    control = make(db, household=house)
+    control.ringing.remember(17, 42, "arriba", None, NOW - timedelta(minutes=2),
+                             assignee="person", assignee_id=china.id)
+    control.awaiting.remember(9, "pastilla", NOW - timedelta(minutes=10), assignee="all")
+    control.awaiting.remember(10, "la basura", NOW - timedelta(minutes=10))
+
+    live = control.live(42)
+
+    assert live["ringing"][0]["for"] == "China"
+    assert [wait["for"] for wait in live["awaiting"]] == ["todos", None]
+
+
+def test_what_can_be_postponed_says_who_it_is_for(db, house):
+    china = house.add("China")
+    control = make(db, household=house)
+    control.fired.remember(42, "arriba", None, NOW - timedelta(minutes=5), job_id=17,
+                           assignee="person", assignee_id=china.id)
+
+    assert control.live(42)["snooze"]["for"] == "China"

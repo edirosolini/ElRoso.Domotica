@@ -79,4 +79,58 @@ assert.strictEqual(agenda.skipsHolidays(agenda.repeatRule("alarm", "weekly"), fa
 assert.strictEqual(agenda.skipsHolidays(agenda.repeatRule("alarm", "daily"), true), false);
 assert.strictEqual(agenda.skipsHolidays(agenda.repeatRule("timer", "weekly"), true), false);
 
+// El filtro por persona: lo de esa persona y lo de todos; Google y feriados siempre.
+var china = { source: "casa", assignee: "person", assignee_id: 3 };
+var diego = { source: "casa", assignee: "person", assignee_id: 5 };
+var everyone = { source: "casa", assignee: "all", assignee_id: null };
+var nobody = { source: "casa", assignee: "none", assignee_id: null };
+assert.strictEqual(agenda.visibleFor(china, 3), true);
+assert.strictEqual(agenda.visibleFor(diego, 3), false);
+assert.strictEqual(agenda.visibleFor(everyone, 3), true);
+assert.strictEqual(agenda.visibleFor(nobody, 3), false);
+assert.strictEqual(agenda.visibleFor({ source: "google" }, 3), true);
+assert.strictEqual(agenda.visibleFor({ source: "feriado" }, 3), true);
+// Sin filtro se ve todo.
+assert.strictEqual(agenda.visibleFor(diego, null), true);
+assert.strictEqual(agenda.visibleFor(nobody, null), true);
+
+// El selector «Para»: nadie, todos y cada persona.
+var persons = [{ id: 3, name: "China", chat_id: null }, { id: 5, name: "Diego", chat_id: 42 }];
+assert.deepStrictEqual(agenda.assigneeOptions(persons), [
+  { value: "none", label: "Nadie" },
+  { value: "all", label: "Todos" },
+  { value: "p:3", label: "China" },
+  { value: "p:5", label: "Diego" },
+]);
+assert.deepStrictEqual(agenda.assigneeOptions([]), [
+  { value: "none", label: "Nadie" },
+  { value: "all", label: "Todos" },
+]);
+assert.deepStrictEqual(agenda.assigneeBody("none"), { assignee: "none" });
+assert.deepStrictEqual(agenda.assigneeBody("all"), { assignee: "all" });
+assert.deepStrictEqual(agenda.assigneeBody("p:3"), { assignee: "person", assignee_id: 3 });
+assert.strictEqual(agenda.assigneeValue({ assignee: "person", assignee_id: 3 }), "p:3");
+assert.strictEqual(agenda.assigneeValue({ assignee: "all", assignee_id: null }), "all");
+assert.strictEqual(agenda.assigneeValue({ assignee: "none", assignee_id: null }), "none");
+assert.strictEqual(agenda.assigneeValue(null), "none");
+
+// A nombre de quién: las personas del padrón o, sin padrón, los chats.
+assert.deepStrictEqual(agenda.authorOptions({ persons: persons, people: [{ chat_id: 42, name: "Eze" }] }), [
+  { value: "p:3", label: "China (sin Telegram)" },
+  { value: "p:5", label: "Diego" },
+]);
+assert.deepStrictEqual(agenda.authorOptions({ persons: [], people: [{ chat_id: 42, name: "Eze" }] }), [
+  { value: "c:42", label: "Eze" },
+]);
+assert.deepStrictEqual(agenda.authorOptions({}), []);
+assert.deepStrictEqual(agenda.authorBody("p:3"), { author_id: 3 });
+assert.deepStrictEqual(agenda.authorBody("c:-100"), { author: -100 });
+
+// El filtro recordado en el dispositivo, si esa persona sigue en el padrón.
+assert.strictEqual(agenda.savedPerson("3", persons), 3);
+assert.strictEqual(agenda.savedPerson("9", persons), null);
+assert.strictEqual(agenda.savedPerson("", persons), null);
+assert.strictEqual(agenda.savedPerson(null, persons), null);
+assert.strictEqual(agenda.savedPerson("abc", persons), null);
+
 console.log("ok");

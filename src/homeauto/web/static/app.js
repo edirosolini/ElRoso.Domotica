@@ -9,6 +9,7 @@
   var BOTTOM_GAP = 40;
   var TICK_MS = 60000;
   var TOAST_MS = 2600;
+  var SAVED_FILTER = "casa.agenda.ver";
 
   function pad(number) {
     return number < 10 ? "0" + number : String(number);
@@ -62,6 +63,69 @@
     return rule.showDays && Boolean(checked);
   }
 
+  // Si un evento se ve con el filtro de esa persona: lo suyo y lo de todos; lo que no es de la casa, siempre.
+  function visibleFor(props, personId) {
+    if (personId === null || props.source !== "casa") {
+      return true;
+    }
+    return props.assignee === "all" ||
+      (props.assignee === "person" && props.assignee_id === personId);
+  }
+
+  // Las opciones de «Para»: nadie, todos y cada persona del padrón.
+  function assigneeOptions(persons) {
+    var options = [{ value: "none", label: "Nadie" }, { value: "all", label: "Todos" }];
+    (persons || []).forEach(function (person) {
+      options.push({ value: "p:" + person.id, label: person.name });
+    });
+    return options;
+  }
+
+  // La opción de «Para» de un aviso guardado.
+  function assigneeValue(job) {
+    if (job && job.assignee === "person") {
+      return "p:" + job.assignee_id;
+    }
+    return (job && job.assignee) || "none";
+  }
+
+  // Lo que viaja de «Para» en el cuerpo del aviso.
+  function assigneeBody(value) {
+    if (value.indexOf("p:") === 0) {
+      return { assignee: "person", assignee_id: parseInt(value.slice(2), 10) };
+    }
+    return { assignee: value };
+  }
+
+  // A nombre de quién: las personas del padrón o, sin padrón, los chats.
+  function authorOptions(data) {
+    var persons = (data && data.persons) || [];
+    if (persons.length) {
+      return persons.map(function (person) {
+        return { value: "p:" + person.id,
+          label: person.name + (person.chat_id === null ? " (sin Telegram)" : "") };
+      });
+    }
+    return ((data && data.people) || []).map(function (chat) {
+      return { value: "c:" + chat.chat_id, label: chat.name };
+    });
+  }
+
+  // Lo que viaja del autor en el cuerpo del aviso: la persona o el chat.
+  function authorBody(value) {
+    var id = parseInt(value.slice(2), 10);
+    return value.indexOf("p:") === 0 ? { author_id: id } : { author: id };
+  }
+
+  // La persona del filtro guardado, si sigue en el padrón; si no, null.
+  function savedPerson(saved, persons) {
+    var id = parseInt(saved, 10);
+    var found = (persons || []).some(function (person) {
+      return person.id === id;
+    });
+    return found ? id : null;
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       isPastToday: isPastToday,
@@ -69,6 +133,13 @@
       nowScroll: nowScroll,
       repeatRule: repeatRule,
       skipsHolidays: skipsHolidays,
+      visibleFor: visibleFor,
+      assigneeOptions: assigneeOptions,
+      assigneeValue: assigneeValue,
+      assigneeBody: assigneeBody,
+      authorOptions: authorOptions,
+      authorBody: authorBody,
+      savedPerson: savedPerson,
     };
   }
   if (typeof document === "undefined") {
@@ -83,6 +154,7 @@
     showPastToday: false,
     todayToggle: null,
     toastTimer: null,
+    person: null,
   };
 
   function byId(id) {
@@ -105,6 +177,29 @@
     var element = line("option", text);
     element.value = String(value);
     return element;
+  }
+
+  function fillSelect(select, options) {
+    clear(select);
+    options.forEach(function (item) {
+      select.appendChild(option(item.value, item.label));
+    });
+  }
+
+  function readFilter() {
+    try {
+      return window.localStorage.getItem(SAVED_FILTER);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function saveFilter(value) {
+    try {
+      window.localStorage.setItem(SAVED_FILTER, value);
+    } catch (error) {
+      return;
+    }
   }
 
   function showProblems(list) {
@@ -203,7 +298,7 @@
       : "Mostrar lo que ya pasó hoy (" + count + ")";
   }
 
-  // Oculta en el mes lo que ya pasó hoy, o lo muestra si se tocó «…».
+  // Oculta lo que no es de la persona elegida y, en el mes, lo que ya pasó hoy salvo que se tocó «…».
   function applyPastToday() {
     var calendar = state.calendar;
     if (!calendar) {
@@ -214,11 +309,12 @@
     var count = 0;
     calendar.batchRendering(function () {
       calendar.getEvents().forEach(function (event) {
-        var past = month && isPastToday(eventItem(event), now);
+        var shown = visibleFor(event.extendedProps, state.person);
+        var past = shown && month && isPastToday(eventItem(event), now);
         if (past) {
           count += 1;
         }
-        var display = past && !state.showPastToday ? "none" : "block";
+        var display = !shown || (past && !state.showPastToday) ? "none" : "block";
         if (event.display !== display) {
           event.setProp("display", display);
         }
@@ -384,6 +480,11 @@
     });
     byId("editor-holidays").checked = job ? Boolean(job.skip_holidays) : false;
     byId("editor-device").value = job ? job.device : "";
+    var assignee = byId("editor-assignee");
+    assignee.value = assigneeValue(job);
+    if (!assignee.value) {
+      assignee.value = "none";
+    }
     byId("editor-author-label").hidden = Boolean(job);
     setType(job ? job.type : "alarm");
     showEditorError("");
@@ -404,7 +505,7 @@
       }
     });
     var rule = repeatRule(byId("editor-type").value, byId("editor-repeat").value);
-    return {
+    var body = {
       type: byId("editor-type").value,
       message: byId("editor-message").value,
       when: byId("editor-when").value,
@@ -412,8 +513,17 @@
       days: days,
       skip_holidays: skipsHolidays(rule, byId("editor-holidays").checked),
       device: byId("editor-device").value,
-      author: parseInt(byId("editor-author").value, 10),
     };
+    var parts = [assigneeBody(byId("editor-assignee").value)];
+    if (byId("editor-author").value) {
+      parts.push(authorBody(byId("editor-author").value));
+    }
+    parts.forEach(function (part) {
+      Object.keys(part).forEach(function (key) {
+        body[key] = part[key];
+      });
+    });
+    return body;
   }
 
   function save(submit) {
@@ -456,11 +566,17 @@
   function loadPeople() {
     send("GET", "/api/people").then(function (data) {
       state.writable = Boolean(data.writable);
-      var author = byId("editor-author");
-      clear(author);
-      (data.people || []).forEach(function (person) {
-        author.appendChild(option(person.chat_id, person.name));
-      });
+      var persons = data.persons || [];
+      fillSelect(byId("editor-author"), authorOptions(data));
+      fillSelect(byId("editor-assignee"), assigneeOptions(persons));
+      var filter = byId("filter");
+      fillSelect(filter, [{ value: "", label: "Toda la casa" }].concat(persons.map(function (person) {
+        return { value: String(person.id), label: person.name };
+      })));
+      state.person = savedPerson(readFilter(), persons);
+      filter.value = state.person === null ? "" : String(state.person);
+      applyPastToday();
+      byId("filter-label").hidden = persons.length === 0;
       var device = byId("editor-device");
       (data.devices || []).forEach(function (alias) {
         device.appendChild(option(alias, alias));
@@ -552,6 +668,12 @@
     byId("new-job").addEventListener("click", function () {
       openEditor(null, null);
     });
+    byId("filter").addEventListener("change", function () {
+      var value = byId("filter").value;
+      state.person = value ? parseInt(value, 10) : null;
+      saveFilter(value);
+      applyPastToday();
+    });
     closeOnBackdrop("detail", closeDetail);
     closeOnBackdrop("editor", closeEditor);
 
@@ -583,7 +705,8 @@
         var fold = folding();
         return (content.events || []).map(function (raw) {
           raw.display = "block";
-          if (fold && isPastToday(rawItem(raw), now)) {
+          if (!visibleFor(raw.extendedProps || {}, state.person) ||
+              (fold && isPastToday(rawItem(raw), now))) {
             raw.display = "none";
           }
           return raw;

@@ -1962,6 +1962,7 @@ def test_the_padron_is_one_and_reaches_the_screen_the_control_and_telegram(
     assert household.chat_ids == frozenset({42, 77})
     assert web.jobs.household is household
     assert web.control.household is household
+    assert web.board.household is household
 
     created = web.handle(Request.from_target(
         "POST", "/api/persons", headers=WRITE,
@@ -1983,6 +1984,26 @@ def test_the_padron_is_one_and_reaches_the_screen_the_control_and_telegram(
     assert json.loads(off.body)["text"] == "Esa alarma ya estaba apagada."
     live = web.handle(Request(method="GET", path="/api/live", query={"person": str(abuela)}))
     assert live.status == 200
+
+
+def test_a_job_for_a_person_reaches_the_agenda_with_her_name(wired, tmp_path, monkeypatch):
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+    china = web.board.household.add("China")
+    when = (datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+
+    created = web.handle(Request.from_target(
+        "POST", "/api/jobs", headers=WRITE,
+        body=json.dumps({"type": "alarm", "message": "arriba", "when": when.strftime("%Y-%m-%dT%H:%M"),
+                         "repeat": "once", "author_id": china.id, "assignee": "person",
+                         "assignee_id": china.id}).encode("utf-8")))
+    start = when.replace(hour=0)
+    events = web.handle(Request(method="GET", path="/api/events", query={
+        "start": start.isoformat(), "end": (start + timedelta(days=1)).isoformat()}))
+
+    assert created.status == 201
+    assert json.loads(created.body)["author_name"] == "China"
+    [event] = json.loads(events.body)["events"]
+    assert event["title"] == "⏰ arriba · para China"
 
 
 def test_the_control_reads_what_rang_from_the_stores_reminders_writes(wired, tmp_path, monkeypatch):

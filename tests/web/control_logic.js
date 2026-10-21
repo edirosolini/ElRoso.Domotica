@@ -92,6 +92,20 @@ assert.strictEqual(items[0].actions, off);
 assert.strictEqual(items[3].title, "🚨 vps no responde");
 assert.deepStrictEqual(control.urgentItems({ now: now }), []);
 
+// Lo que suena y lo que espera dicen para quién es.
+var assigned = control.urgentItems({
+  now: now,
+  ringing: [{ job_id: 17, message: "arriba", since: "2026-10-19T11:58:00", for: "China", actions: [] }],
+  awaiting: [{ job_id: 9, message: "pastilla", since: "2026-10-19T11:50:00", for: "todos", actions: [] }],
+});
+assert.strictEqual(assigned[0].meta, "Sonando hace 2 min · para China");
+assert.strictEqual(assigned[1].meta, "Espera su «Hecho» · sonó hace 10 min · para todos");
+
+var postponed = control.urgentItems({
+  now: now, snooze: { message: "arriba", since: "2026-10-19T11:58:00", for: "China", actions: [] },
+});
+assert.strictEqual(postponed[0].meta, "Sonó hace 2 min · se puede posponer · para China");
+
 // El estado de lo que se vigila en una línea.
 assert.strictEqual(control.statusText([{ name: "vps", up: false }, { name: "web", up: true }]),
   "🔴 vps · ✅ web");

@@ -22,6 +22,11 @@
     return data && data.ringing && shownMs < VIEW_MS ? null : KIOSK;
   }
 
+  // Para quién es la alarma, o vacío si no es de nadie en particular.
+  function forText(data) {
+    return data && data.for ? "Para " + data.for : "";
+  }
+
   function pad(number) {
     return number < 10 ? "0" + number : String(number);
   }
@@ -35,7 +40,8 @@
   }
 
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { jobFrom: jobFrom, nextPage: nextPage, clockText: clockText, dateText: dateText };
+    module.exports = { jobFrom: jobFrom, nextPage: nextPage, clockText: clockText, dateText: dateText,
+      forText: forText };
   }
   if (typeof document === "undefined") {
     return;
@@ -69,6 +75,8 @@
       return;
     }
     byId("message").textContent = data.message || "";
+    byId("for").textContent = forText(data);
+    byId("for").hidden = !forText(data);
     byId("problems").textContent = "";
     tick();
   }
