@@ -24,6 +24,8 @@ from homeauto.config import Config
 from homeauto.listen import ListenError
 from homeauto.meals import (
     DINNER,
+    MENU_OTHER,
+    MENU_SHOP,
     WEEKDAYS,
     MealError,
     left_today,
@@ -105,8 +107,6 @@ MENU_USAGE = (
     "Así: /menu la semana · /menu nuevo sin carne la vuelve a armar"
     " · /menu compras pasa lo de hoy a compras · /menu compras semana, toda la semana"
 )
-MENU_SHOP = "🛒 Pasar a compras"
-MENU_OTHER = "🔄 Otra idea"
 
 
 # «apagar» adelante o atrás del equipo saca la pantalla.

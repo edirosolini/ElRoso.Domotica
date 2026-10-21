@@ -48,7 +48,15 @@ from homeauto.voice.voicemail import Voicemail
 from homeauto.polish import TIMEOUT as POLISH_TIMEOUT, GoogleModel, Polisher, as_is
 from homeauto.translate import TRANSLATE_TIMEOUT, Translator
 from homeauto.lists import ListStore
-from homeauto.meals import MENU_TIMEOUT, MealPlanner, MealStore
+from homeauto.meals import (
+    DINNER,
+    LUNCH,
+    MENU_TIMEOUT,
+    MealPlanner,
+    MealReminder,
+    MealStore,
+    served,
+)
 from homeauto.pending import Conversation, PendingStore
 from homeauto.quiet import AwayStore, Hush, HushStore, Vacation
 from homeauto.screen import ScreenPages, ScreenStore, Screens
@@ -356,6 +364,25 @@ def schedule_weekly(app, config, weekly, tell) -> None:
 
     app.job_queue.run_daily(job, time=moment, days=days, name="weekly")
     log.info("weekly summary at %s on %s", moment.strftime("%H:%M"), days)
+
+
+def schedule_meals(app, config, reminder, tell) -> None:
+    """El aviso escrito antes de cada comida que no esté en `off`; sin planner, ninguno."""
+    if reminder is None:
+        return
+    for meal, at, name in (
+        (LUNCH, config.menu_lunch_at, "menu-lunch"),
+        (DINNER, config.menu_dinner_at, "menu-dinner"),
+    ):
+        if at is None:
+            continue
+
+        def write(meal=meal) -> None:
+            found = reminder.text_for(reminder.clock(), meal)
+            if found:
+                tell(*found)
+
+        _schedule_daily(app, at, write, name=name, label=f"aviso de {meal}")
 
 
 # Los feriados se refrescan de madrugada y unos segundos después de arrancar.
@@ -1025,6 +1052,9 @@ def main() -> None:
         polish=polish,
     )
 
+    meal_store = MealStore(db_path)
+    meal_planner = build_meal_planner(config)
+
     commands = Commands(
         config=config,
         speakers=speakers,
@@ -1044,8 +1074,8 @@ def main() -> None:
         stock=stock,
         vacation=vacation,
         screens=screens,
-        meal_store=MealStore(db_path),
-        meal_planner=build_meal_planner(config),
+        meal_store=meal_store,
+        meal_planner=meal_planner,
         tell_others=lambda chat_id, text: _tell_alert_chats(
             notifier, config.allowed_chat_ids, chat_id, text
         ),
@@ -1176,6 +1206,19 @@ def main() -> None:
     schedule_holidays(app, HolidayClient(), holidays)
 
     schedule_weekly(app, config, Weekly(history=history, clock=datetime.now), house.tell_everyone)
+
+    schedule_meals(
+        app,
+        config,
+        MealReminder(
+            store=meal_store,
+            planner=meal_planner,
+            meals=served(config.menu_lunch_at, config.menu_dinner_at),
+            quiet=hush,
+            clock=datetime.now,
+        ) if meal_planner is not None else None,
+        house.tell_everyone,
+    )
 
     rain = RainWatcher(
         weather=weather,
