@@ -738,7 +738,42 @@ registrado.
 
 ## Instalar la app de la tele
 
-El CT sirve el APK de la tele para bajarlo desde la misma tele. Para subir uno nuevo:
+La app de la tele está en `android/tele/`, en Kotlin. Se compila en Docker: no hace falta
+Android Studio ni el SDK de Android.
+
+### La clave de firma
+
+Se crea una sola vez y vive fuera del repo, en `~/.config/domotica/android` (o en la carpeta
+de `TELE_KEYS_DIR`). Si se pierde, la versión nueva no instala encima de la vieja y hay que
+desinstalar la app en cada tele.
+
+```bash
+mkdir -p ~/.config/domotica/android && chmod 700 ~/.config/domotica/android
+keytool -genkeypair -v -storetype PKCS12 -keystore ~/.config/domotica/android/tele-release.jks \
+    -alias tele -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Domotica tele"
+cat > ~/.config/domotica/android/keystore.properties <<'PROPS'
+storePassword=<la contraseña que elegiste>
+keyAlias=tele
+keyPassword=<la misma contraseña: PKCS12 usa una sola>
+PROPS
+chmod 600 ~/.config/domotica/android/tele-release.jks ~/.config/domotica/android/keystore.properties
+```
+
+Sin la clave, `build.sh` no compila y muestra estos mismos comandos.
+
+### Compilar y subir
+
+```bash
+android/tele/build.sh                 # APK firmado en android/tele/app/build/outputs/apk/release/
+android/tele/build.sh <destino.apk>   # además lo copia ahí
+android/tele/build.sh test            # los tests de la lógica de la app
+```
+
+La versión se sube a mano en `android/tele/version.properties`: `versionCode` tiene que
+crecer para que la nueva instale encima. `TELE_HOUSE` cambia la URL de la casa a la que habla
+la app.
+
+El CT sirve el APK para bajarlo desde la misma tele. Para subir uno nuevo:
 
 ```bash
 deploy/push-apk.sh <apk>              # usa 192.168.68.60 y el CT 300
@@ -746,17 +781,30 @@ deploy/push-apk.sh <apk> <pve> <ctid>
 ```
 
 Lo deja en `/var/lib/domotica/app/tele.apk` sin reiniciar el servicio y muestra el sha256 de
-los dos lados. `deploy/deploy.sh` no lo toca.
+los dos lados. `deploy/deploy.sh` no lo toca. Sin `API_TOKEN` la descarga no existe, igual
+que la pantalla.
 
-En la tele, con Downloader:
+### En la tele
+
+Si la tele tiene la app de prueba «Spike tele», desinstalarla antes: es otro paquete y no se
+reemplaza sola.
+
+Con Downloader:
 
 1. Darle a Downloader el permiso «instalar apps desconocidas».
 2. Abrir `http://192.168.68.10:8099/app/tele.apk` e instalar.
-3. Al abrirla, la app pide el permiso «mostrar sobre otras apps». En Google TV abre la lista
-   general: bajar hasta la app y activarla con el control.
 
-Cada versión nueva viene firmada con otra clave: antes de instalarla hay que desinstalar la
-anterior. Sin `API_TOKEN` la descarga no existe, igual que la pantalla.
+La primera vez que se abre, con el control:
+
+1. Elegir qué tele es, de las de `SCREEN_DEVICES`.
+2. Elegir de quién es, de los chats de la casa.
+3. Aceptar las notificaciones y después «mostrar sobre otras apps». En Google TV abre la lista
+   general: bajar hasta la app y activarla.
+
+Después muestra la pantalla de la casa y, al prender la tele, se conecta sola con el CT. La
+elección queda guardada: para cambiarla hay que borrar los datos de la app desde Ajustes.
+
+Las versiones siguientes instalan encima de la anterior, porque se firman con la misma clave.
 
 ## Desarrollo
 

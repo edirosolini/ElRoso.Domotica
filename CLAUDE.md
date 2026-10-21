@@ -48,6 +48,7 @@ Domotica/
 │   ├── watch/           # vigilancia de servicios, de Seq, de internet y del Proxmox
 │   ├── web/             # pantalla de la casa: agenda, kiosco, control, sus feeds JSON y el APK de la tele
 │   └── main.py          # cableado y ciclo de vida del proceso
+├── android/tele/        # la app Android de la tele, en Kotlin
 ├── deploy/              # unit de systemd, despliegue, CLI, la medición del router y la subida del APK de la tele
 ├── tests/
 └── requirements*.txt
@@ -156,6 +157,8 @@ un despliegue nuevo no necesita migración.
   `.claude/rules/voz.md`.
 - **python-telegram-bot** en modo *long polling*.
 - **APScheduler** + SQLite para timers y alarmas que sobreviven un reinicio.
+- **Kotlin** para la app de la tele, que se compila en Docker, sin Android Studio. Ver
+  `.claude/rules/app-tele.md`.
 - **FullCalendar** en la pantalla de la casa, vendorizado y sin CDN. Es el único JavaScript
   de terceros del proyecto.
 
@@ -359,5 +362,5 @@ Se cargan solas al trabajar los archivos de su `paths:`. Son tan reglas del proy
 - `.claude/rules/consultas.md` — preguntas con búsqueda, cuentas y unidades, listas, menú semanal y traducción.
 - `.claude/rules/web.md` — API HTTP de la LAN y la pantalla web (agenda, kiosco, escritura, control).
 - `.claude/rules/pantalla-tv.md` — DashCast: `/pantalla`, restaurar tras un anuncio y la vista de alarma.
-- `.claude/rules/app-tele.md` — la app de la tele: registro, latido y consulta periódica.
+- `.claude/rules/app-tele.md` — la app de la tele: registro en el CT, la app Android y su compilación.
 - `.claude/rules/cableado.md` — el composition root `main()` y su test.
