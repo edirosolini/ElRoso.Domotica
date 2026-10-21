@@ -10,6 +10,7 @@ from datetime import datetime, tzinfo
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from homeauto.web.apk import FILES as APPS
 from homeauto.web.board import RangeError
 from homeauto.web.jobs import WebError
 
@@ -36,6 +37,7 @@ HTML = "text/html; charset=utf-8"
 JSON = "application/json; charset=utf-8"
 MANIFEST = "application/manifest+json; charset=utf-8"
 PNG = "image/png"
+APK = "application/vnd.android.package-archive"
 
 REVALIDATE = "no-cache"
 FOREVER = "public, max-age=31536000, immutable"
@@ -72,6 +74,7 @@ LIST = re.compile(r"/api/lists/([a-z]+)")
 WRITES = ("POST", "PUT", "DELETE")
 LIVE = "/api/live"
 COMMAND = "/api/command"
+APP = "/app"
 
 
 @dataclass(frozen=True)
@@ -152,10 +155,12 @@ class WebApp:
         control=None,
         static_dir: Path = STATIC_DIR,
         pages_dir: Path = PAGES_DIR,
+        apps=None,
     ):
         self.board = board
         self.jobs = jobs
         self.control = control
+        self.apps = apps
         self.static_dir = static_dir
         self.pages_dir = pages_dir
 
@@ -170,6 +175,8 @@ class WebApp:
             return self._house(request, path)
         if path == LIVE or path == COMMAND:
             return self._control(request, path)
+        if path == APP or path.startswith(APP + "/"):
+            return self._app(request, path[len(APP) + 1:])
 
         ringing = RINGING.fullmatch(path)
         known = path in PAGES or path in FEEDS or ringing or path.startswith("/static/")
@@ -280,6 +287,25 @@ class WebApp:
         except Exception:  # noqa: BLE001
             log.exception("la pantalla de control se rompió")
             return _json(500, {"error": "No pude atender el pedido."})
+
+    def _app(self, request: Request, name: str) -> Response:
+        """Devuelve la app `name` como descarga; 404 si no se ofrece o no está."""
+        if name not in APPS:
+            return _json(404, {"error": "no existe"})
+        if request.method != "GET":
+            return _json(405, {"error": "método no permitido"}, Allow="GET")
+        if self.apps is None:
+            return _json(404, {"error": "no existe"})
+        try:
+            data = self.apps.get(name)
+        except OSError:
+            log.exception("no pude leer la app %s", name)
+            return _json(500, {"error": "No pude leer la app."})
+        if data is None:
+            return _json(404, {"error": "Todavía no hay app de la tele en la casa."})
+        return _respond(
+            200, data, APK, "no-store", **{"Content-Disposition": f'attachment; filename="{name}"'}
+        )
 
     def _page(self, name: str) -> Response:
         return _respond(200, (self.pages_dir / name).read_bytes(), HTML, REVALIDATE)

@@ -1237,6 +1237,19 @@ def test_the_screen_reads_the_one_database(wired, tmp_path, monkeypatch):
     assert board.quiet.until() is None
 
 
+def test_the_screen_serves_the_tv_app_from_the_state_directory(wired, tmp_path, monkeypatch):
+    """El estante apunta a STATE_DIR / "app" y el APK que se deja ahí se baja."""
+    web = _wired_web(monkeypatch, tmp_path)
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "tele.apk").write_bytes(b"PK\x03\x04apk")
+
+    assert web.apps.directory == tmp_path / "app"
+    assert web.apps.get("tele.apk") == b"PK\x03\x04apk"
+    response = web.handle(Request(method="GET", path="/app/tele.apk"))
+    assert response.status == 200
+    assert response.body == b"PK\x03\x04apk"
+
+
 def test_the_screen_shows_the_meal_idea_from_the_one_database(wired, tmp_path, monkeypatch):
     web = _wired_web(monkeypatch, tmp_path, "MENU_LUNCH_AT=off\n")
     board = web.board

@@ -997,3 +997,91 @@ def test_the_control_routes_refuse_the_wrong_method(controller, control, method,
 def test_without_the_control_its_feeds_do_not_exist(app):
     assert get(app, "/api/live", chat="42").status == 404
     assert send(app, "POST", "/api/command", {"chat_id": 42, "text": "hola"}).status == 404
+
+
+class StubShelf:
+    """Doble de AppShelf: devuelve lo guardado o None, o falla al leer."""
+
+    def __init__(self, files=None, fail=None):
+        self.files = files or {}
+        self.fail = fail
+        self.asked = []
+
+    def get(self, name):
+        self.asked.append(name)
+        if self.fail:
+            raise self.fail
+        return self.files.get(name)
+
+
+APK_BYTES = b"PK\x03\x04la-app-de-la-tele"
+
+
+def test_the_tv_app_downloads_whole(board):
+    app = WebApp(board, apps=StubShelf({"tele.apk": APK_BYTES}))
+
+    response = get(app, "/app/tele.apk")
+
+    assert response.status == 200
+    assert response.body == APK_BYTES
+    assert response.headers["Content-Type"] == "application/vnd.android.package-archive"
+    assert response.headers["Content-Disposition"] == 'attachment; filename="tele.apk"'
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert "Content-Security-Policy" in response.headers
+
+
+def test_the_query_does_not_change_the_download(board):
+    app = WebApp(board, apps=StubShelf({"tele.apk": APK_BYTES}))
+
+    assert get(app, "/app/tele.apk", v="2").body == APK_BYTES
+
+
+def test_without_the_app_in_the_house_it_says_so(board):
+    app = WebApp(board, apps=StubShelf())
+
+    response = get(app, "/app/tele.apk")
+
+    assert response.status == 404
+    assert json.loads(response.body) == {"error": "Todavía no hay app de la tele en la casa."}
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+def test_the_app_is_only_downloaded(board, method):
+    shelf = StubShelf({"tele.apk": APK_BYTES})
+    app = WebApp(board, apps=shelf)
+
+    response = app.handle(Request(method=method, path="/app/tele.apk"))
+
+    assert response.status == 405
+    assert response.headers["Allow"] == "GET"
+    assert shelf.asked == []
+
+
+@pytest.mark.parametrize("path", ["/app", "/app/", "/app/../static/app.js", "/app/otro.apk",
+                                  "/app/tele.apk/x"])
+def test_anything_else_under_app_does_not_exist(board, path):
+    shelf = StubShelf({"tele.apk": APK_BYTES})
+    app = WebApp(board, apps=shelf)
+
+    response = get(app, path)
+
+    assert response.status == 404
+    assert json.loads(response.body) == {"error": "no existe"}
+    assert shelf.asked == []
+
+
+def test_without_a_shelf_there_is_no_app(board):
+    response = get(WebApp(board), "/app/tele.apk")
+
+    assert response.status == 404
+    assert json.loads(response.body) == {"error": "no existe"}
+
+
+def test_a_broken_read_is_a_generic_500(board):
+    app = WebApp(board, apps=StubShelf(fail=PermissionError("/var/lib/domotica/app/tele.apk")))
+
+    response = get(app, "/app/tele.apk")
+
+    assert response.status == 500
+    assert json.loads(response.body) == {"error": "No pude leer la app."}
