@@ -181,7 +181,7 @@ vacaciones. Qué equipos tienen pantalla se configura en `SCREEN_DEVICES`: a uno
 ahí le contesta que no tiene pantalla. Sin `API_TOKEN` no hay pantalla que mostrar.
 
 **Alarma en la tele.** Una alarma en un equipo de `SCREEN_DEVICES` prende la tele con la hora
-grande y el mensaje durante un minuto después de cada sonido, y entre una repetición y la
+grande, el mensaje y para quién es durante un minuto después de cada sonido, y entre una repetición y la
 siguiente muestra el kiosco. Cuando deja de sonar pasa sola al kiosco, y a los 15
 minutos se cierra, si nadie puso otra cosa. En descanso o de vacaciones no se prende.
 
@@ -665,7 +665,7 @@ recargar; lo nuevo de Google puede tardar hasta cinco minutos más.
 
 **Crear, editar y borrar desde la agenda.** Tocando un día, o con el botón «+ Nuevo aviso» de
 abajo a la derecha, se abre un panel: tipo (alarma, recordatorio o timer), mensaje, fecha y
-hora, repetición, equipo y a nombre de quién. Valen las mismas reglas que en Telegram: un
+hora, repetición, para quién, equipo y a nombre de quién. Valen las mismas reglas que en Telegram: un
 timer suena una vez, un recordatorio repite, «Algunos días» pide los días —y ofrece la casilla
 «No suena en feriados»— y «Todos los meses» repite el día del mes de la fecha elegida. Tocando un aviso de
 la casa que todavía no sonó aparecen «Editar» y «Borrar»; si repite, se edita o se borra la
@@ -676,8 +676,19 @@ Cada alta, cambio o baja se avisa en todos los chats. El de un alta o un cambio 
 «Cancelar #N», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
 borró.
 
-El desplegable «A nombre de» lista los chats de `ALLOWED_CHAT_IDS`. Cada uno aparece como
-«Chat <número>» hasta que le escribe algo al bot; desde ahí, con su nombre de Telegram.
+«Para» elige de quién es el aviso: «Nadie» (como siempre), «Todos» o una persona de la casa.
+Al sonar, uno de una persona con Telegram le llega solo a ella y el parlante la nombra. Para
+quién es se ve en la agenda («· para China»), en el kiosco, en el control y en la alarma de
+la tele.
+
+El desplegable «A nombre de» lista las personas de la casa; la que no tiene Telegram dice
+«(sin Telegram)», y un aviso a su nombre no aparece en el `/lista` de ningún chat. Si todavía
+no se cargó a nadie, lista los chats de `ALLOWED_CHAT_IDS`: cada uno aparece como «Chat
+<número>» hasta que le escribe algo al bot; desde ahí, con su nombre de Telegram.
+
+Arriba, «Ver» muestra la agenda de toda la casa o la de una persona: lo suyo y lo de todos,
+más Google y los feriados. Cada dispositivo recuerda lo elegido. Lo que viene por turnos entra
+en la vista de esa persona recién cuando suena, salvo que el aviso sea suyo o de todos.
 **Con `ALLOWED_CHAT_IDS` vacío la pantalla no escribe**: no aparece «Nuevo aviso» ni se
 puede editar, borrar, agregar ni tachar.
 

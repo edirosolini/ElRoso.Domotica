@@ -48,7 +48,7 @@ separada del transporte HTTP y se prueba sin red.
 | `/alarma?job=<id>` | la vista de una alarma que suena, para la tele. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md` |
 | `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre y los comandos en paneles. Ver **Control desde la web** |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
-| `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje y la hora del servidor |
+| `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje, para quién (`for`) y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima, `meal` y listas como `[{id, text}]` |
 | `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre, los equipos, el padrón (`persons`) y los chats con el nombre visto en Telegram (`chats`, `seen`) |
 | `POST /api/persons` | suma una persona al padrón. Ver **Padrón de la casa** |
@@ -97,6 +97,13 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   `Reminders` para reagendar.** Con dos copias, la agenda podía mostrar un día en que la
   alarma no suena. Es la misma regla que `down_line()`. `schedule/month.py` expande los jobs
   y traduce el historial; `Board` los pasa al formato de FullCalendar.
+- **Para quién es cada aviso viaja en el evento**: `extendedProps` trae `assignee`,
+  `assignee_id` y `for`, el nombre a mostrar, y el título suma «· para <nombre>» o «· para
+  todos». `board.for_name()` decide, con el padrón leído una vez por pedido
+  (`person_names()`): «nadie», una persona que ya no está o un padrón que falla dan `None`, y
+  el aviso se ve como antes. Lo futuro trae la asignación del job; lo pasado, la foto de lo
+  que sonó. ⚠️ **El turno no cuenta hasta que suena**: una ocurrencia futura de un turno de
+  alguien del padrón se muestra con la asignación del job, no con la de esa persona.
 - **A quién le toca se ve en la agenda y en el kiosco.** `month.occurrences_between()` le
   pone el prefijo de `with_turn()` a cada ocurrencia futura y el historial ya lo trae, así
   que viaja en el mensaje: los scripts no cambiaron.
@@ -119,6 +126,12 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
 - **Semana y día abren una hora antes de la actual** (`nowScroll()`), al cargar y al cambiar
   de vista. ⚠️ **No hay `slotMinTime`**: escondería lo que suena antes de las seis, y en el CT
   el descanso termina a las 05:25.
+- **«Ver» filtra la agenda por persona**, con «Toda la casa» y cada persona del padrón; sin
+  padrón no aparece. Con una persona elegida, de lo de la casa se ve lo suyo y lo de todos,
+  y se esconde lo de nadie y lo de otro; Google y los feriados se ven siempre
+  (`visibleFor()`). Se oculta con `display: none`, igual que lo plegado, sin pedir el feed de
+  nuevo. La elección queda en el `localStorage` del dispositivo (`casa.agenda.ver`); una
+  persona que ya no está vuelve a «Toda la casa».
 - **Hoy, lo que ya pasó queda plegado bajo un «…»** que lo despliega. `isPastToday()` decide:
   lo de la casa que ya sonó, o lo que terminó antes de ahora; lo de todo el día nunca. Se
   oculta con `display: none` desde que llega el feed, así no cuenta en el «+N más». Solo en
@@ -170,8 +183,9 @@ columnas; vertical, en dos.
 - 🔴 **«Hoy» es una línea de tiempo con una marca «ahora», y de lo pasado quedan solo los
   dos últimos** (`KEEP_PAST`). La tarjeta no scrollea: con todo lo pasado a la vista, lo
   que viene, que es lo que se mira, quedaría afuera. Cada entrada de `today` trae
-  `label` —el ícono del tipo y el mensaje— y `mark`, cómo terminó, que se muestra solo si
-  ya pasó.
+  `label` —el ícono del tipo y el mensaje—, `mark`, cómo terminó, que se muestra solo si
+  ya pasó, y `for`, que suma «· para <nombre>» (`todayLabel()`). «Lo próximo» lo trae en el
+  título del evento.
 - **Cada tarjeta de lista y la de «Hoy» llevan un contador** de lo que tienen.
 - **La tarjeta «🍽 Idea para hoy» (o «para mañana») muestra los platos del día de la próxima
   comida** (`#meal-card`). `/api/board` trae `meal` como `{day, tomorrow, items}`, cada ítem
@@ -223,9 +237,25 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
   el día del mes. Qué repetición admite cada tipo lo decide `repeatRule()` de `app.js`, que se
   prueba con node. **Editar un mensual conserva su día** si la fecha es justo donde ese día
   cae en el mes: un 31 que se muestra el 28 de febrero sigue siendo 31 (`jobs._monthday()`).
-- **El autor se elige de un desplegable** con los chats de `ALLOWED_CHAT_IDS`, y **no cambia
-  al editar**: `Store.update` conserva el id y el dueño. Es a nombre de quien queda en
-  `/lista` y de quien puede `/cancelar` escrito.
+- **El autor se elige en «A nombre de»**: las personas del padrón, con «(sin Telegram)» a la
+  que no tiene chat, y con el padrón vacío, los chats de `ALLOWED_CHAT_IDS`. El POST manda
+  `author_id` (persona) o `author` (chat); los dos juntos son un 400. Un chat de la casa
+  guarda también su persona, si tiene. **No cambia al editar**: `Store.update` conserva el id
+  y el dueño. El chat es a nombre de quien queda en `/lista` y de quien puede `/cancelar`
+  escrito.
+- ⚠️ **Una persona sin Telegram deja el aviso en el chat `NO_CHAT`** (cero, que ningún chat
+  real es) con su `author_id`. Suena igual, porque los destinatarios salen de
+  `ALLOWED_CHAT_IDS` y de la asignación, pero no está en el `/lista` de nadie ni se cancela
+  escribiendo: se borra desde la pantalla o con el «Cancelar #N» del aviso.
+- **«Para» asigna el aviso**: «Nadie», «Todos» y cada persona del padrón; nuevo, arranca en
+  «Nadie». Viaja como `assignee` (`none`, `all`, `person`) y `assignee_id`
+  (`JobsService._assignee()`): un valor que no existe, un id con algo que no sea `person` o
+  una persona que no está en el padrón son un 400. **Un PUT sin `assignee` no la toca.** Qué
+  hace al sonar está en **Para quién suena**, en `.claude/rules/programado.md`.
+- **`/api/jobs` devuelve `author`, `author_id`, `author_name`, `assignee`, `assignee_id` y
+  `assignee_name`.** El nombre del autor es el de la persona, o el que el chat muestra en
+  Telegram si no tiene; `assignee_name` es `None` salvo para una persona que sigue en el
+  padrón.
 - 🔴 **Sin `ALLOWED_CHAT_IDS` la pantalla no escribe**: no hay a nombre de quién poner un
   aviso. Las escrituras contestan 403, y el formulario y los ✓ no aparecen.
 - **El nombre de cada chat sale de `PeopleStore`**: `main._meet()`, después de `_knock()`,
@@ -240,7 +270,8 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
   `Store` y el aviso sigue con su timer. No toca lo que ya sonó y espera su «Hecho», ni su
   re-aviso.
 - **Cada alta, cambio o baja se avisa a todos los chats** con «🖥️ … desde la pantalla» y el
-  aviso en una línea; el alta lleva el nombre del autor. Va en un hilo aparte: un chat que
+  aviso en una línea, que suma «· para <nombre>» si es de alguien o de todos; el alta lleva
+  el nombre del autor. Va en un hilo aparte: un chat que
   falla no frena a los otros ni a la respuesta.
 - 🔴 **El «Cancelar #N» de ese aviso manda `borrar <id>`, no `cancelar`.** `borrar` es solo un
   botón, en `Commands.press()` y no en `_dispatch()`, así el router no lo nombra. Borra
@@ -364,7 +395,9 @@ sabe de HTTP; `WebApp._control()` la rutea.
   que sí corrió. Mientras espera muestra «⏳ Procesando…» y deshabilita los botones.
 - **`/api/live` se pide cada cinco segundos** y después de cada comando. Trae lo que suena
   (`RingingStore`), lo que espera «Hecho» (`AwaitingStore.all()`), lo que se puede posponer,
-  las caídas sin confirmar, el silencio y el estado de cada chequeo.
+  las caídas sin confirmar, el silencio y el estado de cada chequeo. Lo que suena, lo que
+  espera y lo que se puede posponer traen `for`, de la foto de lo que sonó, y lo urgente lo
+  muestra como «· para <nombre>».
 - **Lo que espera «Hecho» se filtra a un día** (`awaiting.KEEP`), igual que se poda al sonar
   otro: si no, un recordatorio de hace una semana seguiría pidiendo atención.
 - 🔴 **Posponer aparece solo pegado a lo último que sonó en ese chat**, dentro de
@@ -418,5 +451,5 @@ Telegram. Se carga desde la tarjeta «👪 Personas» de `/control`.
 - 🔴 **La baja pasa los avisos asignados a esa persona a «nadie»** antes de borrarla
   (`before_remove` → `Store.reassign()`); si eso falla, no se borra. Ver **Para quién suena**,
   en `.claude/rules/programado.md`.
-- ⚠️ **La pantalla todavía no asigna ni muestra para quién es un aviso.** Lo asignado solo
-  cambia a qué chats llega y cómo se lo llama al sonar.
+- **La pantalla asigna y muestra para quién es cada aviso**: ver **Escribir desde la
+  pantalla**.
