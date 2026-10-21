@@ -92,3 +92,34 @@ class FiredStore:
     def forget(self, chat_id: int) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM last_fired WHERE chat_id = ?", (chat_id,))
+
+    def all(self) -> list[tuple[int, Fired]]:
+        """Cada chat con lo último que sonó en él, por número de chat."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT chat_id, message, device, fired_at, kind, job_id, stock_id FROM last_fired"
+                " ORDER BY chat_id"
+            ).fetchall()
+        return [
+            (
+                row["chat_id"],
+                Fired(
+                    row["message"],
+                    row["device"],
+                    datetime.fromisoformat(row["fired_at"]),
+                    row["kind"],
+                    row["job_id"],
+                    row["stock_id"],
+                ),
+            )
+            for row in rows
+        ]
+
+    def forget_before(self, chat_id: int, cutoff: datetime) -> bool:
+        """Olvida lo que sonó en el chat solo si sonó antes de `cutoff`; True si lo olvidó."""
+        with self._connect() as conn:
+            deleted = conn.execute(
+                "DELETE FROM last_fired WHERE chat_id = ? AND fired_at < ?",
+                (chat_id, cutoff.isoformat()),
+            )
+        return deleted.rowcount > 0

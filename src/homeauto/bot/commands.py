@@ -20,6 +20,7 @@ from homeauto.agenda.ical import CalendarError
 from homeauto.ask import NOT_SPOKEN, AskError
 from homeauto.calc import CalcError, evaluate
 from homeauto.aloud import strip_aloud
+from homeauto.cleanup import JOBS, TELES, overview_text
 from homeauto.config import Config
 from homeauto.listen import ListenError
 from homeauto.meals import (
@@ -102,6 +103,20 @@ TURNS_OFF = "off"
 TURNS_USAGE = (
     "Así: /turnos 7 Cin, Die turna el #7 por semana entre Cin y Die · /turnos 7 off lo corta"
 )
+
+PURGE_USAGE = (
+    "Así: /depurar cuenta lo que sobra · /depurar teles o /depurar avisos lo muestra para borrar"
+)
+PURGE_DENIED = "Solo los chats de alertas pueden depurar."
+# Los botones de la vista previa: «depurar ok <token>» borra y «depurar no <token>» descarta.
+PURGE_COMMAND = "depurar"
+PURGE_OK = "ok"
+PURGE_NO = "no"
+# Las palabras que nombran cada categoría del depurador.
+PURGE_WORDS = {
+    TELES: ("tele", "teles"),
+    JOBS: ("aviso", "avisos", "alarma", "alarmas", "recordatorio", "recordatorios"),
+}
 
 MENU_USAGE = (
     "Así: /menu la semana · /menu nuevo sin carne la vuelve a armar"
@@ -227,6 +242,7 @@ HELP = """Hola. Manejo los equipos de casa.
 /estado — cómo están los servicios que vigilo
 /equipos — qué equipos tengo y cuál está activo
 /usar <equipo> — cambia el equipo por defecto (acepta varios y «todos»)
+/depurar — lo que sobra, solo para los chats de alertas · /depurar teles · /depurar avisos
 
 La hora se escribe como quieras: 10m, 5min, 2h, 90s, 1h30m, 23:15, 5.30, mañana 8:00.
 Una hora que ya pasó se entiende como la de mañana.
@@ -294,6 +310,7 @@ class Commands:
         screens=None,
         meal_store=None,
         meal_planner=None,
+        cleaner=None,
         tell_others: Callable[[int, str], None] | None = None,
         correct=as_written,
         polish=as_is,
@@ -321,6 +338,8 @@ class Commands:
         self.screens = screens
         self.meal_store = meal_store
         self.meal_planner = meal_planner
+        # Propone borrar teles viejas y avisos que sobran.
+        self.cleaner = cleaner
         # Escribe a todos los chats menos al que se le pasa.
         self.tell_others = tell_others
         self.correct = correct
@@ -1074,6 +1093,7 @@ class Commands:
             "pastillas": self.pills,
             "vacaciones": self.vacation,
             "turnos": self.turns,
+            "depurar": self.purge,
         }
 
     def press(self, chat_id: int, data: str, who: str = "") -> str:
@@ -1097,6 +1117,10 @@ class Commands:
             "confirmar": self.confirm,
         }
         run = {**self._dispatch(), **buttons}.get(command)
+        answer, _, token = argument.strip().partition(" ")
+        if command == PURGE_COMMAND and answer in (PURGE_OK, PURGE_NO):
+            run = self.purge_confirm if answer == PURGE_OK else self.purge_drop
+            argument = token
         if run is None:
             log.warning("botón desconocido: %r", data)
             return "No sé qué hacer con ese botón."
@@ -1168,6 +1192,64 @@ class Commands:
         if job is None:
             return f"El #{job_id} ya no está programado."
         return f"🗑 Borrado #{job_id}: «{job.message}»"
+
+    def _purge_refusal(self, chat_id: int) -> str | None:
+        """La negativa del depurador para ese chat, o None si puede usarlo."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if self.cleaner is None:
+            return "No tengo con qué depurar."
+        if chat_id not in self.config.alert_recipients:
+            return PURGE_DENIED
+        return None
+
+    def purge(self, chat_id: int, text: str = "") -> str:
+        """Cuenta lo que sobra o muestra una categoría para borrar, con sus botones."""
+        refusal = self._purge_refusal(chat_id)
+        if refusal:
+            return refusal
+
+        words = text.strip().lower().split()
+        if not words:
+            overview = self.cleaner.overview()
+            buttons = []
+            if overview.teles:
+                buttons.append((f"Ver teles ({overview.teles})", f"{PURGE_COMMAND} {TELES}"))
+            jobs = overview.jobs + overview.leftovers
+            if jobs:
+                buttons.append((f"Ver avisos ({jobs})", f"{PURGE_COMMAND} {JOBS}"))
+            offer(*buttons)
+            return overview_text(overview)
+
+        category = next(
+            (name for name, names in PURGE_WORDS.items() if any(w in names for w in words)), None
+        )
+        if category is None:
+            return PURGE_USAGE
+        preview = self.cleaner.preview(chat_id, category)
+        if preview.token is not None:
+            offer(
+                (f"Borrar {preview.size}", f"{PURGE_COMMAND} {PURGE_OK} {preview.token}"),
+                ("Cancelar", f"{PURGE_COMMAND} {PURGE_NO} {preview.token}"),
+            )
+        return preview.text
+
+    def purge_confirm(self, chat_id: int, text: str) -> str:
+        """Borra lo que mostró la vista previa del token y todavía sobra."""
+        refusal = self._purge_refusal(chat_id)
+        if refusal:
+            return refusal
+        answer = self.cleaner.confirm(chat_id, text.strip())
+        return answer if answer is not None else "Venció, pedilo de nuevo con /depurar."
+
+    def purge_drop(self, chat_id: int, text: str) -> str:
+        """Descarta la vista previa del token sin borrar nada."""
+        refusal = self._purge_refusal(chat_id)
+        if refusal:
+            return refusal
+        self.cleaner.drop(chat_id, text.strip())
+        return "Listo, no borré nada."
 
     def heard(self, chat_id: int, audio: bytes, mime: str = "audio/ogg") -> Reply:
         """Una nota de voz: se transcribe, se ejecuta y se contesta con otra."""

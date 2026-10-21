@@ -36,6 +36,7 @@ class SpyCommands:
     status = silence = speak = ask = calculate = free_text = _record
     add_item = shopping = todo = remove_item = translate = postpone = pills = vacation = turns = press = _record
     menu = _record
+    purge = _record
 
 
 class EditedUpdate:

@@ -26,3 +26,7 @@ def test_the_vacations_command_is_registered():
 
 def test_the_turns_command_is_registered():
     assert "turnos" in ALL_COMMANDS
+
+
+def test_the_purge_command_is_registered():
+    assert "depurar" in ALL_COMMANDS

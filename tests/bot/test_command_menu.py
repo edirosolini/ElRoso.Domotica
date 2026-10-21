@@ -29,6 +29,7 @@ OUT_OF_MENU = (
     "vacaciones",
     "turnos",
     "menu",
+    "depurar",
 )
 
 VALID = re.compile(r"^[a-z0-9_]{1,32}$")
@@ -87,4 +88,9 @@ def test_the_turns_stay_out_of_the_menu():
 
 def test_the_meal_menu_stays_out_of_the_menu():
     assert "menu" not in {name for name, _ in COMMAND_MENU}
+    assert len(COMMAND_MENU) == 10
+
+
+def test_purge_stays_out_of_the_menu():
+    assert "depurar" not in {name for name, _ in COMMAND_MENU}
     assert len(COMMAND_MENU) == 10

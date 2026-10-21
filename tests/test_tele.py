@@ -315,3 +315,53 @@ def test_after_a_restart_the_caps_come_from_disk(db, clock):
     TeleLink(TeleStore(db), clock=clock).hello("comedor", "1.0", 1, ["play"], "")
 
     assert TeleLink(TeleStore(db), clock=clock).can("comedor", "play")
+
+
+# --- olvidar una tele, para el depurador ---
+
+
+def test_the_store_removes_a_tele(db):
+    store = TeleStore(db)
+    store.save(Tele("vieja", "0.1", 1, ("play",), NOW, "192.168.68.30"))
+
+    assert store.remove("vieja") is True
+    assert store.get("vieja") is None
+    assert store.remove("vieja") is False
+
+
+def test_forget_drops_a_dead_tele_from_memory_and_disk(db, clock):
+    link = TeleLink(TeleStore(db), clock=clock)
+    link.hello("vieja", "0.1", 1, ["play"], "192.168.68.30")
+    link.send("vieja", "show", url="/pantalla?ver=1")
+    clock.advance(minutes=4)
+
+    assert link.forget("vieja") is True
+    assert TeleStore(db).get("vieja") is None
+    assert link.orders("vieja") == []
+    assert not link.can("vieja", "play")
+    assert link.beat("vieja", "192.168.68.30") is False
+
+
+def test_forget_refuses_a_live_tele(db, clock):
+    link = TeleLink(TeleStore(db), clock=clock)
+    link.hello("comedor", "0.3.0", 6, ["play"], "192.168.68.20")
+
+    assert link.forget("comedor") is False
+    assert TeleStore(db).get("comedor") is not None
+    assert link.alive("comedor")
+
+
+def test_forget_of_an_unknown_tele_is_false(db, clock):
+    assert TeleLink(TeleStore(db), clock=clock).forget("nadie") is False
+
+
+def test_a_forgotten_tele_keeps_its_seq_growing_if_it_comes_back(db, clock):
+    link = TeleLink(TeleStore(db), clock=clock)
+    link.hello("vieja", "0.1", 1, ["play"], "192.168.68.30")
+    first = link.send("vieja", "show", url="/pantalla?ver=1")
+    clock.advance(minutes=4)
+    link.forget("vieja")
+
+    link.hello("vieja", "0.1", 1, ["play"], "192.168.68.30")
+
+    assert link.send("vieja", "show", url="/pantalla?ver=1") > first

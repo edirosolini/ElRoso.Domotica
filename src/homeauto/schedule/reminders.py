@@ -265,6 +265,13 @@ class Reminders:
         self._tell_others(chat_id, f"🔕 {who} apagó la alarma: «{ringing.message}»")
         return ringing.message
 
+    def forget_wait(self, job_id: int, before: datetime) -> bool:
+        """Saca de la espera del «Hecho» un job que sonó antes de `before` y desagenda su re-aviso."""
+        if self.awaiting is None or not self.awaiting.drop_before(job_id, before):
+            return False
+        self.timer.unschedule(_nag_key(job_id))
+        return True
+
     def stop_all_ringing(self) -> int:
         """Corta las repeticiones de todas las alarmas que suenan, como el tope; devuelve cuántas."""
         if self.ringing is None:

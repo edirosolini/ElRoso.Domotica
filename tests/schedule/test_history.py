@@ -194,3 +194,20 @@ def test_turning_off_what_is_already_closed_says_so(history):
     history.mark_off(7, NOW, "Eze")
 
     assert not history.mark_off(7, NOW, "Ana")
+
+
+def test_latest_are_the_last_rows_of_the_job_newest_first_without_holidays(history):
+    for day in range(5):
+        record(history, at=NOW + timedelta(days=day))
+    record(history, job_id=8, at=NOW + timedelta(days=6))
+    history.mark_closed(7, "holiday", NOW + timedelta(days=4))
+
+    latest = history.latest(7, 3)
+
+    assert [entry.fired_at for entry in latest] == [
+        NOW + timedelta(days=3), NOW + timedelta(days=2), NOW + timedelta(days=1)
+    ]
+
+
+def test_latest_of_a_job_that_never_rang_is_empty(history):
+    assert history.latest(7, 14) == []

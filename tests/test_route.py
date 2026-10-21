@@ -376,3 +376,28 @@ def test_the_router_measurement_covers_the_meal_menu_and_its_lookalike():
     assert ("armá otro menú sin carne", "menu", "nuevo") in CASES
     assert ("pasá a compras lo del menú de la semana", "menu", "compras semana") in CASES
     assert ("agregá milanesas a compras", "agregar", "milanesas") in CASES
+
+
+def test_purge_is_routable():
+    assert "depurar" in ROUTABLE
+
+
+def test_the_prompt_names_purge_with_its_example():
+    from homeauto.route import PROMPT
+
+    assert "- depurar:" in PROMPT
+    assert "Mensaje: limpiá las teles viejas\nCOMANDO: depurar\nARGUMENTO: teles" in PROMPT
+
+
+def test_a_purge_request_is_routed_with_its_category():
+    router = Router(model_saying("COMANDO: depurar\nARGUMENTO: teles"))
+
+    decision = router.route("limpiá las teles viejas")
+
+    assert (decision.command, decision.argument) == ("depurar", "teles")
+
+
+def test_the_router_measurement_covers_purge():
+    from deploy.measure_router import CASES
+
+    assert ("limpiá las teles viejas", "depurar", "teles") in CASES

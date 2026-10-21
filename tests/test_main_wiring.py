@@ -13,6 +13,7 @@ import pytest
 
 from homeauto import main, polish
 from homeauto.meals import DINNER, LUNCH, Meal
+from homeauto.tele import Tele
 from homeauto.web.app import Request
 
 
@@ -2119,3 +2120,44 @@ async def test_the_meal_reminder_runs_off_the_loop_and_writes_to_everyone_with_b
     assert "choclo" in seen["commands"].press(42, actions[0][1], who="Eze")
     seen["commands"].press(42, actions[1][1], who="Eze")
     assert seen["meal_store"].get(today, "cena").dish == "Tarta de acelga"
+
+
+# --- el depurador ---
+
+
+def test_the_cleaner_reaches_the_commands_and_cleans_the_one_database(
+    wired, tmp_path, monkeypatch
+):
+    """Sin API, el depurador limpia avisos sobre la misma base y no tiene teles."""
+    seen = _wired_commands(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, HOUSE))
+    cleaner = seen["cleaner"]
+    commands = seen["commands"]
+    assert cleaner.tele is None
+    assert cleaner.screens is None
+    store = main.Store(tmp_path / "jobs.db")
+    job = store.add(99, main.datetime.now() + timedelta(hours=1), "regar", repeat="daily")
+
+    preview = cleaner.preview(42, "avisos")
+    assert [candidate.job.id for candidate in preview.jobs] == [job.id]
+    answer = commands.press(42, f"depurar ok {preview.token}", who="Eze")
+
+    assert answer == "🧹 Borré 1 de 1."
+    assert store.get(job.id) is None
+
+
+def test_with_the_api_the_cleaner_shares_the_tele_link_and_the_screens(
+    wired, tmp_path, monkeypatch
+):
+    seen = _wired_commands(monkeypatch)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE + "SCREEN_DEVICES=comedor\n")
+    cleaner = seen["cleaner"]
+    assert cleaner.tele is web.tele.link
+    assert cleaner.screens is web.tele.screens
+    cleaner.tele.store.save(Tele(
+        "vieja", "0.1", 1, ("play",), main.datetime.now() - timedelta(days=8), "192.168.68.30"
+    ))
+
+    preview = cleaner.preview(42, "teles")
+    assert seen["commands"].press(42, f"depurar ok {preview.token}") == "🧹 Borré 1 de 1."
+    assert main.TeleStore(tmp_path / "jobs.db").get("vieja") is None
