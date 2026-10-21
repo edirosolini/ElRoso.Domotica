@@ -41,12 +41,12 @@ separada del transporte HTTP y se prueba sin red.
 | Ruta | Qué es |
 | --- | --- |
 | `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes |
-| `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy y las dos listas. `?ver=1` es solo lectura |
+| `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy, la idea del menú y las dos listas. `?ver=1` es solo lectura |
 | `/alarma?job=<id>` | la vista de una alarma que suena, para la tele. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md` |
 | `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre y los comandos en paneles. Ver **Control desde la web** |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
 | `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje y la hora del servidor |
-| `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima y listas como `[{id, text}]` |
+| `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima, `meal` y listas como `[{id, text}]` |
 | `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre y los equipos |
 | `POST /api/jobs` | crea un aviso de la casa |
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
@@ -142,7 +142,8 @@ páginas.
   descanso se oscurece aunque el dispositivo esté en tema claro.
 
 **El kiosco** (`kiosk.js`) pide `/api/board` cada sesenta segundos y lo arma en tarjetas:
-reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres columnas; vertical, en dos.
+reloj, clima, «Lo próximo», «Hoy», la idea del menú y las dos listas. Apaisado en tres
+columnas; vertical, en dos.
 
 - 🔴 **El reloj corre con la hora del servidor.** Calcula el offset entre `now` y el punto
   medio de la ida y vuelta, así un dispositivo con la hora mal igual muestra la de la casa.
@@ -161,6 +162,22 @@ reloj, clima, «Lo próximo», «Hoy» y las dos listas. Apaisado en tres column
   `label` —el ícono del tipo y el mensaje— y `mark`, cómo terminó, que se muestra solo si
   ya pasó.
 - **Cada tarjeta de lista y la de «Hoy» llevan un contador** de lo que tienen.
+- **La tarjeta «🍽 Idea para hoy» (o «para mañana») muestra los platos del día de la próxima
+  comida** (`#meal-card`). `/api/board` trae `meal` como `{day, tomorrow, items}`, cada ítem
+  `{meal, label, dish, state}`, armado por `Board._meal()` sobre `meals.upcoming()`: hasta
+  las quince es hoy con el almuerzo `next` y la cena `later`; de quince a veintidós, hoy con
+  el almuerzo `past` y la cena `next`; desde las veintidós, mañana. La fila `next` va en
+  negrita y la `past`, atenuada. Ver **Menú semanal**, en `.claude/rules/consultas.md`.
+  - **Solo las comidas servidas**: `Board` recibe `served`, las de `MENU_LUNCH_AT` y
+    `MENU_DINNER_AT` que no están en `off`. Una comida sin plato guardado no aparece.
+  - **Sin menú, sin `MealStore` o sin platos, `meal` es `null`** y la tarjeta queda oculta
+    con la grilla de siempre: la grilla con la tarjeta vive en `.board.has-meal`, que
+    `kiosk.js` pone y saca. Apaisada va a la derecha, arriba de las listas; vertical, abajo
+    del clima y «Lo próximo».
+  - **Es solo lectura**: `mealView()` es pura, todo va por `textContent` y no hay botones,
+    así que `?ver=1` la muestra igual.
+  - ⚠️ **La grilla con la tarjeta se probó en Chromium headless**, apaisada y vertical, no en
+    las teles.
 - ⚠️ **`app.js`, `kiosk.js`, `alarm.js` y `control.js` van en ES5** —`var` y `function`, sin flechas, `const`,
   template strings ni `?.`— para andar en el navegador viejo de un dispositivo reciclado. Sí
   necesitan `fetch`. Hay test que busca esa sintaxis, y `innerHTML`, en los cuatro.

@@ -100,6 +100,9 @@ proveedor de texto, `/menu` contesta que no hay modelo.
 - **`MENU_LUNCH_AT` y `MENU_DINNER_AT` deciden qué comidas tiene el menú y a qué hora se
   avisa cada una**: `off` saca esa comida y no agenda su aviso; con las dos en `off` el menú
   está apagado. El default de la cena es 17:30 porque en esta casa se cena a las 19:30.
+- **El kiosco muestra los platos del día de la próxima comida** en «🍽 Idea para hoy» (o
+  «para mañana»), con el mismo `upcoming()` y solo las comidas que no están en `off`. Ver
+  **El kiosco**, en `.claude/rules/web.md`.
 
 ### Aviso antes de cada comida
 
