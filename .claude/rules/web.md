@@ -57,6 +57,9 @@ separada del transporte HTTP y se prueba sin red.
 | `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` |
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 | `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader. Ver **App de la tele** |
+| `GET /api/tele/setup` | las teles con pantalla y los chats de la casa, para configurar la app de la tele |
+| `POST /api/tele/hello` | registra una tele con su versión y capacidades |
+| `GET /api/tele/<alias>/poll` | el latido de una tele y la alarma que suena en ella. Ver **Registro en el CT**, en `.claude/rules/app-tele.md` |
 
 `Board` arma los datos y `WebApp.handle(Request) -> Response` rutea; ninguno de los dos
 conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arquitectura**, en `CLAUDE.md`.
@@ -300,6 +303,7 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
 - ⚠️ **Cada build firma con una clave debug distinta**, así que Android rechaza instalar una
   versión nueva encima: hay que desinstalar la anterior antes. Para que se actualice sola va
   a hacer falta una clave de firma fija, fuera del repo.
+- El registro y el latido de la app están en **Registro en el CT**, en `.claude/rules/app-tele.md`.
 
 ## Control desde la web
 
