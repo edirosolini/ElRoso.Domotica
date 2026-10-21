@@ -47,6 +47,12 @@ def fetch_url(url: str) -> str:
     return response.text
 
 
+def _reason(exc: Exception) -> str:
+    """El motivo de una falla sin el texto de la excepción, que trae la URL privada."""
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return f"HTTP {status}" if status is not None else type(exc).__name__
+
+
 class CalendarClient:
     def __init__(
         self,
@@ -115,8 +121,9 @@ class CalendarClient:
             try:
                 events.extend(self._events_of(alias, url, start, end))
             except Exception as exc:  # noqa: BLE001 - un calendario roto no tapa los otros
-                log.warning("no pude leer el calendario '%s': %s", alias, exc)
-                problems.append(f"{alias}: {exc}")
+                reason = _reason(exc)
+                log.warning("no pude leer el calendario '%s': %s", alias, reason)
+                problems.append(f"{alias}: {reason}")
 
         self.last_problems = problems
         if problems and len(problems) == len(self.sources):
