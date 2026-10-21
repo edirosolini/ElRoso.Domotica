@@ -712,9 +712,11 @@ Para dejarlo fijo en una tablet o un teléfono viejo:
 **El control** hace desde el navegador lo mismo que Telegram. Se llega desde el enlace
 «Control» de la agenda y del kiosco (el kiosco de solo lectura, `?ver=1`, no lo muestra).
 
-1. Arriba, en «Soy», elegir quién sos. El dispositivo lo recuerda. Todo lo que hagas va a tu
+1. Arriba, en «Soy», elegir quién sos: las personas de la casa o, si todavía no se cargó
+   ninguna, los chats de Telegram. El dispositivo lo recuerda. Todo lo que hagas va a tu
    nombre, y a los demás chats les llega como «<tu nombre> (pantalla)», igual que si
-   hubieras tocado el botón en Telegram.
+   hubieras tocado el botón en Telegram. Alguien sin Telegram solo puede apagar una alarma o
+   marcar «Hecho», y eso les llega a todos los chats.
 2. **Ahora** muestra lo que pide atención, con sus botones: la alarma que suena («🔕 Apagar»),
    lo que espera su «Hecho», lo último que sonó en tu chat si todavía se puede posponer, las
    caídas sin confirmar («✅ Confirmar», solo si tu chat recibe las alertas) y un botón para
@@ -726,6 +728,12 @@ Para dejarlo fijo en una tablet o un teléfono viejo:
    contestar desde acá o desde Telegram.
 4. Un comando que tarda —una pregunta con búsqueda— muestra «⏳ Procesando…» hasta que
    contesta, aunque tarde un minuto.
+
+**Las personas de la casa** se cargan en la tarjeta «👪 Personas», al pie del control: nombre
+y, si tiene, su Telegram, elegido de los chats de `ALLOWED_CHAT_IDS` que no son de nadie, o
+«Sin Telegram». El nombre es el que dice la casa: letras y espacios, sin números ni guiones,
+sin repetir y sin «todos» ni «nadie». Cada fila se renombra, cambia de Telegram o se borra.
+Sumar o sacar a alguien no avisa a nadie.
 
 En el teléfono, el menú del navegador ofrece **«Agregar a pantalla de inicio»** y queda como un
 ícono «Casa» que abre directo en el control. No es una app instalada: la casa sirve http, y

@@ -57,6 +57,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
 | borrado con ese «Cancelar #N» | los demás chats: «🗑 <nombre> borró #N» |
 | lo hecho desde `/control` | lo mismo que el botón o el comando en Telegram: los demás chats, con «<nombre> (pantalla)» |
+| alarma apagada o «Hecho» desde `/control` por una persona sin Telegram | todos los chats, con «<nombre> (pantalla)» |
 | respuesta de un comando | el chat que lo escribió |
 | aviso de un desconocido | todos (`Strangers`) |
 
@@ -75,3 +76,16 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 - **`/control` no tiene destinatarios propios.** Corre el comando a nombre del chat elegido,
   así que ese chat queda como «el que lo tocó» y no recibe el aviso a los demás. Ver
   **Control desde la web**, en `.claude/rules/web.md`.
+
+## Personas con y sin Telegram
+
+El padrón (`people.Household`) dice quién vive en la casa; un chat de `ALLOWED_CHAT_IDS` es
+solo una forma de llegarle. Ver **Padrón de la casa**, en `.claude/rules/web.md`.
+
+- **Una persona con Telegram es su chat**: lo que hace desde `/control` corre como ese chat y
+  le llega lo mismo que a ese chat.
+- 🔴 **Telegram nunca habla por una persona sin chat.** Ella solo apaga una alarma o marca
+  «Hecho» desde `/control`, y como ningún chat lo tocó, el aviso va a todos.
+- **El nombre de lo hecho desde Telegram sale del padrón** (`main._signed()`): la persona
+  dueña de ese chat, y si no hay o el padrón falla, el nombre de Telegram (`main._who()`).
+- ⚠️ **Un aviso todavía no se asigna a una persona**: los destinatarios siguen siendo chats.
