@@ -14,7 +14,7 @@ paths:
 ## Registro en el CT
 
 La app de la tele es una app Android propia para las teles de `SCREEN_DEVICES`. **La fase
-uno está en curso**: existen el lado del CT (registro, latido, consulta de qué mostrar y
+uno está cerrada**: existen el lado del CT (registro, latido, consulta de qué mostrar y
 órdenes con su Cast de respaldo) y la app, que ejecuta las órdenes, muestra la alarma, la
 apaga con el OK del control y se ofrece a actualizarse, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
 `.claude/rules/web.md`.
@@ -61,6 +61,8 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 - **La dirección sale de `Request.client`**, la IP que ve `api._Handler`, no de algo que
   mande la app. Se guarda con cada latido que se escribe.
 - **`ack` no es latido.**
+- **`TeleLink.forget()` borra una tele de memoria y de `teles`, y se niega con la tele
+  viva** (devuelve False). La usa solo el depurador. Ver `.claude/rules/depurador.md`.
 
 🔴 **Sin secreto compartido**, decisión del dueño del 2026-10-21: el mismo nivel que
 `/control`, abierto en la LAN de confianza. ⚠️ Cualquiera que alcance el CT puede registrar

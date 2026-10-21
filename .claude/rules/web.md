@@ -359,6 +359,8 @@ sabe de HTTP; `WebApp._control()` la rutea.
   `Monitor.acknowledge()` deja confirmar. La caída se ve igual para todos.
 - **El panel «🛒 Listas» tiene «Menú»** al lado de «Compras» y «Pendientes»: corre `menu`
   como `/menu` en Telegram, con sus botones. Ver **Menú semanal**, en `.claude/rules/consultas.md`.
+- **El panel «⏰ Programado» tiene «🧹 Depurar»**: corre `depurar`, el mismo comando, con sus botones. Se ve para todos; quién
+  puede usarlo lo decide `Commands`, no la página. Ver `.claude/rules/depurador.md`.
 - **Un solo botón de silencio, según el estado**: «Cortar vacaciones» en vacaciones, «Hablar
   ya» con un silencio pedido y si no «Silenciar 1 h».
 - 🔴 **`/api/live` no manda el `detail` de los chequeos**, solo nombre y si está arriba: el
