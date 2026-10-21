@@ -120,7 +120,8 @@ repite. Los ingredientes van sin cantidades, y la sal, el aceite, la pimienta y 
 pasan; otro condimento con nombre propio, como el orégano, puede llegar a compras. Si lo que arma el modelo no sirve, no se guarda nada. Se lee y nunca
 suena: pedido «por el parlante», contesta escrito y avisa por qué. `MENU_LUNCH_AT=off` o
 `MENU_DINNER_AT=off` saca esa comida del menú. No está en el menú de Telegram: se escribe, se
-pide sin barra o se toca «Menú» en el control.
+pide sin barra o se toca «Menú» en el control. El kiosco muestra la próxima comida en «🍽 Idea
+para hoy» (ver **La pantalla de la casa**).
 
 **Aviso antes de cada comida.** A la hora de `MENU_LUNCH_AT` (11:00) y de `MENU_DINNER_AT`
 (17:30) les escribe a todos el plato de hoy, solo escrito: «🍽 Idea para el almuerzo:
@@ -686,6 +687,10 @@ puede editar, borrar, agregar ni tachar.
   qué calendario es. Lo de todo el día no cuenta. Si no hay nada, «Nada más por hoy».
 - **Hoy**: el día como línea de tiempo, con una marca «ahora». De lo que ya pasó quedan los
   dos últimos, con cómo terminó.
+- **Idea para hoy**: el almuerzo y la cena del menú de la semana. Hasta las 15:00 resalta el
+  almuerzo; de 15:00 a 22:00 atenúa el almuerzo y resalta la cena; desde las 22:00 pasa a
+  «Idea para mañana». Una comida en `off` o sin plato no aparece, y sin menú la tarjeta no se
+  muestra.
 - **Compras y Pendientes**, con cuántos hay. Arriba de cada una hay un campo para agregar:
   «leche y pan, yerba» son tres ítems, como en el chat, y lo que ya estaba no se repite.
   Cada ítem trae un círculo para tacharlo desde ahí. Ni agregar ni tachar avisan en los
