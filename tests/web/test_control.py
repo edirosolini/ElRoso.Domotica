@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 import pytest
 
 from homeauto.bot.commands import offer
-from homeauto.people import PeopleStore
+from homeauto.people import Household, PeopleStore, PersonStore
 from homeauto.quiet import AwayStore, Hush, HushStore, QuietHours
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
@@ -38,6 +38,10 @@ class StubCommands:
             raise self.fail
         return f"Entendí: {text}"
 
+    def press_without_chat(self, data, who=""):
+        self.asked.append(("press_without_chat", data, who))
+        return f"apretado sin chat {data}"
+
 
 class StubMonitor:
     def __init__(self, states):
@@ -62,7 +66,8 @@ def commands():
     return StubCommands()
 
 
-def make(db, commands=None, monitor=None, chat_ids=(42, 77), alerts=(42,), clock=lambda: NOW):
+def make(db, commands=None, monitor=None, chat_ids=(42, 77), alerts=(42,), clock=lambda: NOW,
+         household=None):
     people = PeopleStore(db)
     people.remember(42, "Eze")
     return ControlService(
@@ -76,6 +81,7 @@ def make(db, commands=None, monitor=None, chat_ids=(42, 77), alerts=(42,), clock
         alert_recipients=frozenset(alerts),
         chat_ids=frozenset(chat_ids),
         clock=clock,
+        household=household,
     )
 
 
@@ -273,3 +279,134 @@ def test_a_command_without_exactly_one_short_text_gets_400(db, commands, payload
         make(db, commands=commands).run(payload)
     assert caught.value.status == 400
     assert commands.asked == []
+
+
+# --- el padrón ---
+
+
+@pytest.fixture
+def house(db):
+    return Household(PersonStore(db), (42, 77))
+
+
+def test_a_chat_with_a_person_is_named_from_the_padron(db, commands, house):
+    house.add("Ezequiel", 42)
+
+    make(db, commands=commands, household=house).run({"chat_id": 42, "data": "clima"})
+
+    assert commands.asked == [("press", 42, "clima", "Ezequiel (pantalla)")]
+
+
+def test_a_chat_without_a_person_keeps_the_name_seen_in_telegram(db, commands, house):
+    house.add("Abuela")
+
+    make(db, commands=commands, household=house).run({"chat_id": 42, "data": "clima"})
+
+    assert commands.asked == [("press", 42, "clima", "Eze (pantalla)")]
+
+
+def test_a_person_with_a_chat_runs_as_that_chat(db, commands, house):
+    diego = house.add("Diego", 77)
+    control = make(db, commands=commands, household=house)
+
+    control.run({"person_id": diego.id, "data": "decir hola"})
+    control.run({"person_id": diego.id, "text": "dame el clima"})
+
+    assert commands.asked == [("press", 77, "decir hola", "Diego (pantalla)"),
+                              ("free_text", 77, "dame el clima")]
+
+
+@pytest.mark.parametrize("data", ["callar 17", "hecho 9", "  hecho 9 "])
+def test_a_person_without_a_chat_can_turn_off_and_mark_done(db, commands, house, data):
+    abuela = house.add("Abuela")
+
+    answer = make(db, commands=commands, household=house).run(
+        {"person_id": abuela.id, "data": data})
+
+    assert commands.asked == [("press_without_chat", data.strip(), "Abuela (pantalla)")]
+    assert answer == {"text": f"apretado sin chat {data.strip()}", "actions": []}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"data": "clima"}, {"data": "silencio 1h"}, {"data": "confirmar vps"},
+     {"data": "callarme 3"}, {"text": "apagá la alarma"}],
+)
+def test_a_person_without_a_chat_cannot_run_anything_else(db, commands, house, payload):
+    abuela = house.add("Abuela")
+
+    with pytest.raises(ReadOnly) as caught:
+        make(db, commands=commands, household=house).run({"person_id": abuela.id, **payload})
+
+    assert str(caught.value) == (
+        "Abuela no tiene Telegram: desde la pantalla solo puede apagar una alarma"
+        " o marcar «Hecho»."
+    )
+    assert commands.asked == []
+
+
+@pytest.mark.parametrize("person_id", [999, "1", True, 1.0])
+def test_a_person_that_is_not_in_the_padron_is_refused(db, commands, house, person_id):
+    house.add("Eze", 42)
+
+    with pytest.raises(ReadOnly) as caught:
+        make(db, commands=commands, household=house).run(
+            {"person_id": person_id, "data": "clima"})
+
+    assert str(caught.value) == "Elegí quién sos."
+    assert commands.asked == []
+
+
+def test_a_person_needs_the_house_chats_like_a_chat(db, commands, house):
+    abuela = house.add("Abuela")
+
+    with pytest.raises(ReadOnly):
+        make(db, commands=commands, household=house, chat_ids=()).run(
+            {"person_id": abuela.id, "data": "callar 3"})
+
+
+def test_a_chat_and_a_person_at_once_is_a_400(db, commands, house):
+    eze = house.add("Eze", 42)
+
+    with pytest.raises(WebError) as caught:
+        make(db, commands=commands, household=house).run(
+            {"chat_id": 42, "person_id": eze.id, "data": "clima"})
+
+    assert caught.value.status == 400
+    assert commands.asked == []
+
+
+def test_live_for_a_person_with_a_chat_is_that_chat(db, house):
+    diego = house.add("Diego", 42)
+    control = make(db, household=house)
+    control.fired.remember(42, "arriba", None, NOW - timedelta(minutes=5), job_id=17)
+
+    assert control.live(person_id=diego.id) == control.live(42)
+
+
+def test_live_for_a_person_without_a_chat_only_offers_off_and_done(db, house):
+    abuela = house.add("Abuela")
+    monitor = StubMonitor([status("vps", False, alerted=True)])
+    control = make(db, monitor=monitor, household=house, alerts=(42, 77))
+    control.ringing.remember(17, 42, "arriba", None, NOW - timedelta(minutes=2))
+    control.awaiting.remember(9, "pastilla", NOW - timedelta(minutes=10))
+    control.fired.remember(42, "arriba", None, NOW - timedelta(minutes=5), job_id=17)
+
+    live = control.live(person_id=abuela.id)
+
+    assert live["ringing"][0]["actions"] == [{"label": "🔕 Apagar", "data": "callar 17"}]
+    assert live["awaiting"][0]["actions"] == [{"label": "✅ Hecho", "data": "hecho 9"}]
+    assert live["snooze"] is None
+    assert live["outages"][0]["actions"] == []
+    assert live["quiet"]["actions"] == []
+
+
+@pytest.mark.parametrize("person_id", [999, "1", True])
+def test_live_for_a_person_that_is_not_in_the_padron_is_refused(db, house, person_id):
+    with pytest.raises(ReadOnly):
+        make(db, household=house).live(person_id=person_id)
+
+
+def test_without_a_padron_a_person_is_refused(db, commands):
+    with pytest.raises(ReadOnly):
+        make(db, commands=commands).run({"person_id": 1, "data": "callar 3"})

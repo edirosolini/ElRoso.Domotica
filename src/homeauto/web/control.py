@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Callable, Iterable
 
-from homeauto.bot.commands import with_actions
+from homeauto.bot.commands import CHATLESS_BUTTONS, with_actions
 from homeauto.people import display_name
 from homeauto.schedule.awaiting import KEEP
 from homeauto.schedule.reminders import SNOOZE_WINDOW
@@ -50,6 +50,7 @@ class ControlService:
         alert_recipients: Iterable[int],
         chat_ids: Iterable[int],
         clock: Callable[[], datetime] = datetime.now,
+        household=None,
     ):
         self.commands = commands
         self.ringing = ringing
@@ -61,26 +62,39 @@ class ControlService:
         self.alert_recipients = frozenset(alert_recipients)
         self.chat_ids = frozenset(chat_ids)
         self.clock = clock
+        self.household = household
 
-    def _check_chat(self, chat_id) -> int:
-        """El chat, si es de la casa; si no, levanta ReadOnly."""
+    def _caller(self, chat_id, person_id) -> tuple[int | None, str]:
+        """El chat a cuyo nombre se corre, o None sin Telegram, y el nombre de quien pide."""
         if not self.chat_ids:
             raise ReadOnly("Sin ALLOWED_CHAT_IDS la pantalla no maneja la casa.")
+        if person_id is not None:
+            if chat_id is not None:
+                raise WebError("Mandá chat_id o person_id, no los dos.")
+            person = None
+            if type(person_id) is int and self.household is not None:
+                person = self.household.get(person_id)
+            if person is None:
+                raise ReadOnly("Elegí quién sos.")
+            return person.chat_id, person.name
         if type(chat_id) is not int or chat_id not in self.chat_ids:
             raise ReadOnly("Elegí quién sos.")
-        return chat_id
+        person = self.household.by_chat(chat_id) if self.household is not None else None
+        if person is not None:
+            return chat_id, person.name
+        return chat_id, display_name(chat_id, self.people.names())
 
-    def live(self, chat_id) -> dict:
-        """Lo que pide atención ahora, con los botones que le tocan a ese chat."""
-        chat_id = self._check_chat(chat_id)
+    def live(self, chat_id=None, person_id=None) -> dict:
+        """Lo que pide atención ahora, con los botones que le tocan a ese chat o esa persona."""
+        chat_id, _ = self._caller(chat_id, person_id)
         now = self.clock()
         return {
             "now": now.isoformat(),
             "ringing": self._ringing(),
             "awaiting": self._awaiting(now),
-            "snooze": self._snooze(chat_id, now),
+            "snooze": self._snooze(chat_id, now) if chat_id is not None else None,
             "outages": self._outages(chat_id),
-            "quiet": self._quiet(now),
+            "quiet": self._quiet(now, chat_id is not None),
             "status": self._status(),
         }
 
@@ -124,7 +138,7 @@ class ControlService:
     def _snapshot(self) -> dict:
         return self.monitor.snapshot() if self.monitor is not None else {}
 
-    def _outages(self, chat_id: int) -> list[dict]:
+    def _outages(self, chat_id: int | None) -> list[dict]:
         can_confirm = chat_id in self.alert_recipients
         return [
             {
@@ -144,7 +158,7 @@ class ControlService:
             for state in sorted(self._snapshot().values(), key=lambda state: state.name)
         ]
 
-    def _quiet(self, now: datetime) -> dict:
+    def _quiet(self, now: datetime, can_act: bool = True) -> dict:
         until = getattr(self.quiet, "until", None)
         hush_until = until(now) if until is not None else None
         away_until = self.quiet.away_until(now)
@@ -160,12 +174,12 @@ class ControlService:
             "reason": self.quiet.reason(now) if quiet else "",
             "hush_until": _iso(hush_until),
             "away_until": _iso(away_until),
-            "actions": _actions([action]),
+            "actions": _actions([action] if can_act else []),
         }
 
     def run(self, payload: dict) -> dict:
         """Corre un botón (`data`) o un mensaje suelto (`text`) y devuelve la respuesta con sus botones."""
-        chat_id = self._check_chat(payload.get("chat_id"))
+        chat_id, name = self._caller(payload.get("chat_id"), payload.get("person_id"))
         data, text = payload.get("data"), payload.get("text")
         if (data is None) == (text is None):
             raise WebError("Mandá un comando o un texto.")
@@ -175,9 +189,16 @@ class ControlService:
         if len(value) > MAX_TEXT:
             raise WebError(f"El texto pasa de {MAX_TEXT} caracteres.")
 
-        who = f"{display_name(chat_id, self.people.names())} (pantalla)"
+        who = f"{name} (pantalla)"
+        if chat_id is None and (data is None or value.split()[0] not in CHATLESS_BUTTONS):
+            raise ReadOnly(
+                f"{name} no tiene Telegram: desde la pantalla solo puede apagar una alarma"
+                " o marcar «Hecho»."
+            )
         try:
-            if data is not None:
+            if chat_id is None:
+                reply = with_actions(self.commands.press_without_chat, value.strip(), who)
+            elif data is not None:
                 reply = with_actions(self.commands.press, chat_id, value.strip(), who)
             else:
                 reply = with_actions(self.commands.free_text, chat_id, value.strip(), who=who)

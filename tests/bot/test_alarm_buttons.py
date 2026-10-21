@@ -435,3 +435,90 @@ def test_who_falls_back_to_the_id_when_there_is_no_name():
     update.effective_user = None
 
     assert main._who(update) == "sin nombre"
+
+
+# --- quién es, según el padrón ---------------------------------------------------
+
+from homeauto.bot import commands as commands_module
+
+
+class Padron:
+    def __init__(self, names=None, boom=None):
+        self.names = names or {}
+        self.boom = boom
+        self.threads = []
+
+    def by_chat(self, chat_id):
+        self.threads.append(threading.current_thread().name)
+        if self.boom:
+            raise self.boom
+        name = self.names.get(chat_id)
+        return type("Person", (), {"name": name, "chat_id": chat_id})() if name else None
+
+
+class WhoSpy:
+    def __init__(self):
+        self.who = []
+
+    def press(self, chat_id, data, who=""):
+        self.who.append(who)
+        return "ok"
+
+    def _heard(self, *_args):
+        self.who.append(commands_module._WHO.get())
+        return "ok"
+
+    def __getattr__(self, _name):
+        return self._heard
+
+
+@pytest.mark.asyncio
+async def test_a_message_is_signed_with_the_name_of_the_padron_off_the_loop():
+    app = MessageRecorder()
+    spy, padron = WhoSpy(), Padron({42: "Ezequiel"})
+    main.register(app, spy, household=padron)
+    update = CommandUpdate()
+    update.effective_user = User()
+
+    await app.callbacks[0](update, None)
+
+    assert spy.who == ["Ezequiel"]
+    assert padron.threads[0] != threading.current_thread().name
+
+
+@pytest.mark.asyncio
+async def test_a_tap_is_signed_with_the_name_of_the_padron():
+    app = Recorder()
+    spy = WhoSpy()
+    main.register(app, spy, household=Padron({42: "Ezequiel"}))
+
+    await app.buttons[0](FakeUpdate("callar 17"), None)
+
+    assert spy.who == ["Ezequiel"]
+
+
+@pytest.mark.asyncio
+async def test_a_chat_without_a_person_keeps_the_visible_name():
+    app = MessageRecorder()
+    spy = WhoSpy()
+    main.register(app, spy, household=Padron({77: "Diego"}))
+    update = CommandUpdate()
+    update.effective_user = User()
+
+    await app.callbacks[0](update, None)
+
+    assert spy.who == ["Diego Pérez (@diego)"]
+
+
+@pytest.mark.asyncio
+async def test_a_padron_that_blows_up_does_not_cost_the_answer():
+    app = MessageRecorder()
+    spy = WhoSpy()
+    main.register(app, spy, household=Padron(boom=RuntimeError("sqlite")))
+    update = CommandUpdate()
+    update.effective_user = User()
+
+    await app.callbacks[0](update, None)
+
+    assert spy.who == ["Diego Pérez (@diego)"]
+    assert update.message.edits[0][0] == "ok"

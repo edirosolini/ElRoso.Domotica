@@ -77,6 +77,8 @@ JOBS = "/api/jobs"
 JOB = re.compile(r"/api/jobs/(\d+)")
 ITEM = re.compile(r"/api/lists/([a-z]+)/(\d+)/done")
 LIST = re.compile(r"/api/lists/([a-z]+)")
+PERSONS = "/api/persons"
+PERSON = re.compile(r"/api/persons/(\d+)")
 WRITES = ("POST", "PUT", "DELETE")
 LIVE = "/api/live"
 COMMAND = "/api/command"
@@ -193,7 +195,7 @@ class WebApp:
         """La respuesta a un pedido; nunca levanta."""
         path = request.path.rstrip("/") or "/"
         if (path == PEOPLE or path == JOBS or JOB.fullmatch(path) or ITEM.fullmatch(path)
-                or LIST.fullmatch(path)):
+                or LIST.fullmatch(path) or path == PERSONS or PERSON.fullmatch(path)):
             return self._house(request, path)
         if path == LIVE or path == COMMAND:
             return self._control(request, path)
@@ -222,14 +224,17 @@ class WebApp:
         return _json(404, {"error": "no existe"})
 
     def _house(self, request: Request, path: str) -> Response:
-        """La gente, los avisos y las listas: lo que la pantalla lee y escribe."""
+        """La gente, el padrón, los avisos y las listas: lo que la pantalla lee y escribe."""
         job = JOB.fullmatch(path)
         item = ITEM.fullmatch(path)
         items = LIST.fullmatch(path)
+        person = PERSON.fullmatch(path)
         if path == PEOPLE:
             allowed = ("GET",)
-        elif path == JOBS or item or items:
+        elif path == JOBS or item or items or path == PERSONS:
             allowed = ("POST",)
+        elif person:
+            allowed = ("PUT", "DELETE")
         else:
             allowed = ("GET", "PUT", "DELETE")
         if request.method not in allowed:
@@ -237,7 +242,10 @@ class WebApp:
 
         if self.jobs is None:
             if path == PEOPLE:
-                return _json(200, {"writable": False, "people": [], "devices": []})
+                return _json(200, {"writable": False, "people": [], "devices": [],
+                                   "persons": [], "chats": []})
+            if path == PERSONS or person:
+                return _json(404, {"error": "no existe"})
             if request.method in WRITES:
                 return _json(405, {"error": "la pantalla no puede escribir"}, Allow="GET")
             return _json(404, {"error": "no existe"})
@@ -260,6 +268,13 @@ class WebApp:
                 return _json(200, self.jobs.people())
             if path == JOBS:
                 return _json(201, self.jobs.create(payload))
+            if path == PERSONS:
+                return _json(201, self.jobs.add_person(payload))
+            if person:
+                person_id = int(person.group(1))
+                if request.method == "PUT":
+                    return _json(200, self.jobs.change_person(person_id, payload))
+                return _json(200, self.jobs.remove_person(person_id))
             if item:
                 removed = self.jobs.cross_out(item.group(1), int(item.group(2)))
                 return _json(200, {"removed": removed})
@@ -289,7 +304,11 @@ class WebApp:
         payload = None
         if path == LIVE:
             raw = request.query.get("chat", "")
-            if not raw.lstrip("-").isdigit():
+            person = request.query.get("person")
+            if person is not None:
+                if "chat" in request.query or not (person.isascii() and person.isdigit()):
+                    return _json(400, {"error": "falta la persona, sola"})
+            elif not (raw.isascii() and raw.lstrip("-").isdigit()):
                 return _json(400, {"error": "falta el chat"})
         else:
             refusal = _refuse_write(request)
@@ -303,6 +322,8 @@ class WebApp:
                 return _json(400, {"error": "se esperaba un objeto JSON"})
 
         try:
+            if path == LIVE and person is not None:
+                return _json(200, self.control.live(person_id=int(person)))
             if path == LIVE:
                 return _json(200, self.control.live(int(raw)))
             return _json(200, self.control.run(payload))

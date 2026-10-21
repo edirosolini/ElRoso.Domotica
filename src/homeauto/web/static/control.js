@@ -20,26 +20,84 @@
     return parts.join(" ");
   }
 
-  // El chat guardado si sigue siendo de la casa; si no, el primero; null sin gente.
-  function pickChat(people, saved) {
-    var list = people || [];
-    for (var i = 0; i < list.length; i++) {
-      if (String(list[i].chat_id) === String(saved)) {
-        return list[i].chat_id;
+  // A quién se puede elegir: las personas del padrón o, sin padrón, los chats.
+  function whoOptions(data) {
+    var persons = (data && data.persons) || [];
+    var options = [];
+    var i;
+    if (persons.length) {
+      for (i = 0; i < persons.length; i++) {
+        options.push({ key: "p:" + persons[i].id,
+          label: persons[i].name + (persons[i].chat_id === null ? " (sin Telegram)" : ""),
+          chat_id: persons[i].chat_id });
+      }
+      return options;
+    }
+    var people = (data && data.people) || [];
+    for (i = 0; i < people.length; i++) {
+      options.push({ key: "c:" + people[i].chat_id, label: people[i].name });
+    }
+    return options;
+  }
+
+  // El guardado si sigue; uno viejo, solo el número de chat, por su chat; si no, el primero.
+  function pickWho(options, saved) {
+    var i;
+    var chat = String(saved).replace(/^c:/, "");
+    for (i = 0; i < options.length; i++) {
+      if (options[i].key === String(saved)) {
+        return options[i].key;
       }
     }
-    return list.length ? list[0].chat_id : null;
+    for (i = 0; i < options.length; i++) {
+      var own = options[i].key.indexOf("c:") === 0 ? options[i].key.slice(2) : options[i].chat_id;
+      if (own !== null && own !== undefined && String(own) === chat) {
+        return options[i].key;
+      }
+    }
+    return options.length ? options[0].key : null;
   }
 
   // El cuerpo del POST: un botón viaja como data, lo escrito suelto como text.
-  function commandBody(chat, value, free) {
-    var body = { chat_id: chat };
+  function commandBody(who, value, free) {
+    var id = parseInt(who.slice(2), 10);
+    var body = who.indexOf("p:") === 0 ? { person_id: id } : { chat_id: id };
     body[free ? "text" : "data"] = value;
     return body;
   }
 
-  function liveUrl(chat) {
-    return "/api/live?chat=" + encodeURIComponent(String(chat));
+  function liveUrl(who) {
+    if (who.indexOf("p:") === 0) {
+      return "/api/live?person=" + encodeURIComponent(who.slice(2));
+    }
+    return "/api/live?chat=" + encodeURIComponent(who.slice(2));
+  }
+
+  function chatLabel(chat) {
+    return chat.seen ? chat.seen + " (" + chat.chat_id + ")" : "Chat " + chat.chat_id;
+  }
+
+  // Los chats que esa persona puede tomar: los de nadie y el suyo.
+  function freeChats(chats, persons, personId) {
+    var free = [];
+    for (var i = 0; i < (chats || []).length; i++) {
+      var taken = false;
+      for (var j = 0; j < (persons || []).length; j++) {
+        if (persons[j].chat_id === chats[i].chat_id && persons[j].id !== personId) {
+          taken = true;
+        }
+      }
+      if (!taken) {
+        free.push(chats[i]);
+      }
+    }
+    return free;
+  }
+
+  // El cuerpo del alta de una persona; un chat vacío es sin Telegram.
+  function personBody(name, chat) {
+    return { name: String(name).replace(/^\s+|\s+$/g, ""),
+      chat_id: chat === "" ? null : parseInt(chat, 10) };
   }
 
   // Cuánto pasó desde since, dicho corto.
@@ -110,7 +168,8 @@
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
-      targeted: targeted, pickChat: pickChat, commandBody: commandBody, liveUrl: liveUrl,
+      targeted: targeted, whoOptions: whoOptions, pickWho: pickWho, commandBody: commandBody,
+      liveUrl: liveUrl, chatLabel: chatLabel, freeChats: freeChats, personBody: personBody,
       sinceText: sinceText, quietTitle: quietTitle, urgentItems: urgentItems,
       statusText: statusText,
     };
@@ -119,7 +178,8 @@
     return;
   }
 
-  var chat = null;
+  // La clave de quien eligió el dispositivo: «p:<persona>» o «c:<chat>».
+  var who = null;
   var busy = false;
 
   function byId(id) {
@@ -202,10 +262,10 @@
   }
 
   function poll() {
-    if (chat === null) {
+    if (who === null) {
       return;
     }
-    fetch(liveUrl(chat), { cache: "no-store" })
+    fetch(liveUrl(who), { cache: "no-store" })
       .then(function (response) {
         if (!response.ok) {
           throw new Error(String(response.status));
@@ -238,7 +298,7 @@
 
   // Manda el comando y muestra la respuesta, sin cortar el pedido por tiempo.
   function send(value, free) {
-    if (chat === null) {
+    if (who === null) {
       showAnswer("Elegí quién sos.", []);
       return;
     }
@@ -250,7 +310,7 @@
     fetch("/api/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(commandBody(chat, value, free)),
+      body: JSON.stringify(commandBody(who, value, free)),
     })
       .then(function (response) {
         return response.json().then(function (data) {
@@ -344,18 +404,115 @@
     }
   }
 
-  function fillPeople(people) {
+  function option(value, label) {
+    var node = element("option", "", label);
+    node.value = value;
+    return node;
+  }
+
+  function fillWho(options) {
     var select = byId("who");
     clear(select);
-    for (var i = 0; i < people.length; i++) {
-      var option = element("option", "", people[i].name);
-      option.value = String(people[i].chat_id);
-      select.appendChild(option);
+    for (var i = 0; i < options.length; i++) {
+      select.appendChild(option(options[i].key, options[i].label));
     }
-    chat = pickChat(people, readSaved());
-    if (chat !== null) {
-      select.value = String(chat);
+    who = pickWho(options, readSaved());
+    if (who !== null) {
+      select.value = who;
     }
+  }
+
+  // Llena un desplegable con «Sin Telegram» y los chats que esa persona puede tomar.
+  function fillChats(select, data, personId, selected) {
+    clear(select);
+    select.appendChild(option("", "Sin Telegram"));
+    var free = freeChats(data.chats, data.persons, personId);
+    for (var i = 0; i < free.length; i++) {
+      select.appendChild(option(String(free[i].chat_id), chatLabel(free[i])));
+    }
+    select.value = selected === null || selected === undefined ? "" : String(selected);
+  }
+
+  // Escribe en el padrón y vuelve a leer la gente; una negativa se muestra con su motivo.
+  function writePerson(method, path, body) {
+    var request = { method: method, headers: { "Content-Type": "application/json" } };
+    if (body) {
+      request.body = JSON.stringify(body);
+    }
+    fetch(path, request)
+      .then(function (response) {
+        return response.json().then(function (data) {
+          return { ok: response.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (!result.ok) {
+          showAnswer("🔴 " + (result.data.error || "No pude guardarlo."), []);
+        }
+        loadPeople();
+      })
+      .catch(function () {
+        showAnswer("🔴 " + LOST, []);
+      });
+  }
+
+  function personRow(person, data) {
+    var path = "/api/persons/" + person.id;
+    var row = element("li", "person");
+    row.appendChild(element("span", "person-name", person.name));
+    var select = document.createElement("select");
+    select.setAttribute("aria-label", "Telegram de " + person.name);
+    fillChats(select, data, person.id, person.chat_id);
+    select.addEventListener("change", function () {
+      writePerson("PUT", path, { chat_id: select.value === "" ? null : parseInt(select.value, 10) });
+    });
+    row.appendChild(select);
+    var rename = element("button", "", "Renombrar");
+    rename.type = "button";
+    rename.addEventListener("click", function () {
+      var name = window.prompt("Nuevo nombre de " + person.name, person.name);
+      if (name !== null && name !== person.name) {
+        writePerson("PUT", path, { name: name });
+      }
+    });
+    row.appendChild(rename);
+    var remove = element("button", "", "Borrar");
+    remove.type = "button";
+    remove.addEventListener("click", function () {
+      if (window.confirm("¿Borrar a " + person.name + " del padrón?")) {
+        writePerson("DELETE", path, null);
+      }
+    });
+    row.appendChild(remove);
+    return row;
+  }
+
+  function renderPersons(data) {
+    byId("persons-card").hidden = !data.writable;
+    if (!data.writable) {
+      return;
+    }
+    var list = byId("persons");
+    clear(list);
+    var persons = data.persons || [];
+    for (var i = 0; i < persons.length; i++) {
+      list.appendChild(personRow(persons[i], data));
+    }
+    fillChats(byId("person-chat"), data, null, null);
+  }
+
+  function wirePersons() {
+    var form = byId("person-add");
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var input = byId("person-name");
+      if (!input.value.replace(/\s+/g, "")) {
+        input.focus();
+        return;
+      }
+      writePerson("POST", "/api/persons", personBody(input.value, byId("person-chat").value));
+      input.value = "";
+    });
   }
 
   function loadPeople() {
@@ -365,11 +522,13 @@
       })
       .then(function (data) {
         fillDevices(data.devices);
-        if (!data.writable || !(data.people || []).length) {
+        renderPersons(data);
+        var options = whoOptions(data);
+        if (!data.writable || !options.length) {
           showProblem("Sin ALLOWED_CHAT_IDS la pantalla no maneja la casa.");
           return;
         }
-        fillPeople(data.people);
+        fillWho(options);
         poll();
       })
       .catch(function () {
@@ -379,12 +538,13 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     byId("who").addEventListener("change", function () {
-      chat = parseInt(byId("who").value, 10);
-      save(chat);
+      who = byId("who").value;
+      save(who);
       poll();
     });
     wireCommands();
     wireFree();
+    wirePersons();
     loadPeople();
     setInterval(poll, POLL_MS);
   });

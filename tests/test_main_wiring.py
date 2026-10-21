@@ -1306,9 +1306,9 @@ def test_the_screen_knows_the_people_of_the_house(wired, tmp_path, monkeypatch):
     registered = {}
     original = main.register
 
-    def spy(app, commands, strangers=None, people=None):
+    def spy(app, commands, strangers=None, people=None, household=None):
         registered["people"] = people
-        return original(app, commands, strangers, people)
+        return original(app, commands, strangers, people, household)
 
     monkeypatch.setattr(main, "register", spy)
     web = _wired_web(monkeypatch, tmp_path, HOUSE)
@@ -1319,7 +1319,9 @@ def test_the_screen_knows_the_people_of_the_house(wired, tmp_path, monkeypatch):
 
     assert answer == {"writable": True, "people": [
         {"chat_id": 42, "name": "Eze"}, {"chat_id": 77, "name": "Chat 77"},
-    ], "devices": ["parlante"]}
+    ], "devices": ["parlante"], "persons": [], "chats": [
+        {"chat_id": 42, "seen": "Eze"}, {"chat_id": 77, "seen": None},
+    ]}
 
 
 def test_the_screen_crosses_out_from_the_one_database(wired, tmp_path, monkeypatch):
@@ -1915,10 +1917,10 @@ def test_the_control_runs_real_commands_on_the_one_database(wired, tmp_path, mon
     registered = {}
     original = main.register
 
-    def spy(app, commands, strangers=None, people=None):
+    def spy(app, commands, strangers=None, people=None, household=None):
         registered["commands"] = commands
         registered["people"] = people
-        return original(app, commands, strangers, people)
+        return original(app, commands, strangers, people, household)
 
     monkeypatch.setattr(main, "register", spy)
     web = _wired_web(monkeypatch, tmp_path, HOUSE)
@@ -1939,6 +1941,48 @@ def test_the_control_runs_real_commands_on_the_one_database(wired, tmp_path, mon
     assert response.status == 200
     assert json.loads(response.body) == {"text": "No hay nada programado", "actions": []}
     assert control.people.names() == {42: "Eze"}
+
+
+def test_the_padron_is_one_and_reaches_the_screen_the_control_and_telegram(
+    wired, tmp_path, monkeypatch
+):
+    registered = {}
+    original = main.register
+
+    def spy(app, commands, strangers=None, people=None, household=None):
+        registered["household"] = household
+        return original(app, commands, strangers, people, household)
+
+    monkeypatch.setattr(main, "register", spy)
+    web = _wired_web(monkeypatch, tmp_path, HOUSE)
+    household = registered["household"]
+
+    assert isinstance(household, main.Household)
+    assert household.store.db_path == tmp_path / "jobs.db"
+    assert household.chat_ids == frozenset({42, 77})
+    assert web.jobs.household is household
+    assert web.control.household is household
+
+    created = web.handle(Request.from_target(
+        "POST", "/api/persons", headers=WRITE,
+        body=json.dumps({"name": "Abuela"}).encode("utf-8")))
+    assert created.status == 201
+    abuela = json.loads(created.body)["id"]
+    people = json.loads(web.handle(Request(method="GET", path="/api/people")).body)
+    assert people["persons"] == [{"id": abuela, "name": "Abuela", "chat_id": None}]
+    assert [chat["chat_id"] for chat in people["chats"]] == [42, 77]
+
+    refused = web.handle(Request.from_target(
+        "POST", "/api/command", headers=WRITE,
+        body=json.dumps({"person_id": abuela, "data": "lista"}).encode("utf-8")))
+    off = web.handle(Request.from_target(
+        "POST", "/api/command", headers=WRITE,
+        body=json.dumps({"person_id": abuela, "data": "callar 17"}).encode("utf-8")))
+    assert refused.status == 403
+    assert off.status == 200
+    assert json.loads(off.body)["text"] == "Esa alarma ya estaba apagada."
+    live = web.handle(Request(method="GET", path="/api/live", query={"person": str(abuela)}))
+    assert live.status == 200
 
 
 def test_the_control_reads_what_rang_from_the_stores_reminders_writes(wired, tmp_path, monkeypatch):

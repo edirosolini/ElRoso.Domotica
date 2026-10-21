@@ -553,6 +553,17 @@ class StubJobs:
     def add_items(self, list_name, text):
         return self._answer(("add_items", list_name, text), {"added": ["leche"], "repeated": []})
 
+    def add_person(self, payload):
+        return self._answer(("add_person", payload), {"id": 3, "chat_id": None, **payload})
+
+    def change_person(self, person_id, payload):
+        return self._answer(("change_person", person_id, payload),
+                            {"id": person_id, "name": "Nona", "chat_id": None})
+
+    def remove_person(self, person_id):
+        return self._answer(("remove_person", person_id),
+                            {"id": person_id, "name": "Nona", "chat_id": None})
+
 
 HOST = "192.168.68.10:8080"
 JSON_HEADERS = {"Content-Type": "application/json", "Host": HOST, "Origin": f"http://{HOST}"}
@@ -621,6 +632,62 @@ def test_items_are_added_to_a_list(writer, jobs):
     assert jobs.asked == [("add_items", "compras", "leche")]
 
 
+def test_a_person_is_added_changed_and_removed(writer, jobs):
+    added = send(writer, "POST", "/api/persons", {"name": "Abuela"})
+    changed = send(writer, "PUT", "/api/persons/3", {"chat_id": None})
+    removed = send(writer, "DELETE", "/api/persons/3")
+
+    assert added.status == 201
+    assert body_json(added) == {"id": 3, "name": "Abuela", "chat_id": None}
+    assert (changed.status, removed.status) == (200, 200)
+    assert body_json(removed) == {"id": 3, "name": "Nona", "chat_id": None}
+    assert jobs.asked == [("add_person", {"name": "Abuela"}),
+                          ("change_person", 3, {"chat_id": None}), ("remove_person", 3)]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "allow"),
+    [("GET", "/api/persons", "POST"), ("PUT", "/api/persons", "POST"),
+     ("GET", "/api/persons/3", "PUT, DELETE"), ("POST", "/api/persons/3", "PUT, DELETE")],
+)
+def test_the_person_routes_refuse_the_wrong_method(writer, jobs, method, path, allow):
+    response = send(writer, method, path, {"name": "Abuela"})
+
+    assert response.status == 405
+    assert response.headers["Allow"] == allow
+    assert jobs.asked == []
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [(WebError("Falta el nombre."), 400), (NotFound("No existe la persona #3."), 404),
+     (ReadOnly("La pantalla es de solo lectura."), 403)],
+)
+def test_the_person_refusals_keep_their_status_and_text(board, error, status):
+    app = WebApp(board, jobs=StubJobs(fail=error))
+
+    for response in (send(app, "POST", "/api/persons", {"name": ""}),
+                     send(app, "PUT", "/api/persons/3", {"name": ""}),
+                     send(app, "DELETE", "/api/persons/3")):
+        assert response.status == status
+        assert body_json(response) == {"error": str(error)}
+
+
+def test_a_person_body_that_is_not_a_json_object_gets_400(writer, jobs):
+    for method, path in (("POST", "/api/persons"), ("PUT", "/api/persons/3")):
+        response = writer.handle(Request.from_target(method, path, headers=JSON_HEADERS,
+                                                     body=b"[1]"))
+        assert response.status == 400
+    assert jobs.asked == []
+
+
+def test_without_jobs_there_is_no_padron(app):
+    assert send(app, "POST", "/api/persons", {"name": "Abuela"}).status == 404
+    assert send(app, "DELETE", "/api/persons/3").status == 404
+    assert body_json(get(app, "/api/people")) == {
+        "writable": False, "people": [], "devices": [], "persons": [], "chats": []}
+
+
 def test_a_list_only_accepts_post(writer, jobs):
     response = get(writer, "/api/lists/compras")
 
@@ -671,7 +738,8 @@ def test_a_service_that_breaks_gets_500_without_the_details(board):
 @pytest.mark.parametrize(
     ("method", "path"),
     [("POST", "/api/jobs"), ("PUT", "/api/jobs/7"), ("DELETE", "/api/jobs/7"),
-     ("POST", "/api/lists/compras/17/done")],
+     ("POST", "/api/lists/compras/17/done"), ("POST", "/api/persons"),
+     ("PUT", "/api/persons/3"), ("DELETE", "/api/persons/3")],
 )
 def test_a_write_from_another_site_or_not_json_is_refused(writer, jobs, headers, method, path):
     response = send(writer, method, path, {"message": "arriba"}, headers=headers)
@@ -723,7 +791,8 @@ def test_a_malformed_id_gets_404(writer, jobs, path):
 def test_without_the_service_the_screen_cannot_write(app):
     assert send(app, "POST", "/api/jobs", {"message": "x"}).status == 405
     assert get(app, "/api/people").status == 200
-    assert body_json(get(app, "/api/people")) == {"writable": False, "people": [], "devices": []}
+    assert body_json(get(app, "/api/people")) == {"writable": False, "people": [], "devices": [],
+                                                  "persons": [], "chats": []}
 
 
 def test_writes_carry_no_cors_headers(writer):
@@ -818,8 +887,8 @@ class StubControl:
         self.asked = []
         self.fail = fail
 
-    def live(self, chat_id):
-        self.asked.append(("live", chat_id))
+    def live(self, chat_id=None, person_id=None):
+        self.asked.append(("live", chat_id) if person_id is None else ("live_person", person_id))
         if self.fail:
             raise self.fail
         return {"now": "2026-10-19T12:00:00", "ringing": [], "awaiting": [], "snooze": None,
@@ -905,6 +974,21 @@ def test_the_control_script_uses_both_feeds_and_answers_as_text(app):
     assert "Procesando" in script
 
 
+def test_the_control_manages_the_padron_and_asks_before_removing(app):
+    page = get(app, "/control").body.decode("utf-8")
+    script = get(app, "/static/control.js").body.decode("utf-8")
+
+    persons = page[page.index('id="persons-card"'):]
+    persons = persons[:persons.index("</section>")]
+    assert '<section id="persons-card" class="card panel" hidden>' in page
+    assert 'id="person-add"' in persons and 'id="person-chat"' in persons
+    assert 'maxlength="40"' in persons
+    assert "style=" not in page
+    assert '"/api/persons"' in script and '"/api/persons/" + person.id' in script
+    assert "/api/live?person=" in script
+    assert "window.confirm(" in script
+
+
 def test_the_answer_keeps_its_line_breaks(app):
     css = get(app, "/static/app.css").body.decode()
 
@@ -920,7 +1004,25 @@ def test_live_reads_for_the_chosen_chat(controller, control):
     assert control.asked == [("live", 42)]
 
 
-@pytest.mark.parametrize("query", [{}, {"chat": ""}, {"chat": "abc"}, {"chat": "4.2"}])
+def test_live_reads_for_the_chosen_person(controller, control):
+    response = get(controller, "/api/live", person="3")
+
+    assert response.status == 200
+    assert control.asked == [("live_person", 3)]
+
+
+def test_a_command_for_a_person_reaches_the_control_as_is(controller, control):
+    response = send(controller, "POST", "/api/command", {"person_id": 3, "data": "callar 17"})
+
+    assert response.status == 200
+    assert control.asked == [("run", {"person_id": 3, "data": "callar 17"})]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [{}, {"chat": ""}, {"chat": "abc"}, {"chat": "4.2"}, {"person": ""}, {"person": "-3"},
+     {"person": "abc"}, {"chat": "42", "person": "3"}, {"person": "²"}, {"chat": "²"}],
+)
 def test_live_without_a_chat_gets_400(controller, control, query):
     assert get(controller, "/api/live", **query).status == 400
     assert control.asked == []
