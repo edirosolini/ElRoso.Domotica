@@ -77,7 +77,7 @@ def wired(tmp_path, monkeypatch):
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
     monkeypatch.setattr(
-        main, "build_speakers", lambda config, synth=None, restore=None: _FakeRegistry()
+        main, "build_speakers", lambda config, synth=None, restore=None, tele=None: _FakeRegistry()
     )
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
@@ -303,7 +303,7 @@ def test_the_polisher_reaches_everything_the_house_says(tmp_path, monkeypatch):
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
     monkeypatch.setattr(
-        main, "build_speakers", lambda config, synth=None, restore=None: _FakeRegistry()
+        main, "build_speakers", lambda config, synth=None, restore=None, tele=None: _FakeRegistry()
     )
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
@@ -356,7 +356,7 @@ def test_the_commands_get_both_the_polisher_and_the_corrector(tmp_path, monkeypa
     app = FakeApp()
     monkeypatch.setattr(main.Application, "builder", staticmethod(lambda: FakeBuilder(app)))
     monkeypatch.setattr(
-        main, "build_speakers", lambda config, synth=None, restore=None: _FakeRegistry()
+        main, "build_speakers", lambda config, synth=None, restore=None, tele=None: _FakeRegistry()
     )
     monkeypatch.setattr(main, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
@@ -1361,7 +1361,7 @@ def test_the_tele_app_registers_and_polls_on_the_one_database(wired, tmp_path, m
 
     poll = web.handle(Request(method="GET", path="/api/tele/comedor/poll"))
     assert poll.status == 200
-    assert json.loads(poll.body) == {"alarm": 17}
+    assert json.loads(poll.body) == {"alarm": 17, "orders": []}
     assert main.TeleStore(tmp_path / "jobs.db").get("comedor").address == "192.168.68.20"
     assert tele.link.alive("comedor")
 
@@ -1776,7 +1776,7 @@ def test_the_screens_are_wired_to_the_one_database_and_usable(wired, tmp_path, m
     reminders = _spy_init(monkeypatch, main.Reminders)
     handed = {}
 
-    def build_speakers(config, synth=None, restore=None):
+    def build_speakers(config, synth=None, restore=None, tele=None):
         handed["restore"] = restore
         return _FakeRegistry()
 
@@ -1828,6 +1828,83 @@ def test_each_caster_brings_back_the_page_of_its_own_tv(tmp_path, monkeypatch):
     assert registry.get("comedor").caster.screen() == "pagina de comedor"
     assert registry.get("recamara").caster.screen() == "pagina de recamara"
     assert main.build_speakers(config, synth=object()).get("comedor").caster.screen is None
+
+
+# --- la app de la tele en los parlantes ---
+
+
+def test_only_the_screens_go_through_the_tele_app(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "local_ip", lambda: "192.0.2.10")
+    monkeypatch.setattr(main, "CACHE_DIR", str(tmp_path / "cache"))
+    path = tmp_path / "teles.env"
+    path.write_text(
+        "TELEGRAM_TOKEN=123:ABC\n"
+        f"CAST_DEVICES=comedor:{uuid.uuid4()},parlante:{uuid.uuid4()}\n"
+        "SCREEN_DEVICES=comedor\n",
+        encoding="utf-8",
+    )
+    config = main.Config.from_file(path)
+    link = main.TeleLink(main.TeleStore(tmp_path / "jobs.db"))
+    link.hello("comedor", "1.0", 1, ["play"], "")
+
+    registry = main.build_speakers(
+        config, synth=object(), restore=lambda alias: f"pagina de {alias}", tele=link
+    )
+
+    comedor = registry.get("comedor").caster
+    assert isinstance(comedor, main.TeleCaster)
+    assert comedor.link is link and comedor.alias == "comedor"
+    assert isinstance(comedor.caster, main.Caster)
+    assert comedor.screen() == "pagina de comedor", "el Caster de adentro sigue restaurando"
+    seq = link.send("comedor", "stop")
+    assert comedor.link.orders("comedor") == [{"seq": seq, "kind": "stop"}]
+    assert type(registry.get("parlante").caster) is main.Caster
+    plain = main.build_speakers(config, synth=object())
+    assert type(plain.get("comedor").caster) is main.Caster
+
+
+def test_the_speakers_and_the_tele_app_share_one_link(wired, tmp_path, monkeypatch):
+    handed = {}
+
+    def build_speakers(config, synth=None, restore=None, tele=None):
+        handed["tele"] = tele
+        return _FakeRegistry()
+
+    monkeypatch.setattr(main, "build_speakers", build_speakers)
+
+    web = _wired_web(monkeypatch, tmp_path, HOUSE + "SCREEN_DEVICES=comedor\n")
+
+    link = handed["tele"]
+    assert link is web.tele.link
+    assert link.store.db_path == tmp_path / "jobs.db"
+    web.handle(Request.from_target(
+        "POST", "/api/tele/hello", headers=WRITE,
+        body=json.dumps({"alias": "comedor", "version_name": "1.0", "version_code": 1,
+                         "caps": ["play"]}).encode("utf-8")))
+    seq = link.send("comedor", "play", url="u", min_volume=None, seconds=None)
+    poll = json.loads(web.handle(Request(method="GET", path="/api/tele/comedor/poll")).body)
+    assert [order["seq"] for order in poll["orders"]] == [seq]
+    ack = web.handle(Request.from_target(
+        "POST", "/api/tele/comedor/ack", headers=WRITE,
+        body=json.dumps({"seq": seq, "state": "received"}).encode("utf-8")))
+    assert json.loads(ack.body) == {"accepted": True}
+    assert link.wait("comedor", seq, ("received",), timeout=0) == "received"
+
+
+def test_without_a_token_the_speakers_do_not_go_through_the_tele_app(
+    wired, tmp_path, monkeypatch
+):
+    handed = {}
+
+    def build_speakers(config, synth=None, restore=None, tele=None):
+        handed["tele"] = tele
+        return _FakeRegistry()
+
+    monkeypatch.setattr(main, "build_speakers", build_speakers)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert handed == {"tele": None}
 
 
 # --- la pantalla de control ---

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from homeauto.people import display_name
-from homeauto.tele import CAPS, TeleLink, normalize
+from homeauto.tele import ACK_STATES, CAPS, TeleLink, normalize
 from homeauto.web.jobs import NotFound, WebError
 
 MAX_VERSION = 40
@@ -59,8 +59,24 @@ class TeleService:
         return {"alias": tele.alias, "caps": list(tele.caps)}
 
     def poll(self, alias: str, address: str = "") -> dict:
-        """Cuenta como latido y devuelve la alarma que suena en esa tele, o null."""
+        """Cuenta como latido y devuelve la alarma que suena en esa tele y sus órdenes pendientes."""
         alias = normalize(alias)
         if alias not in self.devices or not self.link.beat(alias, address):
             raise NotFound("Esa tele no está registrada.")
-        return {"alarm": self.screens.job_for(alias)}
+        return {"alarm": self.screens.job_for(alias), "orders": self.link.orders(alias)}
+
+    def ack(self, alias: str, body: dict) -> dict:
+        """Anota lo que la app dice de una orden; `accepted` es falso si ya no estaba abierta."""
+        alias = normalize(alias)
+        if alias not in self.devices:
+            raise NotFound("Esa tele no está registrada.")
+        seq = body.get("seq")
+        if type(seq) is not int or seq < 0:
+            raise WebError("El seq tiene que ser un entero desde cero.")
+        state = body.get("state")
+        if state not in ACK_STATES:
+            raise WebError(f"El estado tiene que ser uno de: {', '.join(ACK_STATES)}.")
+        accepted = self.link.ack(alias, seq, state)
+        if accepted is None:
+            raise NotFound("Esa tele no está registrada.")
+        return {"accepted": accepted}

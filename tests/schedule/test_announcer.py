@@ -437,3 +437,43 @@ def test_any_other_bracket_stays_as_written(message):
 
     assert speaker.said == [message]
     assert polish.kept == [()]
+
+
+# --- la app de la tele ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("rest", ["quiet", "away"])
+def test_in_the_quiet_hours_or_on_vacation_nothing_reaches_the_tele_app(tmp_path, rest):
+    from homeauto.quiet import AwayStore, Hush, HushStore, QuietHours
+    from homeauto.tele import TeleLink, TeleStore
+    from homeauto.voice.speaker import Speaker
+    from homeauto.voice.tele import TeleCaster
+
+    at = datetime(2026, 10, 15, 23, 0) if rest == "quiet" else datetime(2026, 10, 15, 12, 0)
+    path = tmp_path / "jobs.db"
+    hush = Hush(
+        hours=QuietHours.parse("22:00", "05:25"),
+        store=HushStore(path),
+        clock=lambda: at,
+        away=AwayStore(path),
+    )
+    if rest == "away":
+        hush.start_away(datetime(2026, 10, 25, 0, 0))
+    link = TeleLink(TeleStore(path), clock=lambda: at)
+    link.hello("comedor", "1.0", 1, ["play", "show"], "")
+    cast = FakeSpeaker("comedor")
+    speaker = Speaker(synth=None, caster=TeleCaster("comedor", cast, link), media_server=None)
+    sent = []
+    announcer = Announcer(
+        speakers=StubRegistry(comedor=speaker),
+        notify=lambda chat_id, text, actions=(): sent.append(text),
+        fallback="comedor",
+        quiet=hush,
+        clock=lambda: at,
+    )
+
+    announcer(JOB)
+
+    assert link.orders("comedor") == []
+    assert link.can("comedor", "play"), "la app estaba viva: no le llegó porque no se habló"
+    assert len(sent) == 1

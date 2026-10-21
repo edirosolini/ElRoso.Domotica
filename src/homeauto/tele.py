@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,6 +12,14 @@ from typing import Callable, Iterable
 
 # Lo que una tele puede saber hacer; lo demás se ignora.
 CAPS = ("play", "show", "overlay")
+# Lo que la app puede contestar de una orden.
+ACK_STATES = ("received", "done", "failed")
+# Estados de una orden que ya no cambian.
+CLOSED = ("done", "failed", "cancelled")
+# Órdenes que terminan al llegar a la app.
+DELIVERED_ONLY = ("show", "stop")
+# Cuántas órdenes cerradas se guardan por tele.
+KEEP_CLOSED = 32
 # Sin latido en este tiempo, la tele se da por muerta.
 STALE = timedelta(minutes=3)
 # Cada cuánto, como mucho, un latido se anota en disco.
@@ -122,8 +132,15 @@ class TeleStore:
         return [_row_to_tele(row) for row in rows]
 
 
+@dataclass
+class _Order:
+    seq: int
+    fields: dict
+    state: str = "pending"
+
+
 class TeleLink:
-    """El registro y el latido de cada tele; el latido va a disco como mucho una vez por minuto."""
+    """El registro, el latido y el buzón de órdenes de cada tele."""
 
     def __init__(self, store: TeleStore, clock: Callable[[], datetime] = datetime.now):
         self.store = store
@@ -131,6 +148,12 @@ class TeleLink:
         # El último latido de cada tele y cuándo se anotó en disco.
         self._beats: dict[str, datetime] = {}
         self._written: dict[str, datetime] = {}
+        self._caps: dict[str, tuple[str, ...]] = {}
+        # Las órdenes de cada tele, por seq; el seq arranca en el milisegundo del arranque.
+        self._orders: dict[str, dict[int, _Order]] = {}
+        self._first_seq = int(clock().timestamp() * 1000)
+        self._last_seq: dict[str, int] = {}
+        self._changed = threading.Condition()
 
     def hello(
         self,
@@ -146,6 +169,7 @@ class TeleLink:
         self.store.save(tele)
         self._beats[tele.alias] = now
         self._written[tele.alias] = now
+        self._caps[tele.alias] = tele.caps
         return tele
 
     def beat(self, alias: str, address: str) -> bool:
@@ -169,13 +193,86 @@ class TeleLink:
         last = self._beats.get(alias)
         return last is not None and self.clock() - last < STALE
 
+    def can(self, alias: str, cap: str) -> bool:
+        """Si la tele está viva y anunció esa capacidad."""
+        alias = normalize(alias)
+        return self.alive(alias) and cap in self._caps.get(alias, ())
+
+    def send(self, alias: str, kind: str, **fields) -> int:
+        """Deja una orden en el buzón y devuelve su seq; `stop` anula las que siguen abiertas."""
+        alias = normalize(alias)
+        with self._changed:
+            orders = self._orders.setdefault(alias, {})
+            closed = [seq for seq, order in orders.items() if order.state in CLOSED]
+            for seq in closed[:-KEEP_CLOSED]:
+                del orders[seq]
+            if kind == "stop":
+                for order in orders.values():
+                    order.state = "cancelled"
+                self._changed.notify_all()
+            seq = max(self._last_seq.get(alias, self._first_seq), self._first_seq) + 1
+            self._last_seq[alias] = seq
+            orders[seq] = _Order(seq, {"kind": kind, **fields})
+            return seq
+
+    def orders(self, alias: str) -> list[dict]:
+        """Las órdenes que la app todavía no confirmó haber recibido."""
+        alias = normalize(alias)
+        with self._changed:
+            pending = [o for o in self._orders.get(alias, {}).values() if o.state == "pending"]
+            return [{"seq": order.seq, **order.fields} for order in pending]
+
+    def ack(self, alias: str, seq: int, state: str) -> bool | None:
+        """Anota lo que la app dice de una orden; False si no existe o ya cerró, None si la tele no."""
+        alias = normalize(alias)
+        if not self._known(alias):
+            return None
+        with self._changed:
+            order = self._orders.get(alias, {}).get(seq)
+            if order is None or order.state in CLOSED:
+                return False
+            if state == "received" and order.state == "received":
+                return True
+            if state == "received" and order.fields["kind"] in DELIVERED_ONLY:
+                state = "done"
+            order.state = state
+            self._changed.notify_all()
+            return True
+
+    def cancel(self, alias: str, seq: int) -> None:
+        """Anula una orden abierta; un ack que llegue después se ignora."""
+        alias = normalize(alias)
+        with self._changed:
+            order = self._orders.get(alias, {}).get(seq)
+            if order is not None and order.state not in CLOSED:
+                order.state = "cancelled"
+                self._changed.notify_all()
+
+    def wait(self, alias: str, seq: int, states: Iterable[str], timeout: float) -> str | None:
+        """Espera a que la orden llegue a uno de `states` o cierre; None si se acaba el tiempo."""
+        alias = normalize(alias)
+        wanted = set(states) | set(CLOSED)
+        deadline = time.monotonic() + timeout
+        with self._changed:
+            while True:
+                order = self._orders.get(alias, {}).get(seq)
+                if order is None:
+                    return "cancelled"
+                if order.state in wanted:
+                    return order.state
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return None
+                self._changed.wait(left)
+
     def _known(self, alias: str) -> bool:
         """Si la tele está registrada; la primera vez trae de disco su último latido."""
-        if alias in self._beats:
+        if alias in self._beats or alias in self._caps:
             return True
         tele = self.store.get(alias)
         if tele is None:
             return False
+        self._caps[alias] = tele.caps
         if tele.last_seen is not None:
             self._beats[alias] = tele.last_seen
             self._written[alias] = tele.last_seen

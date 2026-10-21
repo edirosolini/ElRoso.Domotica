@@ -71,13 +71,14 @@ from homeauto.schedule.stock import StockStore
 from homeauto.schedule.store import Store
 from homeauto.people import People, PeopleStore
 from homeauto.strangers import Strangers, StrangerStore
-from homeauto.tele import TeleLink, TeleStore
+from homeauto.tele import TeleLink, TeleStore, normalize as normalize_alias
 from homeauto.voice import chime
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
 from homeauto.voice.broadcast import SAME, HouseVoice
 from homeauto.voice.registry import SpeakerRegistry
 from homeauto.voice.speaker import Speaker
+from homeauto.voice.tele import TeleCaster
 from homeauto.voice.tts import (
     DEFAULT_LENGTH_SCALE,
     DEFAULT_SENTENCE_SILENCE,
@@ -596,22 +597,26 @@ def build_voicemail(synth) -> Voicemail:
     return Voicemail(synth)
 
 
-def build_speakers(config: Config, synth=None, restore=None) -> SpeakerRegistry:
+def build_speakers(config: Config, synth=None, restore=None, tele=None) -> SpeakerRegistry:
     """Un Speaker por equipo configurado, compartiendo síntesis y servidor de audio.
 
     Lo único distinto es el Caster: sintetizar dos veces la misma frase o
     levantar dos servidores HTTP sería desperdicio. `restore(alias)` es la página
-    que vuelve a cada tele después de un anuncio.
+    que vuelve a cada tele después de un anuncio; con `tele`, el `TeleLink`, las
+    teles de `SCREEN_DEVICES` pasan primero por su app.
     """
     cache_dir = Path(CACHE_DIR)
     synth = synth or build_synth(cache_dir)
     media_server = MediaServer(cache_dir, advertised_ip=local_ip(), port=MEDIA_PORT)
     aliases = {device_uuid: alias for alias, device_uuid in config.devices.items()}
+    screens = {normalize_alias(alias) for alias in config.screen_devices}
 
     def build(device_uuid) -> Speaker:
         alias = aliases[device_uuid]
         screen = (lambda: restore(alias)) if restore is not None else None
         caster = Caster(device_uuid, screen=screen)
+        if tele is not None and normalize_alias(alias) in screens:
+            caster = TeleCaster(normalize_alias(alias), caster, tele)
         return Speaker(synth=synth, caster=caster, media_server=media_server)
 
     return SpeakerRegistry(config.devices, build=build)
@@ -897,18 +902,20 @@ def main() -> None:
     # El silencio que todos consultan: las horas fijas más lo que haya pedido
     # /silencio. Se arma antes que sus usuarios, como el resto del archivo.
     hush = Hush(hours=config.quiet_hours, store=HushStore(db_path), away=AwayStore(db_path))
-    # La página de cada tele; sin API no hay pantalla que mostrar.
+    # La página de cada tele y su app; sin API no hay pantalla que mostrar ni app que oír.
     pages = None
+    tele_link = None
     if config.api_enabled:
         pages = ScreenPages(
             base=lambda: f"http://{local_ip()}:{config.api_port}",
             store=ScreenStore(db_path),
             quiet=hush,
         )
+        tele_link = TeleLink(TeleStore(db_path), clock=datetime.now)
     # Un solo VoiceSynth: el parlante y la nota de voz comparten cache.
     synth = build_synth(Path(CACHE_DIR))
     speakers = build_speakers(
-        config, synth, restore=pages.restore_url if pages is not None else None
+        config, synth, restore=pages.restore_url if pages is not None else None, tele=tele_link
     )
     log.info("equipos configurados: %s", ", ".join(speakers.aliases))
 
@@ -1159,7 +1166,7 @@ def main() -> None:
                 ),
                 apps=AppShelf(STATE_DIR / "app"),
                 tele=TeleService(
-                    link=TeleLink(TeleStore(db_path), clock=datetime.now),
+                    link=tele_link,
                     devices=config.screen_devices,
                     people=people,
                     chat_ids=config.allowed_chat_ids,

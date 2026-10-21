@@ -79,6 +79,7 @@ TELE = "/api/tele"
 TELE_SETUP = "/api/tele/setup"
 TELE_HELLO = "/api/tele/hello"
 TELE_POLL = re.compile(r"/api/tele/([^/]+)/poll")
+TELE_ACK = re.compile(r"/api/tele/([^/]+)/ack")
 
 
 @dataclass(frozen=True)
@@ -306,11 +307,12 @@ class WebApp:
             return _json(500, {"error": "No pude atender el pedido."})
 
     def _tele(self, request: Request, path: str) -> Response:
-        """El registro y la consulta de la app de la tele."""
+        """El registro, la consulta y las confirmaciones de la app de la tele."""
         poll = TELE_POLL.fullmatch(path)
+        ack = TELE_ACK.fullmatch(path)
         if path == TELE_SETUP or poll:
             allowed = "GET"
-        elif path == TELE_HELLO:
+        elif path == TELE_HELLO or ack:
             allowed = "POST"
         else:
             return _json(404, {"error": "no existe"})
@@ -320,7 +322,7 @@ class WebApp:
             return _json(404, {"error": "no existe"})
 
         payload = None
-        if path == TELE_HELLO:
+        if allowed == "POST":
             refusal = _refuse_write(request)
             if refusal is not None:
                 return refusal
@@ -336,6 +338,8 @@ class WebApp:
                 return _json(200, self.tele.setup())
             if path == TELE_HELLO:
                 return _json(200, self.tele.hello(payload, address=request.client))
+            if ack:
+                return _json(200, self.tele.ack(ack.group(1), payload))
             return _json(200, self.tele.poll(poll.group(1), address=request.client))
         except WebError as exc:
             return _json(exc.status, {"error": str(exc)})
