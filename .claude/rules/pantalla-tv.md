@@ -24,6 +24,8 @@ paths:
 - **Probado el 2026-10-15 en las tres teles**: comedor (Google TV Streamer), recámara
   (Chromecast con Google TV) y habitación (Chromecast HD). Aguantó cuarenta minutos seguidos
   sin que Cast lo cerrara; lo que lo reemplazó fue una app abierta a mano.
+- **Con la app de la tele viva y la capacidad `show`, la página va a la app**; si no, o si la
+  app no confirma, por DashCast. Ver **Órdenes**, en `.claude/rules/app-tele.md`.
 - 🔴 **Lo que se castea es siempre `/pantalla?ver=1`**, el kiosco de solo lectura. Ver
   **Pantalla de la casa**, en `.claude/rules/web.md`.
 - **Tres piezas.** `ScreenPages` decide qué URL va en cada tele y le pregunta a `Hush`;

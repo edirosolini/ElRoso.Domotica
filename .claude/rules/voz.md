@@ -355,6 +355,8 @@ del wav de Piper. Hay tres:
   entre equipos es el Caster; duplicar lo demás sería sintetizar dos veces la misma frase.
   Los Speaker se construyen recién al usarse: al arrancar, casi todos los equipos están
   apagados.
+- **En una tele de `SCREEN_DEVICES` el Caster es un `TeleCaster`**: con la app viva, el audio
+  puede ir por la app y, si no confirma, por Cast. Ver **Órdenes**, en `.claude/rules/app-tele.md`.
 - **El que castea sirve el audio por HTTP desde sí mismo**, y el parlante tiene que poder
   alcanzar ese puerto. No es "mandarle un archivo": es publicarlo y pasarle la URL.
 - 🔴 **Un solo zeroconf y un solo browser mDNS para todo el proceso, y nunca se paran.**

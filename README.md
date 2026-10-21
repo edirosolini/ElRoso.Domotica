@@ -789,9 +789,10 @@ que la pantalla.
 Si la tele tiene la app de prueba «Spike tele», desinstalarla antes: es otro paquete y no se
 reemplaza sola.
 
-Con Downloader:
+Con Downloader, o con un explorador de archivos con acceso a la red (en casa se usó CX File
+Explorer):
 
-1. Darle a Downloader el permiso «instalar apps desconocidas».
+1. Darle a esa app el permiso «instalar apps desconocidas».
 2. Abrir `http://192.168.68.10:8099/app/tele.apk` e instalar.
 
 La primera vez que se abre, con el control:

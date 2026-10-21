@@ -103,6 +103,7 @@ y escribe en todos los chats de `ALLOWED_CHAT_IDS`, no solo en el que la pidió.
 
 `Speaker` es la unidad de "decir algo en un equipo": sintetiza, publica el wav por HTTP y le
 pasa la URL al dispositivo. El parlante descarga el audio del CT; no se le manda un archivo.
+Con la API, cada tele de `SCREEN_DEVICES` usa un `TeleCaster`: prueba la app si está viva y, si no confirma, Cast.
 
 ### Estado
 
