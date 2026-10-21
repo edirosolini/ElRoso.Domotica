@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -62,6 +63,9 @@ enum class AckState(val wire: String) {
 /** La respuesta de `poll`: la alarma que suena en la tele, o null, y las órdenes pendientes. */
 data class PollReply(val alarm: Long? = null, val orders: List<Order> = emptyList())
 
+/** La versión publicada en `tele.json`, con el sha256 en minúsculas y el tamaño en bytes. */
+data class Release(val versionCode: Int, val versionName: String, val sha256: String, val size: Long)
+
 @Serializable
 private data class AckReply(val accepted: Boolean = false)
 
@@ -107,6 +111,28 @@ object Protocol {
     }.toString()
 
     fun parseCommand(body: String): String = json.decodeFromString(CommandReply.serializer(), body).text
+
+    /** Lee `tele.json`; null si no es un objeto con los cuatro campos válidos. */
+    fun parseRelease(body: String): Release? {
+        val root = try {
+            json.parseToJsonElement(body) as? JsonObject
+        } catch (e: SerializationException) {
+            null
+        } ?: return null
+        val code = root.number("version_code")?.toIntOrNull()?.takeIf { it >= 0 } ?: return null
+        val name = root.text("version_name") ?: return null
+        val sha = root.text("sha256")?.lowercase()?.takeIf { SHA256.matches(it) } ?: return null
+        val size = root.number("size")?.toLongOrNull()?.takeIf { it > 0 } ?: return null
+        return Release(code, name, sha, size)
+    }
+
+    private val SHA256 = Regex("[0-9a-f]{64}")
+
+    private fun JsonObject.text(key: String): String? =
+        (get(key) as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+    private fun JsonObject.number(key: String): String? =
+        (get(key) as? JsonPrimitive)?.takeIf { !it.isString && it !is JsonNull }?.content
 
     /** El campo `error` de una respuesta del CT, o null si no lo trae. */
     fun parseError(body: String): String? = try {

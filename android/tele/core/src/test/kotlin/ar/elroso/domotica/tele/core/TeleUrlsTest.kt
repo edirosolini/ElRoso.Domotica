@@ -35,4 +35,10 @@ class TeleUrlsTest {
     fun encodesTheAliasAsAPathSegment() {
         assertEquals("http://casa.lan:8099/api/tele/sala%20grande%2F2/poll", urls.poll("sala grande/2"))
     }
+
+    @Test
+    fun buildsTheReleaseRoutes() {
+        assertEquals("http://casa.lan:8099/app/tele.json", urls.release)
+        assertEquals("http://casa.lan:8099/app/tele.apk", urls.apk)
+    }
 }

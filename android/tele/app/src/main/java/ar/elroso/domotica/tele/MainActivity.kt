@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private enum class Permission(val label: String) {
         NOTIFICATIONS("notificaciones"),
         OVERLAY("mostrar sobre otras apps"),
+        INSTALL("instalar apps desconocidas"),
     }
 
     private val asked = mutableSetOf<Permission>()
@@ -162,6 +163,7 @@ class MainActivity : Activity() {
         when (next) {
             Permission.NOTIFICATIONS -> requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
             Permission.OVERLAY -> askOverlay()
+            Permission.INSTALL -> askInstall()
         }
     }
 
@@ -169,6 +171,7 @@ class MainActivity : Activity() {
         Permission.NOTIFICATIONS -> Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         Permission.OVERLAY -> Settings.canDrawOverlays(this)
+        Permission.INSTALL -> Tele.canInstall(this)
     }
 
     /** Abre el ajuste de superposición, o deja logueado que el equipo no lo tiene. */
@@ -177,6 +180,15 @@ class MainActivity : Activity() {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         } catch (e: ActivityNotFoundException) {
             Tele.log("este equipo no tiene el ajuste de superposición")
+        }
+    }
+
+    /** Abre el ajuste de instalar apps desconocidas, o deja logueado que el equipo no lo tiene. */
+    private fun askInstall() {
+        try {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+        } catch (e: ActivityNotFoundException) {
+            Tele.log("este equipo no tiene el ajuste de instalar apps desconocidas")
         }
     }
 }

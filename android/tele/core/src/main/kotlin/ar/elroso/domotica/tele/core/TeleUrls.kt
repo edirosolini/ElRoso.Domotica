@@ -10,6 +10,8 @@ class TeleUrls(base: String) {
     val hello = "$root/api/tele/hello"
     val kiosk = "$root/pantalla?ver=1"
     val command = "$root/api/command"
+    val release = "$root/app/tele.json"
+    val apk = "$root/app/tele.apk"
 
     fun poll(alias: String) = "$root/api/tele/${segment(alias)}/poll"
 
