@@ -13,17 +13,53 @@ assert.strictEqual(control.targeted("parar", ["comedor"], ""), "parar en comedor
 assert.strictEqual(control.targeted("pantalla apagar", ["comedor"], ""), "pantalla apagar en comedor");
 assert.strictEqual(control.targeted("clima", null, ""), "clima");
 
-// Quién soy: el guardado si sigue en la casa, si no el primero.
+// Quién soy: con padrón vacío, se eligen chats.
 var people = [{ chat_id: 42, name: "Eze" }, { chat_id: 77, name: "Chat 77" }];
-assert.strictEqual(control.pickChat(people, "77"), 77);
-assert.strictEqual(control.pickChat(people, "99"), 42);
-assert.strictEqual(control.pickChat(people, null), 42);
-assert.strictEqual(control.pickChat([], "42"), null);
+var chats = control.whoOptions({ people: people, persons: [] });
+assert.deepStrictEqual(chats, [{ key: "c:42", label: "Eze" }, { key: "c:77", label: "Chat 77" }]);
+assert.deepStrictEqual(control.whoOptions({ people: people }), chats);
+assert.deepStrictEqual(control.whoOptions({}), []);
 
-// Un botón viaja como data, lo escrito suelto como text.
-assert.deepStrictEqual(control.commandBody(42, "callar 17", false), { chat_id: 42, data: "callar 17" });
-assert.deepStrictEqual(control.commandBody(42, "dame el clima", true), { chat_id: 42, text: "dame el clima" });
-assert.strictEqual(control.liveUrl(-100), "/api/live?chat=-100");
+// Con padrón, se elige persona; la que no tiene Telegram lo dice.
+var persons = [{ id: 3, name: "Abuela", chat_id: null }, { id: 5, name: "Eze", chat_id: 42 }];
+var options = control.whoOptions({ people: people, persons: persons });
+assert.deepStrictEqual(options, [
+  { key: "p:3", label: "Abuela (sin Telegram)", chat_id: null },
+  { key: "p:5", label: "Eze", chat_id: 42 },
+]);
+
+// El guardado si sigue, uno viejo por número de chat, si no el primero.
+assert.strictEqual(control.pickWho(chats, "c:77"), "c:77");
+assert.strictEqual(control.pickWho(chats, "77"), "c:77");
+assert.strictEqual(control.pickWho(chats, "c:99"), "c:42");
+assert.strictEqual(control.pickWho(chats, null), "c:42");
+assert.strictEqual(control.pickWho(options, "p:5"), "p:5");
+assert.strictEqual(control.pickWho(options, "42"), "p:5");
+assert.strictEqual(control.pickWho(options, "c:42"), "p:5");
+assert.strictEqual(control.pickWho(options, "p:9"), "p:3");
+assert.strictEqual(control.pickWho([], "42"), null);
+
+// Un botón viaja como data, lo escrito suelto como text, a nombre del chat o de la persona.
+assert.deepStrictEqual(control.commandBody("c:42", "callar 17", false), { chat_id: 42, data: "callar 17" });
+assert.deepStrictEqual(control.commandBody("c:42", "dame el clima", true), { chat_id: 42, text: "dame el clima" });
+assert.deepStrictEqual(control.commandBody("p:3", "callar 17", false), { person_id: 3, data: "callar 17" });
+assert.strictEqual(control.liveUrl("c:-100"), "/api/live?chat=-100");
+assert.strictEqual(control.liveUrl("p:3"), "/api/live?person=3");
+
+// Un chat se muestra con el nombre visto en Telegram, o con su número.
+assert.strictEqual(control.chatLabel({ chat_id: 42, seen: "Ezequiel Di" }), "Ezequiel Di (42)");
+assert.strictEqual(control.chatLabel({ chat_id: 77, seen: null }), "Chat 77");
+
+// Los chats que se pueden asociar: los libres y el propio.
+var house = [{ chat_id: 42, seen: "Eze" }, { chat_id: 77, seen: null }];
+assert.deepStrictEqual(control.freeChats(house, persons, 3), [{ chat_id: 77, seen: null }]);
+assert.deepStrictEqual(control.freeChats(house, persons, 5), house);
+assert.deepStrictEqual(control.freeChats(house, persons, null), [{ chat_id: 77, seen: null }]);
+
+// El cuerpo del alta o del cambio de una persona.
+assert.deepStrictEqual(control.personBody("  Abuela ", ""), { name: "Abuela", chat_id: null });
+assert.deepStrictEqual(control.personBody("Eze", "42"), { name: "Eze", chat_id: 42 });
+assert.deepStrictEqual(control.personBody("Eze", "-100"), { name: "Eze", chat_id: -100 });
 
 // Cuánto pasó.
 var now = "2026-10-19T12:00:00";

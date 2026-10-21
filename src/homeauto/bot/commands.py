@@ -35,6 +35,7 @@ from homeauto.meals import (
     week_of,
 )
 from homeauto.lists import LISTS, SHOPPING, TODO, ListError, resolve, split_items
+from homeauto.people import SAYABLE_NAME
 from homeauto.voice.voicemail import VoicemailError
 from homeauto import slots, summon
 from homeauto.correct import as_written
@@ -86,6 +87,10 @@ ITEM_ID = "id:"
 MAX_BUTTONS = 20
 MAX_LABEL = 40
 
+# Los botones que puede tocar alguien de la casa sin Telegram.
+CHATLESS_BUTTONS = ("callar", "hecho")
+CHATLESS_ONLY = "Sin Telegram solo se puede apagar una alarma o marcar «Hecho»."
+
 # Las tres formas de /pastillas con argumento: cambiar el aviso, reponer y atar un recordatorio.
 _PILL_THRESHOLD = re.compile(r"^(.+?)\s+aviso\s+(\d+)$", re.IGNORECASE)
 _PILL_RESTOCK = re.compile(r"^(.+?)\s+\+\s*(\d+)$")
@@ -97,8 +102,6 @@ PILLS_USAGE = (
 
 # /turnos con argumento: el número del job y los nombres, u «off».
 _TURNS = re.compile(r"^#?(\d+)\s+(.+)$")
-# Un nombre que se dice en voz alta: letras y espacios, sin dígitos ni guiones.
-_SAYABLE_NAME = re.compile(r"^[^\W\d_]+(?:\s+[^\W\d_]+)*$")
 TURNS_OFF = "off"
 TURNS_USAGE = (
     "Así: /turnos 7 Cin, Die turna el #7 por semana entre Cin y Die · /turnos 7 off lo corta"
@@ -1029,7 +1032,7 @@ class Commands:
             return f"El #{job_id} suena una sola vez: solo se turna algo que repite."
 
         people = split_items(names)
-        unsayable = [name for name in people if not _SAYABLE_NAME.fullmatch(name)]
+        unsayable = [name for name in people if not SAYABLE_NAME.fullmatch(name)]
         if unsayable:
             return (
                 f"«{unsayable[0]}» no se puede decir en voz alta:"
@@ -1130,12 +1133,26 @@ class Commands:
         finally:
             _WHO.reset(token)
 
+    def press_without_chat(self, data: str, who: str = "") -> str:
+        """Un botón de alguien de la casa sin chat: solo apagar una alarma o marcar «Hecho»."""
+        command, _, argument = data.strip().partition(" ")
+        run = {"callar": self._turn_alarm_off, "hecho": self._mark_done}.get(command)
+        if run is None:
+            return CHATLESS_ONLY
+        token = _WHO.set(who)
+        try:
+            return run(None, argument)
+        finally:
+            _WHO.reset(token)
+
     def done(self, chat_id: int, text: str) -> str:
         """Marca como hecho el recordatorio que sonó y avisa a los demás chats."""
         denial = self._denial(chat_id)
         if denial:
             return denial
+        return self._mark_done(chat_id, text)
 
+    def _mark_done(self, chat_id: int | None, text: str) -> str:
         try:
             job_id = int(text.strip().lstrip("#"))
         except ValueError:
@@ -1151,7 +1168,9 @@ class Commands:
         denial = self._denial(chat_id)
         if denial:
             return denial
+        return self._turn_alarm_off(chat_id, text)
 
+    def _turn_alarm_off(self, chat_id: int | None, text: str) -> str:
         try:
             job_id = int(text.strip().lstrip("#"))
         except ValueError:

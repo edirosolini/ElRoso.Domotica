@@ -9,7 +9,7 @@ from typing import Callable, Iterable
 
 from homeauto.bot.commands import format_when
 from homeauto.lists import LISTS, split_items
-from homeauto.people import display_name
+from homeauto.people import Person, PersonError, PersonNotFound, display_name
 from homeauto.schedule.month import item_kind
 from homeauto.schedule.spec import (
     SpecError, check_skip_holidays, classify, repetition_label, resolve,
@@ -45,6 +45,10 @@ def cancel_action(job_id: int) -> tuple[str, str]:
     return (f"Cancelar #{job_id}", f"borrar {job_id}")
 
 
+def _person(person: Person) -> dict:
+    return {"id": person.id, "name": person.name, "chat_id": person.chat_id}
+
+
 def _monthday(when: datetime, previous: Job | None) -> int:
     """El día del mes de la fecha elegida, o el del mensual editado si la fecha es donde ese cae."""
     if previous is not None and previous.is_monthly and previous.monthday:
@@ -67,6 +71,7 @@ class JobsService:
         notify: Callable[..., None] | None = None,
         clock: Callable[[], datetime] = datetime.now,
         spawn: Callable[[Callable[[], None]], None] = _in_thread,
+        household=None,
     ):
         self.reminders = reminders
         self.store = store
@@ -77,14 +82,16 @@ class JobsService:
         self.notify = notify
         self.clock = clock
         self.spawn = spawn
+        self.household = household
 
     @property
     def writable(self) -> bool:
         return bool(self.chat_ids)
 
     def people(self) -> dict:
-        """La gente de la casa para elegir el autor, los equipos y si se puede escribir."""
+        """La gente de la casa: los chats, el padrón, los equipos y si se puede escribir."""
         names = self._names()
+        persons = self.household.list() if self.household is not None else []
         return {
             "writable": self.writable,
             "people": [
@@ -92,7 +99,41 @@ class JobsService:
                 for chat_id in self.chat_ids
             ],
             "devices": sorted(self.devices),
+            "persons": [_person(person) for person in persons],
+            "chats": [{"chat_id": chat_id, "seen": names.get(chat_id)} for chat_id in self.chat_ids],
         }
+
+    def add_person(self, payload: dict) -> dict:
+        self._check_padron()
+        return self._on_padron(lambda: self.household.add(payload.get("name"),
+                                                          payload.get("chat_id")))
+
+    def change_person(self, person_id: int, payload: dict) -> dict:
+        """Cambia el nombre, el chat o los dos; `chat_id` en null es sin Telegram."""
+        self._check_padron()
+        changes = {key: payload[key] for key in ("name", "chat_id") if key in payload}
+        if not changes:
+            raise WebError("Mandá el nombre, el chat o los dos.")
+        return self._on_padron(lambda: self.household.update(person_id, **changes))
+
+    def remove_person(self, person_id: int) -> dict:
+        self._check_padron()
+        return self._on_padron(lambda: self.household.remove(person_id))
+
+    def _check_padron(self) -> None:
+        self._check_writable()
+        if self.household is None:
+            raise NotFound("No existe el padrón.")
+
+    @staticmethod
+    def _on_padron(change: Callable[[], Person]) -> dict:
+        """Hace el cambio del padrón y traduce sus negativas a las de la pantalla."""
+        try:
+            return _person(change())
+        except PersonNotFound as exc:
+            raise NotFound(str(exc)) from None
+        except PersonError as exc:
+            raise WebError(str(exc)) from None
 
     def job(self, job_id: int) -> dict:
         job = self.store.get(job_id)

@@ -70,7 +70,7 @@ from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.ringing import RingingStore
 from homeauto.schedule.stock import StockStore
 from homeauto.schedule.store import Store
-from homeauto.people import People, PeopleStore
+from homeauto.people import Household, People, PeopleStore, PersonStore
 from homeauto.strangers import Strangers, StrangerStore
 from homeauto.tele import TeleLink, TeleStore, normalize as normalize_alias
 from homeauto.voice import chime
@@ -726,12 +726,32 @@ async def _meet(people, update: Update) -> None:
         log.exception("could not remember the chat name")
 
 
-def register(app: Application, commands: Commands, strangers=None, people=None) -> None:
+def _signed(household, chat_id: int, fallback: str) -> str:
+    """El nombre del padrón para ese chat, o `fallback` si no hay persona o el padrón falla."""
+    if household is None:
+        return fallback
+    try:
+        person = household.by_chat(chat_id)
+    except Exception:  # noqa: BLE001 - leer el padrón no puede costar la respuesta
+        log.exception("no pude leer el padrón")
+        return fallback
+    return person.name if person is not None else fallback
+
+
+def register(
+    app: Application, commands: Commands, strangers=None, people=None, household=None
+) -> None:
     """Cablea todos los comandos, corriendo el trabajo fuera del event loop.
 
     El descubrimiento (zeroconf) y la síntesis (Piper) bloquean: en el loop no
     encuentran nada y congelan el bot.
     """
+
+    def signed_run(run, chat_id: int, argument: str, fallback: str):
+        return with_actions(run, chat_id, argument, who=_signed(household, chat_id, fallback))
+
+    def signed_press(chat_id: int, data: str, fallback: str):
+        return with_actions(commands.press, chat_id, data, _signed(household, chat_id, fallback))
 
     def handler(run_command):
         async def callback(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
@@ -749,7 +769,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
             markup = None
             try:
                 reply = await asyncio.to_thread(
-                    with_actions, run_command, chat_id, text, who=_who(update)
+                    signed_run, run_command, chat_id, text, _who(update)
                 )
                 answer, markup = reply.text, _keyboard(reply.actions)
             except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
@@ -854,7 +874,7 @@ def register(app: Application, commands: Commands, strangers=None, people=None) 
         markup = None
         try:
             reply = await asyncio.to_thread(
-                with_actions, commands.press, update.effective_chat.id, query.data, _who(update)
+                signed_press, update.effective_chat.id, query.data, _who(update)
             )
             answer, markup = reply.text, _keyboard(reply.actions)
         except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
@@ -1112,11 +1132,13 @@ def main() -> None:
         clock=datetime.now,
     )
     people = PeopleStore(db_path)
+    household = Household(PersonStore(db_path), config.allowed_chat_ids)
     register(
         app,
         commands,
         Strangers(config=config, store=StrangerStore(db_path), notify=notifier),
         People(people, config.allowed_chat_ids),
+        household,
     )
 
     watcher = None
@@ -1167,6 +1189,7 @@ def main() -> None:
                     lists=ListStore(db_path),
                     notify=notifier,
                     clock=datetime.now,
+                    household=household,
                 ),
                 control=ControlService(
                     commands=commands,
@@ -1179,6 +1202,7 @@ def main() -> None:
                     alert_recipients=config.alert_recipients,
                     chat_ids=config.allowed_chat_ids,
                     clock=datetime.now,
+                    household=household,
                 ),
                 apps=AppShelf(STATE_DIR / "app"),
                 tele=TeleService(

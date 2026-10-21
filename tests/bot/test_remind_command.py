@@ -286,3 +286,15 @@ def test_typed_cancel_is_still_only_the_owners(cmd):
 
     assert "No encontré" in cmd.cancel(OTHER, str(job.id))
     assert cmd.reminders.store.get(job.id) is not None
+
+
+def test_someone_without_a_chat_marks_done_and_every_chat_hears(cmd):
+    job = ring(cmd)
+
+    reply = cmd.press_without_chat(f"hecho {job.id}", who="Abuela (pantalla)")
+
+    assert reply == "✅ Hecho: «tomar la pastilla»"
+    assert sorted(cmd.told) == [
+        (OWNER, "✅ Abuela (pantalla) marcó hecho: «tomar la pastilla»"),
+        (OTHER, "✅ Abuela (pantalla) marcó hecho: «tomar la pastilla»"),
+    ]

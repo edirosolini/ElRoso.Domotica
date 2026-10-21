@@ -141,3 +141,25 @@ def test_the_off_button_fits_in_telegram():
     """Telegram rechaza un callback_data de más de 64 bytes."""
     for _label, data in main.ALARM_ACTIONS + main.OFF_ACTIONS:
         assert len(data.format(job=2**63 - 1).encode()) <= 64
+
+
+# --- alguien de la casa sin Telegram ---
+
+
+def test_someone_without_a_chat_turns_it_off_and_every_chat_hears(cmd):
+    job = ring(cmd)
+
+    reply = cmd.press_without_chat(f"callar {job.id}", who="Abuela (pantalla)")
+
+    assert reply == "🔕 Apagada: «arriba»"
+    assert sorted(cmd.told) == [(OWNER, "🔕 Abuela (pantalla) apagó la alarma: «arriba»"),
+                                (OTHER, "🔕 Abuela (pantalla) apagó la alarma: «arriba»")]
+    assert f"ring:{job.id}" not in cmd.timer.armed
+
+
+@pytest.mark.parametrize("data", ["clima", "borrar 3", "confirmar vps", "posponer 10m", ""])
+def test_without_a_chat_only_off_and_done_run(cmd, data):
+    reply = cmd.press_without_chat(data, who="Abuela (pantalla)")
+
+    assert reply == "Sin Telegram solo se puede apagar una alarma o marcar «Hecho»."
+    assert cmd.told == []

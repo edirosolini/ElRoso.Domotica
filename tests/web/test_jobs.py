@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from homeauto.lists import ListStore
-from homeauto.people import PeopleStore
+from homeauto.people import Household, PeopleStore, PersonStore
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.reminders import Reminders
@@ -63,6 +63,7 @@ def parts(tmp_path):
             notify=notify,
             clock=lambda: NOW,
             spawn=spawn,
+            household=Household(PersonStore(path), chat_ids),
         )
 
     return {"build": build, "store": store, "timer": timer, "told": told,
@@ -93,15 +94,93 @@ def test_people_are_the_allowed_chats_with_their_names(parts):
         "writable": True,
         "people": [{"chat_id": DIEGO, "name": "Chat 7"}, {"chat_id": EZE, "name": "Eze"}],
         "devices": ["comedor", "parlante"],
+        "persons": [],
+        "chats": [{"chat_id": DIEGO, "seen": None}, {"chat_id": EZE, "seen": "Eze"}],
     }
 
 
 def test_without_allowed_chats_the_screen_is_read_only(parts):
     jobs = parts["build"](chat_ids=())
 
-    assert jobs.people() == {"writable": False, "people": [], "devices": ["comedor", "parlante"]}
+    assert jobs.people() == {"writable": False, "people": [], "devices": ["comedor", "parlante"],
+                             "persons": [], "chats": []}
     with pytest.raises(ReadOnly):
         jobs.create(payload())
+    with pytest.raises(ReadOnly):
+        jobs.add_person({"name": "Abuela"})
+
+
+# --- el padrón ---
+
+
+def test_people_carry_the_padron(parts):
+    jobs = parts["build"]()
+    eze = jobs.add_person({"name": "Ezequiel", "chat_id": EZE})
+    abu = jobs.add_person({"name": "Abuela"})
+
+    assert jobs.people()["persons"] == [
+        {"id": abu["id"], "name": "Abuela", "chat_id": None},
+        {"id": eze["id"], "name": "Ezequiel", "chat_id": EZE},
+    ]
+
+
+def test_a_person_is_added_renamed_associated_and_removed(parts):
+    jobs = parts["build"]()
+
+    added = jobs.add_person({"name": "Abuela"})
+    renamed = jobs.change_person(added["id"], {"name": "Nona"})
+    associated = jobs.change_person(added["id"], {"chat_id": DIEGO})
+    both = jobs.change_person(added["id"], {"name": "Abuela", "chat_id": None})
+    removed = jobs.remove_person(added["id"])
+
+    assert added == {"id": added["id"], "name": "Abuela", "chat_id": None}
+    assert renamed == {"id": added["id"], "name": "Nona", "chat_id": None}
+    assert associated == {"id": added["id"], "name": "Nona", "chat_id": DIEGO}
+    assert both == {"id": added["id"], "name": "Abuela", "chat_id": None}
+    assert removed == both
+    assert jobs.people()["persons"] == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"name": "Eze2"}, {"name": "todos"}, {}, {"name": "Abuela", "chat_id": 13},
+     {"name": "Abuela", "chat_id": "42"}],
+)
+def test_a_person_that_does_not_validate_is_a_400_with_the_reason(parts, body):
+    with pytest.raises(WebError) as caught:
+        parts["build"]().add_person(body)
+
+    assert caught.value.status == 400
+    assert str(caught.value)
+
+
+def test_a_change_without_name_or_chat_is_a_400(parts):
+    jobs = parts["build"]()
+    abu = jobs.add_person({"name": "Abuela"})
+
+    with pytest.raises(WebError) as caught:
+        jobs.change_person(abu["id"], {})
+
+    assert caught.value.status == 400
+    assert str(caught.value) == "Mandá el nombre, el chat o los dos."
+
+
+def test_without_a_padron_the_persons_do_not_exist(parts):
+    jobs = parts["build"]()
+    jobs.household = None
+
+    assert jobs.people()["persons"] == []
+    with pytest.raises(NotFound):
+        jobs.add_person({"name": "Abuela"})
+
+
+def test_a_person_that_does_not_exist_is_a_404(parts):
+    jobs = parts["build"]()
+
+    for act in (lambda: jobs.change_person(17, {"name": "Nona"}),
+                lambda: jobs.remove_person(17)):
+        with pytest.raises(NotFound):
+            act()
 
 
 # --- crear ---
