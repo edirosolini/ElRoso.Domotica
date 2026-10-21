@@ -31,7 +31,7 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`, y `people`, los chats de `ALLOWED_CHAT_IDS` como `{chat_id, name}` |
+| `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`; `persons`, el padrón como `{id, name, chat_id}`, y `people`, los chats como `{chat_id, name}` |
 | `POST /api/tele/hello` | registra la tele, o la actualiza, y cuenta como latido. Devuelve `{alias, caps}` |
 | `GET /api/tele/<alias>/poll` | cuenta como latido y devuelve `{"alarm": id o null, "orders": [...]}` |
 | `POST /api/tele/<alias>/ack` | lo que la app dice de una orden, `{seq, state}`. Devuelve `{"accepted": bool}` |
@@ -44,6 +44,9 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
   cuenta; `caps`, una lista.
 - **De `caps` quedan solo las conocidas** (`tele.CAPS`: `play`, `show`, `overlay`), sin
   repetidas. Lo demás se ignora sin error, y la respuesta dice qué se aceptó.
+- 🔴 **`people` sigue como lo lee la `0.3.0`**: con padrón son las personas que tienen chat,
+  con su nombre del padrón; con el padrón vacío, los chats de `ALLOWED_CHAT_IDS` con el nombre
+  de `PeopleStore`. Una app vieja sigue eligiendo un chat sin enterarse de `persons`.
 - **`poll` de una tele que no está en `SCREEN_DEVICES` o que nunca hizo `hello` es un 404.**
 - 🔴 **La alarma del `poll` sale de `ScreenStore.job_for()`**, la misma tabla que usa DashCast.
   Ya respeta descanso y vacaciones: `Screens.ring()` no anota la alarma en esos casos. Ver
@@ -66,8 +69,8 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 
 🔴 **Sin secreto compartido**, decisión del dueño del 2026-10-21: el mismo nivel que
 `/control`, abierto en la LAN de confianza. ⚠️ Cualquiera que alcance el CT puede registrar
-una tele de `SCREEN_DEVICES`, hacerla latir y leer en `setup` los chats de la casa con sus
-nombres, los mismos que ya da `/api/people` cuando la pantalla escribe.
+una tele de `SCREEN_DEVICES`, hacerla latir y leer en `setup` el padrón y los chats de la casa
+con sus nombres, los mismos que ya da `/api/people` cuando la pantalla escribe.
 
 ## Órdenes
 
@@ -134,12 +137,18 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
   un servicio en primer plano de tipo `mediaPlayback`, que es justo lo que hace la app al
   prender la tele. `minSdk` 26.
 
-**Primer uso.**
+**Primer uso y cambio.**
 
 - Sin tele elegida, `MainActivity` manda a `SetupActivity`: pide `setup` al CT y se elige con
-  el control el alias, de `devices`, y la persona, de `people`. Si `people` viene vacío se
-  guarda sin persona. Queda en `SharedPreferences`.
-- ⚠️ **Hoy la elección no se puede cambiar** sin borrar los datos de la app desde Ajustes.
+  el control el alias, de `devices`, y de quién es (`Owners`): las personas de `persons`, una
+  sin chat como «<nombre> (sin Telegram)»; con el padrón vacío, los chats de `people`. Sin
+  ninguna de las dos se guarda sin nadie. Queda en `SharedPreferences`.
+- **Una persona se guarda como `person_id`, aunque tenga chat; un chat, como `chat_id`.** Una
+  elección de la `0.3.0`, solo con `chat_id`, sigue como chat sin migrar nada (`TeleChoice`).
+- **«Cambiar tele o persona»**, abajo a la derecha del kiosco, abre `SetupActivity` de nuevo.
+  BACK vuelve al kiosco sin cambiar nada. 🔴 **Si cambia la tele, se para y se vuelve a
+  arrancar `TeleService`**, para que haga `hello` con el alias nuevo; si solo cambia la
+  persona, el servicio sigue.
 - **La persona no viaja en `hello`**, que manda alias, versión y capacidades: solo la usa el OK
   de la alarma.
 
@@ -167,6 +176,10 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
 **Kiosco.** `MainActivity` es un WebView con JavaScript sobre `/pantalla?ver=1` del CT, o
 sobre la URL que le pase un `show`. `Kiosk` es el puente entre el servicio y el kiosco abierto:
 si no hay kiosco abierto, lo que el servicio le pide se pierde sin error.
+
+- **El foco arranca en el WebView** cada vez que la app vuelve adelante. **Abajo en el D-pad,
+  con el foco en el WebView, lo lleva al botón** «Cambiar tele o persona», que sin foco queda
+  casi transparente.
 
 **Órdenes en la app.** `OrderRunner`, en `:core`, ejecuta cada orden sobre `TeleDevice`, que en
 Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
@@ -208,10 +221,16 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
 
 - **Con el kiosco abierto carga `/alarma?job=<id>`, pero no lo pone adelante**: eso lo hace el
   `show` que manda `Screens`. La vista de alarma vuelve sola al kiosco, igual que en DashCast.
-- 🔴 **El OK del control apaga la alarma a nombre de la persona elegida**: manda a
-  `/api/command` `{chat_id, data: "callar <id>"}`, el mismo botón que «🔕 Apagar» (`AlarmKey`).
-  Mientras hay alarma y persona, abajo dice «OK para apagar». **Sin persona, el OK no hace
-  nada** con la alarma y queda en el log.
+- 🔴 **El OK del control apaga la alarma a nombre de quien se eligió**: manda a
+  `/api/command` `{person_id, data: "callar <id>"}`, o `{chat_id, ...}` con una elección de
+  chat, el mismo botón que «🔕 Apagar» (`AlarmKey`). Mientras hay alarma y alguien elegido,
+  abajo dice «OK para apagar». **Sin nadie elegido, el OK no hace nada** con la alarma y queda
+  en el log.
+- **Con alarma, el OK apaga aunque el foco esté en «Cambiar tele o persona»**: no abre el
+  cambio. Sin alarma, el OK sobre el botón lo abre.
+- **Una persona sin Telegram también apaga**: `/api/command` lo corre por
+  `Commands.press_without_chat()`, y el aviso de que la apagó llega a todos los chats. Ver
+  **Control desde la web**, en `.claude/rules/web.md`.
 - ⚠️ **El OK solo llega si la app está adelante**: es una tecla de `MainActivity`. La respuesta
   del CT se espera diez segundos, lo que dura cualquier pedido de la app; si tarda más queda un
   error en el log, aunque el comando haya corrido.
@@ -265,7 +284,7 @@ de nuevo.
   en un volumen de Docker.
 - **`versionCode` y `versionName` van a mano en `version.properties`.** Una versión nueva
   para instalar encima sube el `versionCode`, y es lo único que mira `UpdatePolicy`. Hoy es la
-  `0.3.0`, `versionCode` 6.
+  `0.4.0`, `versionCode` 7.
 - **Del wrapper solo se versiona `gradle-wrapper.properties`, con el sha256 de la
   distribución.** `gradlew` y el jar se generan en Docker si faltan y están en `.gitignore`.
 - 🔴 **La firma de release usa una clave fija fuera del repo**, en `TELE_KEYS_DIR` (por

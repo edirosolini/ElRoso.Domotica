@@ -62,7 +62,7 @@ separada del transporte HTTP y se prueba sin red.
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 | `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader o con un explorador de archivos con acceso a la red. Ver **App de la tele** |
 | `GET /app/tele.json` | la versión del APK publicado, para que la app de la tele sepa si hay una nueva. Ver **App de la tele** |
-| `GET /api/tele/setup` | las teles con pantalla y los chats de la casa, para configurar la app de la tele |
+| `GET /api/tele/setup` | las teles con pantalla, el padrón (`persons`) y los chats de la casa (`people`), para configurar la app de la tele |
 | `POST /api/tele/hello` | registra una tele con su versión y capacidades |
 | `GET /api/tele/<alias>/poll` | el latido de una tele, la alarma que suena en ella y sus órdenes pendientes. Ver **Registro en el CT**, en `.claude/rules/app-tele.md` |
 | `POST /api/tele/<alias>/ack` | lo que la app dice de una orden: recibida, hecha o fallida. Ver **Órdenes**, en `.claude/rules/app-tele.md` |
