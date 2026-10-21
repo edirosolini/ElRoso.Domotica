@@ -276,6 +276,15 @@ def test_a_show_or_stop_closes_once_the_app_received_it(link):
     assert link.ack("comedor", stop, "done") is False
 
 
+def test_a_hide_closes_once_the_app_received_it(link):
+    hide = link.send("comedor", "hide")
+
+    assert link.orders("comedor") == [{"seq": hide, "kind": "hide"}]
+    link.ack("comedor", hide, "received")
+    assert link.wait("comedor", hide, (), timeout=0) == "done"
+    assert link.orders("comedor") == []
+
+
 def test_shows_that_only_get_received_do_not_pile_up(link):
     for _ in range(KEEP_CLOSED * 3):
         link.ack("comedor", link.send("comedor", "show", url="u"), "received")

@@ -7,7 +7,10 @@ data class TeleChoice(val alias: String?, val chatId: Long?) {
 
 /** Las capacidades que la app anuncia en `hello`. */
 object Caps {
+    const val PLAY = "play"
+    const val SHOW = "show"
     const val OVERLAY = "overlay"
 
-    fun of(overlay: Boolean): List<String> = if (overlay) listOf(OVERLAY) else emptyList()
+    /** Las capacidades de la tele: `play` siempre; `show` y `overlay` solo con la superposición. */
+    fun of(overlay: Boolean): List<String> = if (overlay) listOf(PLAY, SHOW, OVERLAY) else listOf(PLAY)
 }

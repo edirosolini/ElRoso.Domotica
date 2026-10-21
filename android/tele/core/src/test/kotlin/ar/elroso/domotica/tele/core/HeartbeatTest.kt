@@ -10,6 +10,9 @@ class HeartbeatTest {
     private val transport = FakeTransport()
     private val logs = mutableListOf<String>()
     private var caps = emptyList<String>()
+    private val alarms = mutableListOf<Long?>()
+    private val handed = mutableListOf<Order>()
+    private val repeated = mutableListOf<Order>()
 
     private fun heartbeat(choice: TeleChoice = TeleChoice("comedor", 11)) = Heartbeat.forChoice(
         choice = choice,
@@ -17,6 +20,9 @@ class HeartbeatTest {
         version = AppVersion("0.1.0", 3),
         caps = { caps },
         log = { logs += it },
+        onAlarm = { alarms += it },
+        onOrders = { handed += it },
+        onRepeated = { repeated += it },
     )
 
     private fun ready() = heartbeat()!!
@@ -109,5 +115,29 @@ class HeartbeatTest {
             """{"alias":"comedor","version_name":"0.1.0","version_code":3,"caps":["overlay"]}""",
             transport.bodies.last(),
         )
+    }
+
+    @Test
+    fun handsTheAlarmWhenItChanges() {
+        val beat = ready()
+        transport.reply(200, """{"alias": "comedor", "caps": []}""")
+        listOf("7", "7", "null").forEach { transport.reply(200, """{"alarm": $it}""") }
+
+        repeat(4) { beat.tick() }
+
+        assertEquals(listOf<Long?>(7, null), alarms)
+    }
+
+    @Test
+    fun handsEachOrderOnceEvenIfItArrivesAgain() {
+        val beat = ready()
+        transport.reply(200, """{"alias": "comedor", "caps": []}""")
+        transport.reply(200, """{"alarm": null, "orders": [{"seq": 4, "kind": "show", "url": "u"}]}""")
+        transport.reply(200, """{"alarm": null, "orders": [{"seq": 4, "kind": "show", "url": "u"}, {"seq": 5, "kind": "stop"}]}""")
+
+        repeat(3) { beat.tick() }
+
+        assertEquals(listOf(Order(4, OrderKind.SHOW, "u"), Order(5, OrderKind.STOP)), handed)
+        assertEquals(listOf(Order(4, OrderKind.SHOW, "u")), repeated)
     }
 }

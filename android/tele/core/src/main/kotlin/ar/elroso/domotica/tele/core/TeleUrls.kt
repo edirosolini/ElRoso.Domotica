@@ -9,8 +9,13 @@ class TeleUrls(base: String) {
     val setup = "$root/api/tele/setup"
     val hello = "$root/api/tele/hello"
     val kiosk = "$root/pantalla?ver=1"
+    val command = "$root/api/command"
 
     fun poll(alias: String) = "$root/api/tele/${segment(alias)}/poll"
+
+    fun ack(alias: String) = "$root/api/tele/${segment(alias)}/ack"
+
+    fun alarm(job: Long) = "$root/alarma?job=$job"
 
     private fun segment(text: String) = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
 }

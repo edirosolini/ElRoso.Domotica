@@ -27,12 +27,24 @@ sealed interface HelloResult {
 
 /** Cómo terminó un `poll`. */
 sealed interface PollResult {
-    data class Alarm(val id: Long?) : PollResult
+    data class Alarm(val id: Long?, val orders: List<Order> = emptyList()) : PollResult
     data object NotRegistered : PollResult
     data class Failed(val reason: String) : PollResult
 }
 
-/** Las tres rutas de la tele en el CT. */
+/** Cómo terminó un `ack`: si el CT lo aceptó, o por qué no llegó. */
+sealed interface AckResult {
+    data class Answered(val accepted: Boolean) : AckResult
+    data class Failed(val reason: String) : AckResult
+}
+
+/** Cómo terminó un comando: la respuesta del CT, o por qué no. */
+sealed interface CommandResult {
+    data class Replied(val text: String) : CommandResult
+    data class Failed(val reason: String) : CommandResult
+}
+
+/** Las rutas de la tele en el CT y el comando de la pantalla de control. */
 class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
 
     /** Lo necesario para el primer uso; lanza TeleFailure si no se pudo. */
@@ -56,10 +68,30 @@ class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
     fun poll(alias: String): PollResult {
         val reply = send({ transport.get(urls.poll(alias)) }) { return PollResult.Failed(it) }
         return when (reply.status) {
-            200 -> PollResult.Alarm(parse({ Protocol.parsePoll(reply.body).alarm }) { return PollResult.Failed(it) })
+            200 -> {
+                val poll = parse({ Protocol.parsePoll(reply.body) }) { return PollResult.Failed(it) }
+                PollResult.Alarm(poll.alarm, poll.orders)
+            }
             404 -> PollResult.NotRegistered
             else -> PollResult.Failed(describe(reply))
         }
+    }
+
+    fun ack(alias: String, seq: Long, state: AckState): AckResult {
+        val reply = send({ transport.postJson(urls.ack(alias), Protocol.encodeAck(seq, state)) }) {
+            return AckResult.Failed(it)
+        }
+        if (reply.status != 200) return AckResult.Failed(describe(reply))
+        return AckResult.Answered(parse({ Protocol.parseAck(reply.body) }) { return AckResult.Failed(it) })
+    }
+
+    /** Corre un comando de botón (`data`) a nombre de ese chat, como la pantalla de control. */
+    fun command(chatId: Long, data: String): CommandResult {
+        val reply = send({ transport.postJson(urls.command, Protocol.encodeCommand(chatId, data)) }) {
+            return CommandResult.Failed(it)
+        }
+        if (reply.status != 200) return CommandResult.Failed(describe(reply))
+        return CommandResult.Replied(parse({ Protocol.parseCommand(reply.body) }) { return CommandResult.Failed(it) })
     }
 
     private inline fun send(request: () -> HttpReply, onFailure: (String) -> Nothing): HttpReply = try {

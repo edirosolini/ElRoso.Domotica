@@ -6,17 +6,32 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.View
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.TextView
+import ar.elroso.domotica.tele.core.AlarmKey
+import ar.elroso.domotica.tele.core.CommandResult
+import kotlin.concurrent.thread
 
-/** El kiosco de la casa en un WebView; manda al primer uso si todavía no se eligió la tele. */
+/** El kiosco de la casa en un WebView, con la vista de alarma y su OK; manda al primer uso si falta elegir la tele. */
 class MainActivity : Activity() {
+
+    companion object {
+        /** La página que el servicio pide mostrar al ponerla adelante. */
+        const val EXTRA_URL = "url"
+        private val OK_KEYS = setOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER)
+    }
 
     /** Permisos que la app pide, en este orden. */
     private enum class Permission(val label: String) {
@@ -26,6 +41,7 @@ class MainActivity : Activity() {
 
     private val asked = mutableSetOf<Permission>()
     private var web: WebView? = null
+    private var hint: TextView? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,9 +64,77 @@ class MainActivity : Activity() {
                     if (request.isForMainFrame) Tele.log("el kiosco no cargó: ${error.errorCode} ${error.description}")
                 }
             }
-            loadUrl(Tele.urls.kiosk)
+            loadUrl(intent.getStringExtra(EXTRA_URL) ?: Tele.urls.kiosk)
         }
-        setContentView(web)
+        hint = TextView(this).apply {
+            text = getString(R.string.ok_to_silence)
+            textSize = 28f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.argb(0xB0, 0, 0, 0))
+            setPadding(48, 16, 48, 16)
+            visibility = View.GONE
+        }
+        setContentView(FrameLayout(this).apply {
+            addView(web)
+            addView(hint, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
+            ).apply { bottomMargin = 48 })
+        })
+        Kiosk.attach(this)
+        refreshHint()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(EXTRA_URL)?.let { load(it) }
+    }
+
+    /** Carga la página si no es la que ya se ve. */
+    fun load(url: String) = runOnUiThread {
+        val view = web ?: return@runOnUiThread
+        if (view.url != url) view.loadUrl(url)
+    }
+
+    /** Vuelve al kiosco y deja de estar adelante. */
+    fun leave() = runOnUiThread {
+        web?.loadUrl(Tele.urls.kiosk)
+        moveTaskToBack(true)
+    }
+
+    /** Una alarma nueva carga su vista; el aviso del OK sigue a la alarma. */
+    fun onAlarm(id: Long?) = runOnUiThread {
+        if (id != null) {
+            load(Tele.urls.alarm(id))
+            if (Tele.choice(this).chatId == null) Tele.log("alarma sin persona elegida: el OK no la apaga")
+        }
+        refreshHint()
+    }
+
+    private fun refreshHint() {
+        val command = AlarmKey.offCommand(Kiosk.alarm, Tele.choice(this).chatId)
+        hint?.visibility = if (command == null) View.GONE else View.VISIBLE
+    }
+
+    /** Con una alarma sonando, el OK del control la apaga a nombre de la persona elegida. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode !in OK_KEYS) return super.dispatchKeyEvent(event)
+        val chat = Tele.choice(this).chatId
+        val command = AlarmKey.offCommand(Kiosk.alarm, chat) ?: return super.dispatchKeyEvent(event)
+        if (chat != null && event.action == KeyEvent.ACTION_UP && event.repeatCount == 0) silence(chat, command)
+        return true
+    }
+
+    private fun silence(chat: Long, command: String) {
+        Tele.log("OK del control: $command")
+        thread(name = "tele-ok") {
+            when (val result = Tele.api.command(chat, command)) {
+                is CommandResult.Replied -> Tele.log("el CT contestó al OK: ${result.text}")
+                is CommandResult.Failed -> Tele.log("el OK no llegó al CT: ${result.reason}")
+            }
+        }
     }
 
     override fun onResume() {
@@ -59,6 +143,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        Kiosk.detach(this)
         web?.destroy()
         web = null
         super.onDestroy()

@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 import pytest
 
 from homeauto.tele import STALE, TeleLink, TeleStore
-from homeauto.voice.tele import ACK_TIMEOUT, TeleCaster
+from homeauto.voice.caster import FINISH_MARGIN, FINISH_TIMEOUT
+from homeauto.voice.tele import ACK_TIMEOUT, APP_WAKE_MARGIN, TeleCaster
 
 NOW = datetime(2026, 10, 21, 12, 0)
 URL = "http://192.0.2.10:8765/a.wav"
@@ -27,6 +28,8 @@ class FakeCaster:
     def __init__(self):
         self.calls = []
         self.screen = "la página de siempre"
+        self.hide_result = True
+        self.hide_error = None
 
     def play(self, url, min_volume=None, expected_seconds=None):
         self.calls.append(("play", url, min_volume, expected_seconds))
@@ -45,7 +48,9 @@ class FakeCaster:
 
     def hide(self):
         self.calls.append(("hide",))
-        return True
+        if self.hide_error is not None:
+            raise self.hide_error
+        return self.hide_result
 
     def showing(self):
         return False
@@ -116,6 +121,34 @@ def test_a_live_app_that_confirms_plays_it_and_cast_is_not_used(link, cast):
     ]
 
 
+def test_the_app_gets_thirteen_seconds_to_wake_the_tele():
+    assert APP_WAKE_MARGIN == 13
+
+
+@pytest.mark.parametrize(
+    "seconds, deadline",
+    [
+        (3.0, 3.0 + FINISH_MARGIN + APP_WAKE_MARGIN),
+        (None, FINISH_TIMEOUT + APP_WAKE_MARGIN),
+        (FINISH_TIMEOUT, FINISH_TIMEOUT + APP_WAKE_MARGIN),
+    ],
+)
+def test_the_wait_for_done_adds_the_wake_of_the_tele(tmp_path, clock, cast, seconds, deadline):
+    class Recording(TeleLink):
+        def wait(self, alias, seq, states, timeout):
+            self.waits.append((tuple(states), timeout))
+            return "received" if len(self.waits) == 1 else "done"
+
+    link = Recording(TeleStore(tmp_path / "jobs.db"), clock=clock)
+    link.waits = []
+    link.hello("comedor", "1.0", 1, ["play"], "")
+
+    tele(link, cast).play(URL, expected_seconds=seconds)
+
+    assert link.waits == [(("received",), ACK_TIMEOUT), (("done",), deadline)]
+    assert cast.calls == []
+
+
 def test_a_stale_app_goes_straight_to_cast(link, cast, clock):
     clock.now += STALE
 
@@ -160,7 +193,7 @@ def test_a_late_ack_after_falling_back_does_not_play_it_again(tmp_path, clock, c
 
 def test_received_but_never_done_falls_back_to_cast_once(link, cast):
     with App(link, states=("received",)):
-        tele(link, cast, finish_timeout=0.01).play(URL, expected_seconds=0.0)
+        tele(link, cast, finish_timeout=0.01, wake_margin=0).play(URL, expected_seconds=0.0)
 
     assert cast.calls == [("play", URL, None, 0.0)]
 
@@ -250,10 +283,46 @@ def test_volume_and_turning_off_stay_on_cast(link, cast):
 def test_the_rest_is_the_caster_of_always(link, cast):
     caster = tele(link, cast)
 
-    assert caster.hide() is True
     assert caster.showing() is False
     assert caster.device_name() == "Comedor TV"
     assert caster.screen == "la página de siempre"
+    assert link.orders("comedor") == []
+
+
+def test_hide_sends_a_live_app_back_and_also_closes_dashcast(link, cast):
+    cast.hide_result = False
+    with App(link, states=("received",)) as app:
+        assert tele(link, cast).hide() is True
+
+    assert [o["kind"] for o in app.seen] == ["hide"]
+    assert cast.calls == [("hide",)]
+
+
+def test_hide_confirmed_by_the_app_survives_a_cast_failure(link, cast):
+    cast.hide_error = OSError("sin cast")
+    with App(link, states=("received",)):
+        assert tele(link, cast).hide() is True
+
+
+def test_hide_without_an_ack_is_dropped_and_answers_what_cast_did(link, cast):
+    cast.hide_result = False
+
+    assert tele(link, cast, ack_timeout=0.01).hide() is False
+    assert cast.calls == [("hide",)]
+    assert link.orders("comedor") == []
+
+
+def test_hide_without_a_live_app_with_show_goes_only_to_cast(tmp_path, clock, cast):
+    link = TeleLink(TeleStore(tmp_path / "jobs.db"), clock=clock)
+    link.hello("comedor", "1.0", 1, ["play"], "")
+
+    assert tele(link, cast).hide() is True
+    link.hello("comedor", "1.0", 1, ["show"], "")
+    clock.now += STALE
+    cast.hide_error = OSError("sin cast")
+    with pytest.raises(OSError):
+        tele(link, cast).hide()
+
     assert link.orders("comedor") == []
 
 
