@@ -12,8 +12,9 @@ paths:
 ## Registro en el CT
 
 La app de la tele es una app Android propia para las teles de `SCREEN_DEVICES`. **La fase
-uno está en curso y hoy existe solo el lado del CT**: el registro, el latido y la consulta
-de qué mostrar. Cómo se baja el APK está en **App de la tele**, en `.claude/rules/web.md`.
+uno está en curso**: existen el lado del CT (registro, latido y consulta de qué mostrar) y la
+app base, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
+`.claude/rules/web.md`.
 
 Tres piezas, sin nada de HTTP en las dos primeras:
 
@@ -63,3 +64,61 @@ nombres, los mismos que ya da `/api/people` cuando la pantalla escribe.
 
 Las órdenes a la tele, su confirmación y el Cast de respaldo cuando la app no responde
 **todavía no existen**.
+
+## La app Android
+
+Vive en `android/tele/`, en Kotlin, y **se compila en Docker**: sin Android Studio ni SDK en
+la máquina. Paquete `ar.elroso.domotica.tele`.
+
+- **Dos módulos.** `:core` es JVM puro —protocolo, URLs, latido, backoff, elección— y es lo
+  único con tests (`android/tele/build.sh test`). `:app` es lo de Android: pantallas, servicio,
+  arranque y el transporte HTTP. Lo que se puede probar sin Android va a `:core`.
+- 🔴 **`targetSdk` 34, no más.** Desde el 35 Android no deja arrancar desde `BOOT_COMPLETED`
+  un servicio en primer plano de tipo `mediaPlayback`, que es justo lo que hace la app al
+  prender la tele. `minSdk` 26.
+
+**Primer uso.**
+
+- Sin tele elegida, `MainActivity` manda a `SetupActivity`: pide `setup` al CT y se elige con
+  el control el alias, de `devices`, y la persona, de `people`. Si `people` viene vacío se
+  guarda sin persona. Queda en `SharedPreferences`.
+- ⚠️ **Hoy la elección no se puede cambiar** sin borrar los datos de la app desde Ajustes.
+- ⚠️ **La persona todavía no viaja al CT**: `hello` manda alias, versión y capacidades.
+
+**Servicio.**
+
+- `TeleService` corre en primer plano con notificación. Arranca al abrir la app, al terminar
+  el primer uso y al prender el equipo (`BootReceiver`, solo si ya hay tele elegida).
+- **Hace `hello` y después `poll` cada cinco segundos.** Sin red, o ante un error del CT,
+  espera diez, veinte, cuarenta y sesenta segundos como tope (`BeatSchedule`), y vuelve a cinco
+  con la primera respuesta buena. Un `hello` rechazado con 4xx también espera.
+- **Se vuelve a registrar** ante un 404 del `poll` o si cambian las capacidades.
+- **Capacidades: solo `overlay`, y solo si el permiso de superposición está concedido.** Se
+  mira en cada latido, así que concederlo o sacarlo dispara un `hello` nuevo. `play` y `show`
+  todavía no se anuncian.
+- ⚠️ El `poll` hoy solo anota en el log la alarma que llega: la app no la muestra.
+- Al abrirse, la app pide notificaciones y después «mostrar sobre otras apps», un permiso
+  por vez y una vez por apertura.
+- El log va a logcat con el tag `DomoticaTele`.
+
+**Kiosco.** `MainActivity` es un WebView con JavaScript sobre `/pantalla?ver=1` del CT.
+
+**Red.** 🔴 **Texto claro solo al host de `-Phouse`**: `networkConfig` genera el
+`network_security_config` con ese host y nada más. La URL de la casa sale de `-Phouse`
+(`TELE_HOUSE` en `build.sh`) o del default de `app/build.gradle.kts`; cambiarla es compilar
+de nuevo.
+
+**Compilación.**
+
+- `android/tele/build.sh [destino.apk]` arma el release firmado y lo verifica con
+  `apksigner`; `android/tele/build.sh test` corre los tests de `:core`. La imagen trae JDK 17,
+  el SDK 34 y Gradle 8.7, con las descargas verificadas por sha256. La caché de Gradle queda
+  en un volumen de Docker.
+- **`versionCode` y `versionName` van a mano en `version.properties`.** Una versión nueva
+  para instalar encima sube el `versionCode`.
+- **Del wrapper solo se versiona `gradle-wrapper.properties`, con el sha256 de la
+  distribución.** `gradlew` y el jar se generan en Docker si faltan y están en `.gitignore`.
+- 🔴 **La firma de release usa una clave fija fuera del repo**, en `TELE_KEYS_DIR` (por
+  defecto `~/.config/domotica/android`): `tele-release.jks` y `keystore.properties`. Se monta
+  de solo lectura. Sin ella `build.sh` falla e imprime cómo crearla. **Si se pierde, la
+  versión nueva no instala encima: hay que desinstalar la app en cada tele.**

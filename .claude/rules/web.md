@@ -300,9 +300,8 @@ Otra versión cambia el nombre de la carpeta, `FULLCALENDAR` en `app.py` y los `
 - **El archivo es `root:root` 644 y `deploy/deploy.sh` no lo toca.** Lo sube
   `deploy/push-apk.sh`, que lo instala como `.tmp` y lo reemplaza con un `mv` atómico, sin
   reiniciar: una descarga en curso nunca ve un APK a medias.
-- ⚠️ **Cada build firma con una clave debug distinta**, así que Android rechaza instalar una
-  versión nueva encima: hay que desinstalar la anterior antes. Para que se actualice sola va
-  a hacer falta una clave de firma fija, fuera del repo.
+- La app se firma con una clave de release fija, así que una versión nueva instala encima. Ver
+  **La app Android**, en `.claude/rules/app-tele.md`.
 - El registro y el latido de la app están en **Registro en el CT**, en `.claude/rules/app-tele.md`.
 
 ## Control desde la web
