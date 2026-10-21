@@ -58,6 +58,10 @@ con el mismo patrón que las otras siete.
   hacía que una nota de voz guardara un solo ítem con todo adentro. La regla es una sola,
   `lists.split_items()`, y la usan el chat y la pantalla.
 - **Un duplicado se avisa, no se repite**, comparando sin mayúsculas.
+- **Cada ítem guarda cuándo se agregó** (`added_at`), para que `/depurar listas` proponga
+  los de más de treinta días. La columna se suma sola al abrir una base vieja
+  (`_add_missing_columns()`), y las filas de antes quedan sin fecha: el depurador las cuenta
+  pero no las toca.
 - 🔴 **La lista se lee, no se escucha.** `/compras` y `/pendientes` contestan al chat como
   `/lista`: números y cantidades son de leer. Lo único hablado es el conteo del cierre del
   día, y ese va en palabras.
