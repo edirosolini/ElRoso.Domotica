@@ -310,8 +310,9 @@ lo creó. Entran por `_add_missing_columns` con `none`: **lo que ya existía es 
 como sonaba todo antes**. `store.check_assignee()` rechaza un valor que no existe, una
 persona sin id o un id sin persona.
 
-⚠️ **Hoy nada asigna**: ni Telegram («para X») ni la pantalla eligen a nadie todavía; solo
-`Reminders.add()`/`update()` lo aceptan. Lo que se asigna en la práctica es el turno.
+**La pantalla asigna** con «Para» y muestra para quién es cada aviso en la agenda, el
+kiosco, la vista de alarma y `/control`. ⚠️ **Telegram todavía no asigna** («para X»). Ver
+**Escribir desde la pantalla**, en `.claude/rules/web.md`.
 
 | Asignación | Chats que reciben el aviso | El parlante dice |
 | --- | --- | --- |
@@ -329,6 +330,9 @@ persona sin id o un id sin persona.
   nombre de la asignación. Va al `must_keep` del pulidor como los otros (`announcer._called()`).
   Para los destinatarios, el turno de alguien del padrón le gana a la asignación y el
   «[Nombre]» no cuenta.
+- ⚠️ **La agenda muestra la asignación del job, no la del turno**, hasta que suena: lo futuro
+  sale del job y recién lo que sonó trae la foto con la persona del turno. Filtrada por
+  persona, una ocurrencia futura de su turno no se ve si el job no es suyo ni de todos.
 - 🔴 **Un padrón que falla o un id que ya no existe suena como «nadie»**: a todos y sin nombre.
   `Reminders._person()` loguea y sigue; leer el padrón no puede costar un aviso.
 - 🔴 **Lo que sonó guarda una foto**: `assignee`, `assignee_id` y `audience` (los chats a los

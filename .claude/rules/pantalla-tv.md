@@ -63,6 +63,11 @@ desaloja.
 **Vista de alarma.** `/alarma?job=<id>` muestra la hora grande, el mensaje y la fecha, y
 consulta `/api/ringing/<id>` cada cinco segundos.
 
+- **Si la alarma es de alguien, abajo del mensaje dice «Para <nombre>»** o «Para todos», con
+  el `for` del feed, que sale de la foto de lo que sonó (`forText()`). De nadie, o de una
+  persona que ya no está, no muestra la línea. El kiosco de la tele suma «· para <nombre>» en
+  «Hoy» y en «Lo próximo». Ver **Pantalla de la casa**, en `.claude/rules/web.md`.
+
 - **Una alarma cuyo equipo está en `SCREEN_DEVICES` prende la vista en esa tele al sonar**
   (`Screens.ring()` al disparar y `light()` después del primer anuncio). Sin equipo, cuenta
   el `CAST_DEFAULT`.
