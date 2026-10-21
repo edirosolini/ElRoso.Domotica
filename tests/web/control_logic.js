@@ -46,9 +46,18 @@ assert.deepStrictEqual(control.commandBody("p:3", "callar 17", false), { person_
 assert.strictEqual(control.liveUrl("c:-100"), "/api/live?chat=-100");
 assert.strictEqual(control.liveUrl("p:3"), "/api/live?person=3");
 
-// Un chat se muestra con el nombre visto en Telegram, o con su número.
+// Un chat se muestra con el nombre visto en Telegram, o como que todavía no escribió.
 assert.strictEqual(control.chatLabel({ chat_id: 42, seen: "Ezequiel Di" }), "Ezequiel Di (42)");
-assert.strictEqual(control.chatLabel({ chat_id: 77, seen: null }), "Chat 77");
+assert.strictEqual(control.chatLabel({ chat_id: 5550001234, seen: null }), "Todavía no escribió (·1234)");
+assert.strictEqual(control.chatLabel({ chat_id: 77, seen: null }), "Todavía no escribió (·77)");
+assert.strictEqual(control.chatLabel({ chat_id: -1001234567, seen: "" }), "Todavía no escribió (·4567)");
+
+// Un formulario sin dato obligatorio consulta vacío y ejecuta con texto; uno obligatorio vacío no manda nada.
+assert.strictEqual(control.formCommand("pastillas", false, [], ""), "pastillas");
+assert.strictEqual(control.formCommand("pastillas", false, [], " 7 enalapril 30 "), "pastillas 7 enalapril 30");
+assert.strictEqual(control.formCommand("turnos", false, [], "7 Cin, Die"), "turnos 7 Cin, Die");
+assert.strictEqual(control.formCommand("decir", true, ["comedor"], "  "), null);
+assert.strictEqual(control.formCommand("decir", true, ["comedor"], "hola"), "decir en comedor hola");
 
 // Los chats que se pueden asociar: los libres y el propio.
 var house = [{ chat_id: 42, seen: "Eze" }, { chat_id: 77, seen: null }];
@@ -105,6 +114,12 @@ var postponed = control.urgentItems({
   now: now, snooze: { message: "arriba", since: "2026-10-19T11:58:00", for: "China", actions: [] },
 });
 assert.strictEqual(postponed[0].meta, "Sonó hace 2 min · se puede posponer · para China");
+
+// «Ahora» va compacta si no hay nada más que el silencio.
+assert.strictEqual(control.isCalm([]), true);
+assert.strictEqual(control.isCalm([{ kind: "quiet" }]), true);
+assert.strictEqual(control.isCalm(items), false);
+assert.strictEqual(control.isCalm([{ kind: "awaiting" }, { kind: "quiet" }]), false);
 
 // El estado de lo que se vigila en una línea.
 assert.strictEqual(control.statusText([{ name: "vps", up: false }, { name: "web", up: true }]),

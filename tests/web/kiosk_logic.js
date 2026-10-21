@@ -50,6 +50,12 @@ assert.strictEqual(kiosk.nowIndex(kiosk.trimPast(day, 2)), 3);
 assert.strictEqual(hours(kiosk.trimPast(day.slice(0, 3), 2)), " 07:00 08:00");
 assert.strictEqual(hours(kiosk.trimPast([{ time: "14:00", past: false }], 2)), "14:00");
 
+// El contador de «Hoy» cuenta lo que queda, no lo que ya pasó.
+assert.strictEqual(kiosk.leftToday(day), 3);
+assert.strictEqual(kiosk.leftToday([{ time: "07:00", past: true }]), 0);
+assert.strictEqual(kiosk.leftToday([]), 0);
+assert.strictEqual(kiosk.leftToday(null), 0);
+
 // El cielo con mayúscula y la sensación al lado.
 assert.strictEqual(kiosk.skyLine({ sky: "nublado", feels_like: 19 }), "Nublado · sensación 19°");
 

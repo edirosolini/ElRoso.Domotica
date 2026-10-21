@@ -70,6 +70,13 @@
     });
   }
 
+  // Cuánto queda de hoy: lo que todavía no pasó.
+  function leftToday(entries) {
+    return (entries || []).filter(function (entry) {
+      return !entry.past;
+    }).length;
+  }
+
   // El texto de una entrada de hoy, con para quién es si es de alguien.
   function todayLabel(entry) {
     var text = entry.label || entry.title;
@@ -119,7 +126,7 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { untilText: untilText, nextMeta: nextMeta, nowIndex: nowIndex, skyLine: skyLine,
       trimPast: trimPast, awayText: awayText, readOnly: readOnly, mealView: mealView,
-      todayLabel: todayLabel };
+      todayLabel: todayLabel, leftToday: leftToday };
   }
   if (typeof document === "undefined") {
     return;
@@ -293,7 +300,7 @@
   function fillToday(entries) {
     var list = byId("today");
     clear(list);
-    byId("count-today").textContent = String(entries ? entries.length : 0);
+    byId("count-today").textContent = String(leftToday(entries));
     if (!entries || entries.length === 0) {
       list.appendChild(emptyLine("Nada para hoy"));
       return;

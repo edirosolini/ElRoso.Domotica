@@ -20,13 +20,15 @@
     <label class="who"><span>Soy</span>
       <select id="who" aria-label="Quién sos"></select>
     </label>
-    <a class="ghost" href="/agenda">Agenda</a>
-    <a class="ghost" href="/pantalla">Pantalla</a>
+    <nav class="links">
+      <a class="ghost" href="/agenda">Agenda</a>
+      <a class="ghost" href="/pantalla">Pantalla</a>
+    </nav>
   </header>
 
   <p id="problems" class="problems" hidden></p>
 
-  <section class="card urgent-card">
+  <section id="urgent-card" class="card urgent-card">
     <div class="card-head"><h2>Ahora</h2></div>
     <ul id="urgent" class="urgent"></ul>
     <p id="status" class="status-line"></p>
@@ -35,11 +37,12 @@
   <section id="answer" class="card answer-card" role="status" aria-live="polite" hidden></section>
 
   <form id="free" class="card free">
-    <input id="free-text" type="text" maxlength="500" autocomplete="off" enterkeyhint="send" placeholder="Pedí lo que quieras, como en Telegram" aria-label="Mensaje">
+    <input id="free-text" type="text" maxlength="500" autocomplete="off" enterkeyhint="send" placeholder="Pedí lo que quieras" title="Como en Telegram: «poné una alarma a las 7»" aria-label="Mensaje">
     <button type="submit" class="btn primary">Enviar</button>
   </form>
 
   <div class="panels">
+    <div class="panel-col">
     <section class="card panel">
       <div class="card-head"><h2>🏠 Casa</h2></div>
       <div id="devices" class="devices" role="group" aria-label="Equipos"></div>
@@ -48,11 +51,11 @@
         <button type="submit">Decir</button>
       </form>
       <form class="cmd row" data-verb="llamar" data-target="1" data-need="1">
-        <input type="text" maxlength="480" placeholder="Llamar a… (cenar, bajar)" aria-label="A qué llamar">
+        <input type="text" maxlength="480" placeholder="Llamar a…" title="Por ejemplo: cenar, bajar" aria-label="A qué llamar">
         <button type="submit">Llamar</button>
       </form>
       <form class="cmd row" data-verb="volumen" data-target="1" data-need="1" data-keep="1">
-        <input type="number" min="0" max="100" step="5" placeholder="Volumen 0 a 100" aria-label="Volumen">
+        <input type="number" min="0" max="100" step="5" placeholder="0 a 100" title="Volumen de 0 a 100" aria-label="Volumen">
         <button type="submit">Volumen</button>
       </form>
       <div class="buttons">
@@ -63,11 +66,13 @@
         <button type="button" class="cmd" data-verb="equipos">Equipos</button>
       </div>
       <form class="cmd row" data-verb="usar" data-need="1">
-        <input type="text" maxlength="200" placeholder="Usar por defecto… (comedor, todos)" aria-label="Equipo por defecto">
+        <input type="text" maxlength="200" placeholder="Equipo por defecto…" title="Por ejemplo: comedor, todos" aria-label="Equipo por defecto">
         <button type="submit">Usar</button>
       </form>
     </section>
+    </div>
 
+    <div class="panel-col">
     <section class="card panel">
       <div class="card-head"><h2>🔎 Consultas</h2></div>
       <div class="buttons">
@@ -81,35 +86,12 @@
         <button type="submit">Preguntar</button>
       </form>
       <form class="cmd row" data-verb="calcular" data-need="1">
-        <input type="text" maxlength="480" placeholder="Calcular… (15 x 4, 3 km en millas)" aria-label="Cuenta">
+        <input type="text" maxlength="480" placeholder="Calcular…" title="Por ejemplo: 15 x 4, 3 km en millas" aria-label="Cuenta">
         <button type="submit">Calcular</button>
       </form>
       <form class="cmd row" data-verb="traducir" data-need="1">
-        <input type="text" maxlength="480" placeholder="Traducir… (al francés hola)" aria-label="Qué traducir">
+        <input type="text" maxlength="480" placeholder="Traducir…" title="Por ejemplo: al francés hola" aria-label="Qué traducir">
         <button type="submit">Traducir</button>
-      </form>
-    </section>
-
-    <section class="card panel">
-      <div class="card-head"><h2>⏰ Programado</h2></div>
-      <div class="buttons">
-        <button type="button" class="cmd" data-verb="lista">Lista</button>
-        <button type="button" class="cmd" data-verb="pastillas">Pastillas</button>
-        <button type="button" class="cmd" data-verb="turnos">Turnos</button>
-        <button type="button" class="cmd" data-verb="depurar">🧹 Depurar</button>
-        <a class="ghost" href="/agenda">Crear en la agenda</a>
-      </div>
-      <form class="cmd row" data-verb="cancelar" data-need="1">
-        <input type="text" maxlength="20" placeholder="Cancelar el número…" aria-label="Número a cancelar">
-        <button type="submit">Cancelar</button>
-      </form>
-      <form class="cmd row" data-verb="pastillas" data-need="1">
-        <input type="text" maxlength="200" placeholder="Pastillas… (7 enalapril 30)" aria-label="Pastillas">
-        <button type="submit">Pastillas</button>
-      </form>
-      <form class="cmd row" data-verb="turnos" data-need="1">
-        <input type="text" maxlength="200" placeholder="Turnos… (7 Cin, Die)" aria-label="Turnos">
-        <button type="submit">Turnos</button>
       </form>
     </section>
 
@@ -121,12 +103,35 @@
         <button type="button" class="cmd" data-verb="menu">Menú</button>
       </div>
       <form class="cmd row" data-verb="agregar" data-need="1">
-        <input type="text" maxlength="480" placeholder="Agregar… (leche y pan)" aria-label="Qué agregar">
+        <input type="text" maxlength="480" placeholder="Agregar…" title="Por ejemplo: leche y pan" aria-label="Qué agregar">
         <button type="submit">Agregar</button>
       </form>
       <form class="cmd row" data-verb="sacar" data-need="1">
-        <input type="text" maxlength="200" placeholder="Sacar… (2, todo)" aria-label="Qué sacar">
+        <input type="text" maxlength="200" placeholder="Sacar…" title="Por ejemplo: 2, todo" aria-label="Qué sacar">
         <button type="submit">Sacar</button>
+      </form>
+    </section>
+    </div>
+
+    <div class="panel-col">
+    <section class="card panel">
+      <div class="card-head"><h2>⏰ Programado</h2></div>
+      <div class="buttons">
+        <button type="button" class="cmd" data-verb="lista">Lista</button>
+        <button type="button" class="cmd" data-verb="depurar">🧹 Depurar</button>
+        <a class="btn secondary" href="/agenda">Crear en la agenda</a>
+      </div>
+      <form class="cmd row" data-verb="cancelar" data-need="1">
+        <input type="text" maxlength="20" placeholder="Número…" title="El número del aviso a cancelar" aria-label="Número a cancelar">
+        <button type="submit">Cancelar</button>
+      </form>
+      <form class="cmd row" data-verb="pastillas">
+        <input type="text" maxlength="200" placeholder="Vacío: ver todas" title="Vacío muestra las pastillas; con texto, por ejemplo: 7 enalapril 30" aria-label="Pastillas">
+        <button type="submit">Pastillas</button>
+      </form>
+      <form class="cmd row" data-verb="turnos">
+        <input type="text" maxlength="200" placeholder="Vacío: ver todos" title="Vacío muestra los turnos; con texto, por ejemplo: 7 Cin, Die" aria-label="Turnos">
+        <button type="submit">Turnos</button>
       </form>
     </section>
 
@@ -139,6 +144,7 @@
         <button type="submit">Agregar</button>
       </form>
     </section>
+    </div>
   </div>
 </div>
 </body>
