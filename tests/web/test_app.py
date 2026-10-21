@@ -1085,3 +1085,156 @@ def test_a_broken_read_is_a_generic_500(board):
 
     assert response.status == 500
     assert json.loads(response.body) == {"error": "No pude leer la app."}
+
+
+# --- la app de la tele ---
+
+
+class StubTele:
+    """Doble de TeleService: anota lo pedido y contesta como el de verdad."""
+
+    def __init__(self, fail=None):
+        self.asked = []
+        self.fail = fail
+
+    def setup(self):
+        self.asked.append(("setup",))
+        return {"devices": ["comedor"], "people": [{"chat_id": 42, "name": "Eze"}]}
+
+    def hello(self, body, address=""):
+        self.asked.append(("hello", body, address))
+        if self.fail:
+            raise self.fail
+        return {"alias": body["alias"], "caps": ["play"]}
+
+    def poll(self, alias, address=""):
+        self.asked.append(("poll", alias, address))
+        if self.fail:
+            raise self.fail
+        return {"alarm": 17}
+
+
+def test_the_tele_gets_its_setup(board):
+    app = WebApp(board, tele=StubTele())
+
+    response = get(app, "/api/tele/setup")
+
+    assert response.status == 200
+    assert body_json(response) == {"devices": ["comedor"],
+                                   "people": [{"chat_id": 42, "name": "Eze"}]}
+    assert "Content-Security-Policy" in response.headers
+
+
+def test_the_tele_says_hello_with_its_address(board):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = app.handle(Request.from_target(
+        "POST", "/api/tele/hello", headers=JSON_HEADERS,
+        body=json.dumps({"alias": "comedor"}).encode("utf-8"), client="192.168.68.20"))
+
+    assert response.status == 200
+    assert body_json(response) == {"alias": "comedor", "caps": ["play"]}
+    assert tele.asked == [("hello", {"alias": "comedor"}, "192.168.68.20")]
+
+
+def test_the_tele_polls_with_its_address(board):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = app.handle(Request.from_target("GET", "/api/tele/comedor/poll",
+                                              client="192.168.68.20"))
+
+    assert response.status == 200
+    assert body_json(response) == {"alarm": 17}
+    assert tele.asked == [("poll", "comedor", "192.168.68.20")]
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Host": HOST},
+        {"Content-Type": "text/plain", "Host": HOST},
+        {"Content-Type": "application/json", "Host": HOST, "Origin": "https://malo.example"},
+    ],
+)
+def test_a_hello_that_is_not_json_or_from_another_site_is_refused(board, headers):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = send(app, "POST", "/api/tele/hello", {"alias": "comedor"}, headers=headers)
+
+    assert response.status in (403, 415)
+    assert tele.asked == []
+
+
+@pytest.mark.parametrize("body", [b"", b"no es json", b"[1, 2]"])
+def test_a_hello_that_is_not_a_json_object_gets_400(board, body):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = app.handle(Request.from_target("POST", "/api/tele/hello", headers=JSON_HEADERS,
+                                              body=body))
+
+    assert response.status == 400
+    assert tele.asked == []
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [(WebError("Esa tele no tiene pantalla en la casa."), 400),
+     (NotFound("Esa tele no está registrada."), 404)],
+)
+def test_the_tele_errors_keep_their_status(board, error, status):
+    app = WebApp(board, tele=StubTele(fail=error))
+
+    hello = send(app, "POST", "/api/tele/hello", {"alias": "cocina"})
+    poll = get(app, "/api/tele/cocina/poll")
+
+    assert (hello.status, poll.status) == (status, status)
+    assert body_json(poll)["error"] == str(error)
+
+
+def test_a_broken_tele_service_is_a_generic_500(board):
+    app = WebApp(board, tele=StubTele(fail=RuntimeError("/var/lib/domotica/jobs.db")))
+
+    response = get(app, "/api/tele/comedor/poll")
+
+    assert response.status == 500
+    assert b"jobs.db" not in response.body
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "allow"),
+    [
+        ("POST", "/api/tele/setup", "GET"),
+        ("GET", "/api/tele/hello", "POST"),
+        ("PUT", "/api/tele/hello", "POST"),
+        ("POST", "/api/tele/comedor/poll", "GET"),
+        ("DELETE", "/api/tele/comedor/poll", "GET"),
+    ],
+)
+def test_the_tele_routes_take_one_method(board, method, path, allow):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = send(app, method, path, {})
+
+    assert response.status == 405
+    assert response.headers["Allow"] == allow
+    assert tele.asked == []
+
+
+@pytest.mark.parametrize("path", ["/api/tele", "/api/tele/comedor", "/api/tele/a/b/poll",
+                                  "/api/tele/comedor/poll/x"])
+def test_anything_else_under_tele_does_not_exist(board, path):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    assert get(app, path).status == 404
+    assert tele.asked == []
+
+
+@pytest.mark.parametrize("path", ["/api/tele/setup", "/api/tele/comedor/poll"])
+def test_without_the_service_there_is_no_tele(board, path):
+    assert get(WebApp(board), path).status == 404

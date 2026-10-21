@@ -75,6 +75,10 @@ WRITES = ("POST", "PUT", "DELETE")
 LIVE = "/api/live"
 COMMAND = "/api/command"
 APP = "/app"
+TELE = "/api/tele"
+TELE_SETUP = "/api/tele/setup"
+TELE_HELLO = "/api/tele/hello"
+TELE_POLL = re.compile(r"/api/tele/([^/]+)/poll")
 
 
 @dataclass(frozen=True)
@@ -84,16 +88,25 @@ class Request:
     query: dict[str, str] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
     body: bytes = b""
+    # La IP de quien pide.
+    client: str = ""
 
     @classmethod
     def from_target(
-        cls, method: str, target: str, headers: dict[str, str] | None = None, body: bytes = b""
+        cls,
+        method: str,
+        target: str,
+        headers: dict[str, str] | None = None,
+        body: bytes = b"",
+        client: str = "",
     ) -> "Request":
         """Un pedido a partir de la línea cruda; de cada parámetro vale el primero."""
         url = urlsplit(target)
         query = {key: values[0] for key, values in parse_qs(url.query).items()}
         lowered = {name.lower(): value for name, value in (headers or {}).items()}
-        return cls(method=method, path=url.path, query=query, headers=lowered, body=body)
+        return cls(
+            method=method, path=url.path, query=query, headers=lowered, body=body, client=client
+        )
 
 
 @dataclass(frozen=True)
@@ -156,11 +169,13 @@ class WebApp:
         static_dir: Path = STATIC_DIR,
         pages_dir: Path = PAGES_DIR,
         apps=None,
+        tele=None,
     ):
         self.board = board
         self.jobs = jobs
         self.control = control
         self.apps = apps
+        self.tele = tele
         self.static_dir = static_dir
         self.pages_dir = pages_dir
 
@@ -177,6 +192,8 @@ class WebApp:
             return self._control(request, path)
         if path == APP or path.startswith(APP + "/"):
             return self._app(request, path[len(APP) + 1:])
+        if path == TELE or path.startswith(TELE + "/"):
+            return self._tele(request, path)
 
         ringing = RINGING.fullmatch(path)
         known = path in PAGES or path in FEEDS or ringing or path.startswith("/static/")
@@ -287,6 +304,44 @@ class WebApp:
         except Exception:  # noqa: BLE001
             log.exception("la pantalla de control se rompió")
             return _json(500, {"error": "No pude atender el pedido."})
+
+    def _tele(self, request: Request, path: str) -> Response:
+        """El registro y la consulta de la app de la tele."""
+        poll = TELE_POLL.fullmatch(path)
+        if path == TELE_SETUP or poll:
+            allowed = "GET"
+        elif path == TELE_HELLO:
+            allowed = "POST"
+        else:
+            return _json(404, {"error": "no existe"})
+        if request.method != allowed:
+            return _json(405, {"error": "método no permitido"}, Allow=allowed)
+        if self.tele is None:
+            return _json(404, {"error": "no existe"})
+
+        payload = None
+        if path == TELE_HELLO:
+            refusal = _refuse_write(request)
+            if refusal is not None:
+                return refusal
+            try:
+                payload = json.loads(request.body.decode("utf-8"))
+            except ValueError:
+                payload = None
+            if not isinstance(payload, dict):
+                return _json(400, {"error": "se esperaba un objeto JSON"})
+
+        try:
+            if path == TELE_SETUP:
+                return _json(200, self.tele.setup())
+            if path == TELE_HELLO:
+                return _json(200, self.tele.hello(payload, address=request.client))
+            return _json(200, self.tele.poll(poll.group(1), address=request.client))
+        except WebError as exc:
+            return _json(exc.status, {"error": str(exc)})
+        except Exception:  # noqa: BLE001
+            log.exception("la app de la tele se rompió")
+            return _json(500, {"error": "No pude atender a la tele."})
 
     def _app(self, request: Request, name: str) -> Response:
         """Devuelve la app `name` como descarga; 404 si no se ofrece o no está."""

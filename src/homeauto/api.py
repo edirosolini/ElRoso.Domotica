@@ -132,7 +132,13 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             body = self.rfile.read(length) if length else b""
         response = self.web.handle(
-            Request.from_target(method, self.path, headers=dict(self.headers.items()), body=body)
+            Request.from_target(
+                method,
+                self.path,
+                headers=dict(self.headers.items()),
+                body=body,
+                client=self.client_address[0],
+            )
         )
         self.send_response(response.status)
         for name, value in response.headers.items():
