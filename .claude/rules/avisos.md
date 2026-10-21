@@ -42,12 +42,12 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | caída confirmada | los otros chats de alertas: «✅ <nombre> confirmó: X no responde» |
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
 | resumen semanal | todos, solo escrito |
-| alarmas, recordatorios y timers | todos, con posponer; la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
-| repetición de una alarma sin apagar | todos, en cada repetición y solo con «🔕 Apagar», también en descanso; «Dejé de sonar» al tope |
-| alarma apagada | los demás chats: «🔕 <nombre> apagó la alarma» |
-| re-aviso de un recordatorio o timer sin «Hecho» | todos, solo por chat y solo con «Hecho» |
+| alarmas, recordatorios y timers | los chats del aviso según su asignación: todos, o solo el de la persona asignada con Telegram; con posponer, la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
+| repetición de una alarma sin apagar | los chats del aviso, en cada repetición y solo con «🔕 Apagar», también en descanso; «Dejé de sonar» al tope, a todos si era de una persona |
+| alarma apagada o «Hecho» | los demás chats del aviso: «🔕 <nombre> apagó la alarma» / «✅ <nombre> marcó hecho» |
+| re-aviso de un recordatorio o timer sin «Hecho» | los chats del aviso, solo por chat y solo con «Hecho»; el último, a todos si era de una persona |
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
-| algo programado que un feriado saltea | todos, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
+| algo programado que un feriado saltea | los chats del aviso, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
 | corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
 | aviso antes de cada comida (`MENU_LUNCH_AT`, `MENU_DINNER_AT`) | todos, solo escrito, con «🛒 Pasar a compras» y «🔄 Otra idea»; en vacaciones, nada |
 | plato del menú cambiado con `/menu otra` | los demás chats, solo escrito: «🍽 <nombre> cambió la cena del miércoles 21/10: …» |
@@ -57,7 +57,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
 | borrado con ese «Cancelar #N» | los demás chats: «🗑 <nombre> borró #N» |
 | lo hecho desde `/control` | lo mismo que el botón o el comando en Telegram: los demás chats, con «<nombre> (pantalla)» |
-| alarma apagada o «Hecho» desde `/control` por una persona sin Telegram | todos los chats, con «<nombre> (pantalla)» |
+| alarma apagada o «Hecho» desde `/control` por una persona sin Telegram | todos los chats del aviso, con «<nombre> (pantalla)» |
 | respuesta de un comando | el chat que lo escribió |
 | aviso de un desconocido | todos (`Strangers`) |
 
@@ -88,4 +88,7 @@ solo una forma de llegarle. Ver **Padrón de la casa**, en `.claude/rules/web.md
   «Hecho» desde `/control`, y como ningún chat lo tocó, el aviso va a todos.
 - **El nombre de lo hecho desde Telegram sale del padrón** (`main._signed()`): la persona
   dueña de ese chat, y si no hay o el padrón falla, el nombre de Telegram (`main._who()`).
-- ⚠️ **Un aviso todavía no se asigna a una persona**: los destinatarios siguen siendo chats.
+- **Un aviso asignado a una persona con Telegram le llega solo a su chat**; sin Telegram, a
+  todos. Lo existente es «nadie» y sigue llegando a todos. Ver **Para quién suena**, en
+  `.claude/rules/programado.md`.
+- **Borrar a una persona pasa sus avisos a «nadie»**: vuelven a llegar a todos.

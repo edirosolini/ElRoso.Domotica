@@ -48,7 +48,11 @@ latido nunca, cuenta como viejo). Se borra con `TeleLink.forget()`, de memoria y
 
 Candidato si cumple al menos uno, y se muestran todos los que cumple:
 
-- **a** — su autor no está en `ALLOWED_CHAT_IDS` (con la lista vacía no aplica).
+- **a** — su autor no es de la casa: el chat que lo creó no está en el padrón
+  (`Household.roster()`: los chats de las personas más `ALLOWED_CHAT_IDS`) y su `author_id`
+  tampoco es una persona del padrón. Con la lista vacía no aplica. Además, **asignado a una
+  persona que ya no está** en el padrón (`ORPHAN`), aunque la baja normal ya lo pasa a «nadie».
+  Sin `roster`, `Cleaner` cae a `ALLOWED_CHAT_IDS` y no mira personas.
 - **b** — tiene equipos y **ninguno** está en `CAST_DEVICES`. Uno sin equipo no entra.
 - **c** — repite y **sus últimas catorce ocurrencias** (`IGNORED_IN_A_ROW`) en
   `fired_history` cerraron sin «Hecho», «Apagar» ni posponer. Las de feriado no cuentan:

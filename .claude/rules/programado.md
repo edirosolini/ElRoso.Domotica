@@ -40,9 +40,9 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   colegio suenan con minutos de diferencia; marcar el primero no puede depender del orden.
   El aviso manda `hecho <id>` y `AwaitingStore` guarda el mensaje de cada job que sonó hasta
   que alguien lo marca, así un timer ya borrado de `jobs` igual se puede cerrar.
-- **«Hecho» se marca una sola vez, desde cualquier chat**, y avisa a los demás «✅ <nombre>
-  marcó hecho». El aviso le llegó a todos, así que lo cierra cualquiera. El segundo toque
-  contesta que ya estaba. También borra lo que sonó, así ya no se pospone.
+- **«Hecho» se marca una sola vez, desde cualquier chat**, y avisa «✅ <nombre> marcó hecho»
+  a los demás chats del aviso (ver **Para quién suena**). El segundo toque contesta que ya
+  estaba. También borra lo que sonó, así ya no se pospone.
 - **En un recordatorio atado a un remedio, «Hecho» descuenta una dosis.** Ver **Pastillas que
   se acaban**.
 - **Lo que espera un «Hecho» vence al día** (`awaiting.KEEP`): se poda cada vez que suena otro.
@@ -50,8 +50,8 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   `NAG_LIMIT`): «🔔 Sigue pendiente: «…»». Un recordatorio que sonó una vez y nadie tocó
   quedaba olvidado, que es justo lo que no puede pasar con una medicación.
 - **El re-aviso es solo chat y solo trae «Hecho».** No suena, no pasa por el pulidor y no
-  ofrece posponer: es insistir, no un segundo aviso. Va a todos los chats y **sale también
-  en descanso**, porque no despierta a nadie.
+  ofrece posponer: es insistir, no un segundo aviso. Va a los chats del aviso, el último
+  escala (ver **Para quién suena**), y **sale también en descanso**, porque no despierta a nadie.
 - **«Hecho», posponer y `/cancelar` lo cortan.** Los tres sacan el job de `awaiting_done` y
   desagendan su timer.
 - 🔴 **El timer del re-aviso usa la clave `nag:<id>`, no la del job.** Un recordatorio diario
@@ -73,13 +73,14 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   llega hacia el minuto diez) y suma uno a los re-avisos del historial.
 - 🔴 **Tope de media hora desde que sonó** (`RING_LIMIT`): son cinco repeticiones, hacia los
   cinco, diez, quince, veinte y veinticinco minutos. Al llegar deja de sonar y escribe
-  una sola vez «⏰ Dejé de sonar: «…», nadie la apagó» a todos los chats.
+  una sola vez «⏰ Dejé de sonar: «…», nadie la apagó» a los chats del aviso; si era de una
+  persona, a todos.
 - **Cada repetición escribe al chat** «⏰ Sigue sonando», solo con «🔕 Apagar». En descanso no
   se habla, así que ese texto es todo lo que sale, y sale igual en cada repetición.
-- 🔴 **«🔕 Apagar» manda `callar <id>`** y apaga desde cualquier chat, porque el aviso le llegó
-  a todos. Corta el audio en curso (`Announcer.stop()`), olvida en `FiredStore` solo los chats
-  cuyo último disparo fue esa alarma, cierra el historial como `off` con quién y avisa a los
-  demás «🔕 <nombre> apagó la alarma». El segundo toque contesta que ya estaba apagada. El
+- 🔴 **«🔕 Apagar» manda `callar <id>`** y apaga desde cualquier chat. Corta el audio en curso
+  (`Announcer.stop()`), olvida en `FiredStore` solo los chats del aviso cuyo último disparo fue
+  esa alarma, cierra el historial como `off` con quién y avisa a los demás chats del aviso
+  «🔕 <nombre> apagó la alarma». El segundo toque contesta que ya estaba apagada. El
   método es `Commands.alarm_off`: `silence` ya es `/silencio`.
 - **Posponer, `/cancelar` y `borrar` cortan la repetición.** ⚠️ Posponer no corta el audio
   que esté sonando en ese momento; solo «Apagar» lo hace.
@@ -156,9 +157,10 @@ botones, «Posponer 10 min» y «Posponer 30 min», que hacen lo mismo.
 
 - **Se pospone lo último que sonó en ese chat**, no un número de `/lista`. Quien acaba de
   escuchar el aviso no sabe qué número tenía.
-- 🔴 **Cualquiera la pospone, una sola vez.** El aviso le llega a todos los chats, así que lo
-  que sonó se guarda para todos, y posponer lo borra para todos: el botón del otro contesta
-  que no hay nada que posponer. El job nuevo queda a nombre de quien tocó.
+- 🔴 **Cualquiera de los chats del aviso lo pospone, una sola vez.** Lo que sonó se guarda
+  solo en esos chats, y posponer lo borra en esos chats: el botón del otro contesta que no hay
+  nada que posponer. El job nuevo queda a nombre de quien tocó y **copia la asignación** (ver
+  **Para quién suena**).
 - **Posponer una alarma corta su repetición**, pero no el audio en curso.
 - **Crea un job de una sola vez**, con el mismo mensaje y los mismos equipos. Una alarma que
   repite sigue su curso: posponer el lunes no mueve el martes.
@@ -299,3 +301,50 @@ como un llamado: «[Papá] tomar medicación» suena «Papá, tomar medicación�
   «⏰ Sigue sonando» (lo hablado de la repetición sí sale «Papá, …»), «🔔 Sigue pendiente»,
   «⏰ Dejé de sonar», `/lista`, `/turnos`, los avisos a los demás chats, el resumen semanal,
   `/control` y la pantalla, incluida la vista de alarma de la tele.
+
+## Para quién suena
+
+Cada job de `jobs` tiene una asignación (`assignee`): `none` (nadie en particular), `all`
+(todos) o `person`, con el id del padrón en `assignee_id`. `author_id` guarda la persona que
+lo creó. Entran por `_add_missing_columns` con `none`: **lo que ya existía es «nadie», que es
+como sonaba todo antes**. `store.check_assignee()` rechaza un valor que no existe, una
+persona sin id o un id sin persona.
+
+⚠️ **Hoy nada asigna**: ni Telegram («para X») ni la pantalla eligen a nadie todavía; solo
+`Reminders.add()`/`update()` lo aceptan. Lo que se asigna en la práctica es el turno.
+
+| Asignación | Chats que reciben el aviso | El parlante dice |
+| --- | --- | --- |
+| nadie | todos (`ALLOWED_CHAT_IDS`), como siempre | el mensaje |
+| todos | todos | «Todos, <mensaje>» |
+| una persona con Telegram | solo su chat | «<Nombre>, <mensaje>» |
+| una persona sin Telegram | todos | «<Nombre>, <mensaje>» |
+
+- 🔴 **La asignación se resuelve al sonar** (`Reminders._assignment()`): un turno cuyo nombre
+  coincide con una persona del padrón (`Household.by_name()`, sin distinguir mayúsculas ni
+  espacios de más) la hace destinataria, por encima de lo que diga el job. Si no, vale la del
+  job.
+- **El nombre dicho**: el turno va siempre adelante con su «Le toca a X:»; el «[Nombre]» del
+  mensaje convive con él («Le toca a Cin: Papá, …»); recién sin turno ni corchete se dice el
+  nombre de la asignación. Va al `must_keep` del pulidor como los otros (`announcer._called()`).
+  Para los destinatarios, el turno de alguien del padrón le gana a la asignación y el
+  «[Nombre]» no cuenta.
+- 🔴 **Un padrón que falla o un id que ya no existe suena como «nadie»**: a todos y sin nombre.
+  `Reminders._person()` loguea y sigue; leer el padrón no puede costar un aviso.
+- 🔴 **Lo que sonó guarda una foto**: `assignee`, `assignee_id` y `audience` (los chats a los
+  que llegó, separados por coma; sin valor es todos) en `last_fired`, `awaiting_done`, `ringing`
+  y `fired_history`. Repetición, re-aviso, «Hecho», «Apagar», posponer y el aviso de feriado
+  usan la foto, no el job, que puede haber cambiado o no existir. Las filas de antes quedan
+  sin audiencia: todos.
+- 🔴 **Escala lo último**: el último re-aviso de un recordatorio y el «⏰ Dejé de sonar» de una
+  alarma, si eran de una persona, van a todos los chats. Si esa persona no contestó, que se
+  entere la casa.
+- **«Hecho» y «Apagar» los toca cualquiera**, aunque no le haya llegado, y avisan a los demás
+  chats del aviso. El aviso de feriado va a los chats del aviso.
+- **Posponer solo desde un chat del aviso**, porque `last_fired` se guarda solo ahí. El
+  pospuesto copia `assignee` y `assignee_id`, no la audiencia: se resuelve de nuevo al sonar.
+- **Repetir una alarma vuelve a buscar el nombre** por `assignee_id`; si la persona ya no está,
+  suena sin nombre a los mismos chats.
+- 🔴 **Borrar una persona pasa sus avisos a «nadie»** (`Store.reassign()`, por el
+  `before_remove` de `Household` que arma `main()`), antes de borrar la fila. Si falla, la
+  persona no se borra. Lo que ya sonó conserva su foto.
