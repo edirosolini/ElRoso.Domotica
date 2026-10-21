@@ -13,14 +13,15 @@ from typing import TYPE_CHECKING, Callable, Iterable, Protocol
 
 from homeauto.lists import SHOPPING
 from homeauto.quiet import away_of
-from homeauto.schedule.awaiting import AwaitingStore
+from homeauto.schedule.announcer import nag_call
+from homeauto.schedule.awaiting import AwaitingStore, Waiting
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import CANCEL, HOLIDAY, SNOOZE, HistoryStore
 from homeauto.schedule.ringing import Ringing, RingingStore
 from homeauto.schedule.rota import turn_for, with_turn
 from homeauto.schedule.spec import skips
 from homeauto.schedule.store import (
-    ALARM, EVERYONE, NOBODY, ONCE, PERSON, Job, Store, next_run,
+    ALARM, EVERYONE, NOBODY, ONCE, PERSON, REMINDER, Job, Store, next_run,
 )
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ log = logging.getLogger(__name__)
 # Hasta cuánto después de sonar se puede posponer una alarma.
 SNOOZE_WINDOW = timedelta(minutes=30)
 
-# Cada cuánto y cuántas veces vuelve a avisar por el chat un recordatorio sin «Hecho».
+# Cada cuánto y cuántas veces vuelve a avisar un recordatorio sin «Hecho».
 NAG_DELAY = timedelta(minutes=5)
 NAG_LIMIT = 3
 
@@ -91,10 +92,13 @@ class Reminders:
         screen=None,
         resolve: Callable[[int], Person | None] | None = None,
         find: Callable[[str], Person | None] | None = None,
+        say_nag: Callable[[Job], None] | None = None,
     ):
         self.store = store
         self.timer = timer
         self.announce = announce
+        # Dice el re-aviso en los equipos del aviso.
+        self.say_nag = say_nag
         self.fired = fired
         self.awaiting = awaiting
         self.history = history
@@ -471,7 +475,7 @@ class Reminders:
         self.timer.schedule(_nag_key(job_id), when, lambda: self._nag(job_id, chat_id))
 
     def _nag(self, job_id: int, chat_id: int | None) -> None:
-        """Vuelve a avisar por el chat un recordatorio que sigue sin «Hecho»."""
+        """Vuelve a avisar por el chat y por el parlante un recordatorio que sigue sin «Hecho»."""
         wait = self.awaiting.get(job_id)
         if wait is None or wait.next_nag is None:
             return
@@ -480,7 +484,8 @@ class Reminders:
             self.awaiting.stop_nagging(job_id)
             return
 
-        text = f"🔔 Sigue pendiente: «{wait.message}»"
+        addressee = self._addressee(wait.assignee, wait.assignee_id)
+        text = _nag_text(wait.message, addressee)
         actions = tuple((label, data.format(job=job_id)) for label, data in self.nag_actions)
         last = wait.nags + 1 >= NAG_LIMIT
         chats = (
@@ -496,6 +501,7 @@ class Reminders:
                     self.notify(chat, text)
             except Exception:
                 log.exception("no se pudo re-avisar al chat %s del job %s", chat, job_id)
+        self._say_nag(wait, chat_id, addressee)
         self._write_history(lambda history: history.mark_nag(job_id))
 
         if last:
@@ -503,6 +509,31 @@ class Reminders:
         else:
             self.awaiting.mark_nagged(job_id, now + NAG_DELAY)
             self._arm_nag(job_id, chat_id, now + NAG_DELAY)
+
+    def _say_nag(self, wait: Waiting, chat_id: int | None, addressee: str | None) -> None:
+        """Dice el re-aviso con la foto del aviso, sin que una falla frene el chat."""
+        if self.say_nag is None:
+            return
+        devices = wait.devices
+        if devices is None and (job := self.store.get(wait.job_id)) is not None:
+            devices = job.device
+        try:
+            self.say_nag(
+                Job(
+                    id=wait.job_id,
+                    chat_id=chat_id,
+                    when=wait.fired_at,
+                    message=wait.message,
+                    device=devices,
+                    kind=REMINDER,
+                    assignee=wait.assignee,
+                    assignee_id=wait.assignee_id,
+                    audience=wait.audience,
+                    addressee=addressee,
+                )
+            )
+        except Exception:
+            log.exception("no se pudo decir el re-aviso del job %s", wait.job_id)
 
     def _arm(self, job: Job) -> None:
         self.timer.schedule(str(job.id), job.when, lambda: self._fire(job.id))
@@ -534,7 +565,9 @@ class Reminders:
         if self.awaiting is not None and job.is_reminder:
             at = self.clock()
             next_nag = at + NAG_DELAY if self._nags() else None
-            self.awaiting.remember(job.id, job.message, at, next_nag, job.stock_id, **photo)
+            self.awaiting.remember(
+                job.id, job.message, at, next_nag, job.stock_id, devices=job.device, **photo
+            )
             if next_nag is not None:
                 self._arm_nag(job.id, job.chat_id, next_nag)
         fired_at = self.clock()
@@ -594,6 +627,14 @@ class Reminders:
         log.info("job %s skipped: holiday %s", job.id, holiday.day)
         for chat in self._chats(job.audience, job.chat_id):
             self._write(chat, f"🏖 Feriado ({holiday.name}): hoy no suena «{job.message}»")
+
+
+def _nag_text(message: str, addressee: str | None) -> str:
+    """El re-aviso escrito, con el mismo nombre que el hablado."""
+    name, rest = nag_call(message, addressee)
+    if name is None:
+        return f"🔔 Sigue pendiente: «{message}»"
+    return f"🔔 {name}, sigue pendiente: «{rest or message}»"
 
 
 def _running_out(supply: Stock) -> str:

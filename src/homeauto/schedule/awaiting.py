@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS awaiting_done (
     stock_id INTEGER,
     assignee TEXT    NOT NULL DEFAULT 'none',
     assignee_id INTEGER,
-    audience TEXT
+    audience TEXT,
+    devices  TEXT
 );
 """
 
@@ -39,6 +40,8 @@ class Waiting:
     assignee: str = NOBODY
     assignee_id: int | None = None
     audience: tuple[int, ...] | None = None
+    # Los equipos en que sonó, separados por coma; None es el de siempre.
+    devices: str | None = None
 
 
 def _row_to_waiting(row: sqlite3.Row) -> Waiting:
@@ -52,6 +55,7 @@ def _row_to_waiting(row: sqlite3.Row) -> Waiting:
         assignee=row["assignee"],
         assignee_id=row["assignee_id"],
         audience=unpack_chats(row["audience"]),
+        devices=row["devices"],
     )
 
 
@@ -65,7 +69,7 @@ class AwaitingStore:
 
     @staticmethod
     def _add_missing_columns(conn: sqlite3.Connection) -> None:
-        """Agrega las columnas del re-aviso, del stock y de la asignación si la tabla no las tiene."""
+        """Agrega las columnas del re-aviso, del stock, de la asignación y de los equipos si faltan."""
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(awaiting_done)")}
         if "nags" not in existing:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN nags INTEGER NOT NULL DEFAULT 0")
@@ -81,6 +85,8 @@ class AwaitingStore:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN assignee_id INTEGER")
         if "audience" not in existing:
             conn.execute("ALTER TABLE awaiting_done ADD COLUMN audience TEXT")
+        if "devices" not in existing:
+            conn.execute("ALTER TABLE awaiting_done ADD COLUMN devices TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, isolation_level=None)
@@ -97,19 +103,21 @@ class AwaitingStore:
         assignee: str = NOBODY,
         assignee_id: int | None = None,
         audience: tuple[int, ...] | None = None,
+        devices: str | None = None,
     ) -> None:
         """Deja el job esperando su «Hecho» y borra lo que venció."""
         with self._connect() as conn:
             conn.execute("DELETE FROM awaiting_done WHERE fired_at < ?", ((at - KEEP).isoformat(),))
             conn.execute(
                 "INSERT INTO awaiting_done (job_id, message, fired_at, nags, next_nag, stock_id,"
-                " assignee, assignee_id, audience) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?) "
+                " assignee, assignee_id, audience, devices) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(job_id) DO UPDATE SET message = excluded.message, "
                 "fired_at = excluded.fired_at, nags = 0, next_nag = excluded.next_nag, "
                 "stock_id = excluded.stock_id, assignee = excluded.assignee, "
-                "assignee_id = excluded.assignee_id, audience = excluded.audience",
+                "assignee_id = excluded.assignee_id, audience = excluded.audience, "
+                "devices = excluded.devices",
                 (job_id, message, at.isoformat(), next_nag.isoformat() if next_nag else None,
-                 stock_id, assignee, assignee_id, pack_chats(audience)),
+                 stock_id, assignee, assignee_id, pack_chats(audience), devices),
             )
 
     def get(self, job_id: int) -> Waiting | None:

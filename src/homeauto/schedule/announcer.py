@@ -102,6 +102,20 @@ class Announcer:
                 # El parlante puede ya haber hablado; un chat roto no deshace eso.
                 log.exception("no se pudo avisar al chat %s del job %s", chat_id, job.id)
 
+    def nag(self, job: Job) -> None:
+        """Dice el re-aviso del job en sus equipos, sin pulir; en descanso o vacaciones calla."""
+        if self.quiet is not None and self.quiet.is_quiet(self.clock()):
+            log.info("el re-aviso del job %s cae en horario de descanso: no se dice", job.id)
+            return
+        text = _nag_line(job.message, job.addressee)
+        for alias in job.devices or [self.fallback]:
+            try:
+                self.speakers.get(alias).say(
+                    text, chime=self._sound(job), min_volume=self._floor(job)
+                )
+            except DEVICE_ERRORS as exc:
+                log.warning("el re-aviso del job %s no sonó en %s: %s", job.id, alias, exc)
+
     def stop(self, devices: Iterable[str]) -> None:
         """Corta lo que esté sonando en esos equipos, o en el de siempre."""
         for alias in list(devices) or [self.fallback]:
@@ -167,6 +181,25 @@ def _called(
     if addressee and not turn:
         return f"{addressee}, {message}", addressee
     return message, None
+
+
+def nag_call(message: str, addressee: str | None = None) -> tuple[str | None, str]:
+    """A quién llama el re-aviso y qué queda del mensaje: turno, «[Nombre]» o `addressee`, en ese orden."""
+    turn = turn_in(message)
+    if turn:
+        return turn, _called(message[len(with_turn("", turn)):], None)[0]
+    if match := _CALLED.match(message):
+        return match.group(1), message[match.end():]
+    return addressee, message
+
+
+def _nag_line(message: str, addressee: str | None = None) -> str:
+    """El re-aviso hablado: «<Nombre>, sigue pendiente: <mensaje>.»."""
+    name, rest = nag_call(message, addressee)
+    line = f"{name}, sigue pendiente" if name else "Sigue pendiente"
+    if rest:
+        line += f": {rest}"
+    return line if line.endswith((".", "!", "?", "…")) else f"{line}."
 
 
 def _numbered(actions: tuple[tuple[str, str], ...], job: Job) -> tuple[tuple[str, str], ...]:
