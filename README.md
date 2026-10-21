@@ -807,12 +807,26 @@ La primera vez que se abre, con el control:
 3. Aceptar las notificaciones y después «mostrar sobre otras apps». En Google TV abre la lista
    general: bajar hasta la app y activarla. Sin ese permiso la alarma suena en la tele pero no
    se ve.
+4. Darle a la app de Domótica «instalar apps desconocidas». Sin ese permiso no se puede
+   actualizar sola.
 
 Después muestra la pantalla de la casa y, al prender la tele, se conecta sola con el CT. La
 elección queda guardada: para cambiarla hay que borrar los datos de la app desde Ajustes.
 
-Las versiones siguientes se instalan encima de la anterior, igual que la primera, porque se
-firman con la misma clave: no hay que desinstalar ni volver a elegir la tele.
+### Actualizar una tele
+
+Se sube el `versionCode` en `version.properties`, se compila y se publica con
+`deploy/push-apk.sh`. Cada tele mira la versión publicada a los treinta segundos de arrancar
+la app y después cada hora; si hay una nueva, la baja, la verifica y abre la pantalla de
+instalar: se confirma con el control. En el emulador el foco arrancó en «Cancelar», así que
+puede hacer falta moverse hasta el botón de instalar.
+
+No la ofrece con la tele apagada, mientras suena una alarma o mientras la tele está hablando; si
+una versión falla al instalar —por ejemplo, firmada con otra clave— no la vuelve a ofrecer, y si
+se cancela no vuelve a
+preguntar por esa versión hasta seis horas después. Al terminar de instalar, la app vuelve a
+conectarse sola con el CT. Se instala encima porque se firma con la misma clave: no hay que
+desinstalar ni volver a elegir la tele.
 
 Cuando suena una alarma, la tele muestra la hora grande y abajo «OK para apagar»: el OK del
 control la apaga a nombre de la persona elegida. Sin persona elegida, el OK no la apaga.
