@@ -107,7 +107,7 @@ def test_a_version_at_the_limit_is_accepted(service, store):
 def test_poll_without_an_alarm_says_null(service):
     service.hello(hello())
 
-    assert service.poll("comedor") == {"alarm": None}
+    assert service.poll("comedor") == {"alarm": None, "orders": []}
 
 
 def test_poll_brings_the_alarm_of_that_tele(service, screens):
@@ -115,13 +115,13 @@ def test_poll_brings_the_alarm_of_that_tele(service, screens):
     screens.show("comedor", 17)
     screens.show("recamara", 18)
 
-    assert service.poll("Comedor") == {"alarm": 17}
+    assert service.poll("Comedor") == {"alarm": 17, "orders": []}
 
 
 def test_poll_counts_as_a_beat(service, store):
     service.hello(hello(), address="192.168.68.20")
 
-    assert service.poll("comedor", address="192.168.68.21") == {"alarm": None}
+    assert service.poll("comedor", address="192.168.68.21") == {"alarm": None, "orders": []}
     assert service.link.alive("comedor")
 
 
@@ -131,3 +131,61 @@ def test_poll_of_an_unregistered_or_unknown_tele_is_a_404(service, alias):
 
     with pytest.raises(NotFound):
         service.poll(alias)
+
+
+# --- las órdenes y su confirmación ---
+
+
+def test_poll_brings_the_pending_orders(service):
+    service.hello(hello())
+    seq = service.link.send("comedor", "show", url="http://casa/alarma?job=7")
+
+    assert service.poll("comedor")["orders"] == [
+        {"seq": seq, "kind": "show", "url": "http://casa/alarma?job=7"}
+    ]
+
+
+@pytest.mark.parametrize("state", ["received", "done", "failed"])
+def test_ack_records_what_the_app_says(service, state):
+    service.hello(hello())
+    seq = service.link.send("comedor", "play", url="u", min_volume=None, seconds=None)
+
+    assert service.ack(" Comedor", {"seq": seq, "state": state}) == {"accepted": True}
+    assert service.poll("comedor")["orders"] == []
+
+
+def test_a_late_ack_is_answered_but_not_accepted(service):
+    service.hello(hello())
+    seq = service.link.send("comedor", "play", url="u", min_volume=None, seconds=None)
+    service.link.cancel("comedor", seq)
+
+    assert service.ack("comedor", {"seq": seq, "state": "done"}) == {"accepted": False}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"state": "done"},
+        {"seq": "3", "state": "done"},
+        {"seq": True, "state": "done"},
+        {"seq": -1, "state": "done"},
+        {"seq": 3},
+        {"seq": 3, "state": "cancelled"},
+        {"seq": 3, "state": 1},
+    ],
+)
+def test_a_bad_ack_is_a_400(service, body):
+    service.hello(hello())
+
+    with pytest.raises(WebError) as error:
+        service.ack("comedor", body)
+
+    assert error.value.status == 400
+
+
+@pytest.mark.parametrize("alias", ["recamara", "cocina", ""])
+def test_ack_of_an_unregistered_or_unknown_tele_is_a_404(service, alias):
+    service.hello(hello())
+
+    with pytest.raises(NotFound):
+        service.ack(alias, {"seq": 1, "state": "done"})

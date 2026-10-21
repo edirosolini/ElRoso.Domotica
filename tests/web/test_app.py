@@ -1111,7 +1111,13 @@ class StubTele:
         self.asked.append(("poll", alias, address))
         if self.fail:
             raise self.fail
-        return {"alarm": 17}
+        return {"alarm": 17, "orders": [{"seq": 5, "kind": "stop"}]}
+
+    def ack(self, alias, body):
+        self.asked.append(("ack", alias, body))
+        if self.fail:
+            raise self.fail
+        return {"accepted": True}
 
 
 def test_the_tele_gets_its_setup(board):
@@ -1146,8 +1152,51 @@ def test_the_tele_polls_with_its_address(board):
                                               client="192.168.68.20"))
 
     assert response.status == 200
-    assert body_json(response) == {"alarm": 17}
+    assert body_json(response) == {"alarm": 17, "orders": [{"seq": 5, "kind": "stop"}]}
     assert tele.asked == [("poll", "comedor", "192.168.68.20")]
+
+
+def test_the_tele_acks_an_order(board):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = send(app, "POST", "/api/tele/comedor/ack", {"seq": 5, "state": "received"})
+
+    assert response.status == 200
+    assert response.headers["Content-Type"].startswith("application/json")
+    assert body_json(response) == {"accepted": True}
+    assert tele.asked == [("ack", "comedor", {"seq": 5, "state": "received"})]
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Host": HOST},
+        {"Content-Type": "text/plain", "Host": HOST},
+        {"Content-Type": "application/json", "Host": HOST, "Origin": "https://malo.example"},
+    ],
+)
+def test_an_ack_that_is_not_json_or_from_another_site_is_refused(board, headers):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = send(app, "POST", "/api/tele/comedor/ack", {"seq": 5, "state": "done"},
+                    headers=headers)
+
+    assert response.status in (403, 415)
+    assert tele.asked == []
+
+
+@pytest.mark.parametrize("body", [b"", b"no es json", b"[1, 2]"])
+def test_an_ack_that_is_not_a_json_object_gets_400(board, body):
+    tele = StubTele()
+    app = WebApp(board, tele=tele)
+
+    response = app.handle(Request.from_target("POST", "/api/tele/comedor/ack",
+                                              headers=JSON_HEADERS, body=body))
+
+    assert response.status == 400
+    assert tele.asked == []
 
 
 @pytest.mark.parametrize(
@@ -1190,9 +1239,11 @@ def test_the_tele_errors_keep_their_status(board, error, status):
 
     hello = send(app, "POST", "/api/tele/hello", {"alias": "cocina"})
     poll = get(app, "/api/tele/cocina/poll")
+    ack = send(app, "POST", "/api/tele/cocina/ack", {"seq": 1, "state": "done"})
 
-    assert (hello.status, poll.status) == (status, status)
+    assert (hello.status, poll.status, ack.status) == (status, status, status)
     assert body_json(poll)["error"] == str(error)
+    assert body_json(ack)["error"] == str(error)
 
 
 def test_a_broken_tele_service_is_a_generic_500(board):
@@ -1212,6 +1263,8 @@ def test_a_broken_tele_service_is_a_generic_500(board):
         ("PUT", "/api/tele/hello", "POST"),
         ("POST", "/api/tele/comedor/poll", "GET"),
         ("DELETE", "/api/tele/comedor/poll", "GET"),
+        ("GET", "/api/tele/comedor/ack", "POST"),
+        ("PUT", "/api/tele/comedor/ack", "POST"),
     ],
 )
 def test_the_tele_routes_take_one_method(board, method, path, allow):
@@ -1226,7 +1279,8 @@ def test_the_tele_routes_take_one_method(board, method, path, allow):
 
 
 @pytest.mark.parametrize("path", ["/api/tele", "/api/tele/comedor", "/api/tele/a/b/poll",
-                                  "/api/tele/comedor/poll/x"])
+                                  "/api/tele/comedor/poll/x", "/api/tele/a/b/ack",
+                                  "/api/tele/comedor/ack/x"])
 def test_anything_else_under_tele_does_not_exist(board, path):
     tele = StubTele()
     app = WebApp(board, tele=tele)
