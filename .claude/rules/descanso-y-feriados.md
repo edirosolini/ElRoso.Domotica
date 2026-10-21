@@ -74,7 +74,8 @@ leer, contesta cómo están y cómo se usa.
   sin «🔕 Apagar»: no hay nada que apagar.
 - **`/decir`, `/llamar` y lo pedido «por el parlante» se niegan** con el motivo y la pista
   `/vacaciones off`. `/pantalla` tampoco prende la tele. `/apagar`, `/parar` y `/volumen` siguen andando: no hablan. El resumen,
-  el cierre, el clima y la agenda salen solo por chat, como en descanso.
+  el cierre, el clima y la agenda salen solo por chat, como en descanso. El aviso del menú
+  antes de cada comida no sale: ver **Menú semanal**, en `.claude/rules/consultas.md`.
 - ⚠️ **Todo camino nuevo que castee tiene que preguntarle a `Hush`**, o se saltea las
   vacaciones sin que nada avise. Hoy se cumple: la pantalla en la tele le pregunta por
   `ScreenPages` y `/pantalla` por `away_of()`. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.

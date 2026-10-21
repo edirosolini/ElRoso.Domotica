@@ -97,10 +97,30 @@ proveedor de texto, `/menu` contesta que no hay modelo.
   cena del miércoles 21/10: …». Ver **A quién le llega cada aviso**, en `.claude/rules/avisos.md`.
 - 🔴 **El menú se lee, no se escucha**, como las listas: «por el parlante» contesta escrito y
   avisa que el menú no se dice.
-- **`MENU_LUNCH_AT` y `MENU_DINNER_AT` deciden qué comidas tiene el menú**: `off` saca esa
-  comida y con las dos en `off` el menú está apagado. ⚠️ **La hora todavía no dispara nada**:
-  hoy solo cuenta si es `off` o no. El default de la cena es 17:30 porque en esta casa se cena
-  a las 19:30.
+- **`MENU_LUNCH_AT` y `MENU_DINNER_AT` deciden qué comidas tiene el menú y a qué hora se
+  avisa cada una**: `off` saca esa comida y no agenda su aviso; con las dos en `off` el menú
+  está apagado. El default de la cena es 17:30 porque en esta casa se cena a las 19:30.
+
+### Aviso antes de cada comida
+
+`main.schedule_meals()` agenda `menu-lunch` y `menu-dinner` con `_schedule_daily`, por
+`to_thread` como los otros diarios. Sin planner no se agenda ninguno. `MealReminder.text_for()`
+arma el texto y `HouseVoice.tell_everyone()` lo manda a todos, **solo escrito**:
+«🍽 Idea para el almuerzo: Milanesas con puré.\nLleva: carne, pan rallado, huevo, papa.», con
+«🛒 Pasar a compras» (`menu compras <fecha> <comida>`, solo ese plato) y «🔄 Otra idea»
+(`menu otra <fecha> <comida>`).
+
+- **Usa la semana de hoy** (`week_of()`), no la regla del domingo de `/menu`: el domingo a la
+  noche avisa la cena de ese domingo.
+- **Si la semana está vacía y la anterior tuvo menú, la arma y la guarda**, evitando los
+  platos de la anterior y sin heredar su pedido. Si nunca hubo menú no arma nada: el primero
+  lo pide alguien con `/menu`.
+- **No manda nada** si la semana existe pero no tiene esa comida, si el modelo falla (queda
+  un warning en el log) o en vacaciones (`away_of()`).
+- ⚠️ **El descanso no lo frena y las vacaciones sí**, al revés que el resumen y el cierre,
+  que en vacaciones salen por chat. Es solo escrito, así que el descanso no le cambia nada.
+  En vacaciones no hay nadie en casa que vaya a cocinar, decisión del dueño del 2026-10-20.
+  Las horas por defecto (11:00 y 17:30) quedan lejos del descanso del CT.
 - **Ocho semanas de historia** (`KEEP_WEEKS`): `save_week()` poda lo anterior. `replace()`
   conserva el pedido de la semana del plato.
 - **Fuera del menú de Telegram y en `HELP`**; entra también por el router. Ver **Comandos y
