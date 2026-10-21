@@ -800,12 +800,17 @@ La primera vez que se abre, con el control:
 1. Elegir qué tele es, de las de `SCREEN_DEVICES`.
 2. Elegir de quién es, de los chats de la casa.
 3. Aceptar las notificaciones y después «mostrar sobre otras apps». En Google TV abre la lista
-   general: bajar hasta la app y activarla.
+   general: bajar hasta la app y activarla. Sin ese permiso la alarma suena en la tele pero no
+   se ve.
 
 Después muestra la pantalla de la casa y, al prender la tele, se conecta sola con el CT. La
 elección queda guardada: para cambiarla hay que borrar los datos de la app desde Ajustes.
 
-Las versiones siguientes instalan encima de la anterior, porque se firman con la misma clave.
+Las versiones siguientes se instalan encima de la anterior, igual que la primera, porque se
+firman con la misma clave: no hay que desinstalar ni volver a elegir la tele.
+
+Cuando suena una alarma, la tele muestra la hora grande y abajo «OK para apagar»: el OK del
+control la apaga a nombre de la persona elegida. Sin persona elegida, el OK no la apaga.
 
 ## Desarrollo
 

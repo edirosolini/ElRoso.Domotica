@@ -15,7 +15,8 @@ paths:
 
 La app de la tele es una app Android propia para las teles de `SCREEN_DEVICES`. **La fase
 uno está en curso**: existen el lado del CT (registro, latido, consulta de qué mostrar y
-órdenes con su Cast de respaldo) y la app base, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
+órdenes con su Cast de respaldo) y la app, que ejecuta las órdenes, muestra la alarma y la
+apaga con el OK del control, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
 `.claude/rules/web.md`.
 
 Tres piezas, sin nada de HTTP en las dos primeras:
@@ -69,11 +70,11 @@ nombres, los mismos que ya da `/api/people` cuando la pantalla escribe.
 ## Órdenes
 
 `TeleLink` guarda en memoria un buzón por tele. Una orden es `{seq, kind, ...}`: `play` con
-`url`, `min_volume` y `seconds`; `show` con `url`; `stop` sin más.
+`url`, `min_volume` y `seconds`; `show` con `url`; `stop` y `hide` sin más.
 
 - 🔴 **Cada `poll` devuelve todas las órdenes que siguen `pending`**, hasta que la app conteste
-  `received`: la misma orden llega en varios `poll` y **la app tiene que descartar los `seq`
-  que ya procesó**.
+  `received`: la misma orden llega en varios `poll`. La app no la ejecuta de nuevo, ver
+  **Órdenes en la app**.
 - **El `seq` arranca en el milisegundo del arranque del proceso** y crece de a uno por tele.
   El buzón no va a disco: así, tras un reinicio, un `seq` nuevo no repite uno que la app ya
   descartó.
@@ -89,17 +90,21 @@ nombres, los mismos que ya da `/api/people` cuando la pantalla escribe.
 - Un alias fuera de `SCREEN_DEVICES` o que nunca hizo `hello` es un 404.
 - **`{"accepted": false}`** si la orden no existe o ya cerró (`done`, `failed` o
   `cancelled`): un `ack` tardío no revive nada. Repetir `received` es `true`.
-- **`show` y `stop` cierran con `received`** (`DELIVERED_ONLY`): pasan a `done` al llegar a la
-  app, así no quedan abiertas en el buzón. Solo `play` espera un `done` propio.
+- **`show`, `stop` y `hide` cierran con `received`** (`DELIVERED_ONLY`): pasan a `done` al
+  llegar a la app, así no quedan abiertas en el buzón. Solo `play` espera un `done` propio.
 
 **`voice.tele.TeleCaster`.** `build_speakers(..., tele=)` envuelve en él al `Caster` de cada
 tele de `SCREEN_DEVICES`; sin API no hay `TeleLink` y todo sigue por Cast. Usa la app solo si
 la tele está viva **y** anunció la capacidad (`TeleLink.can()`); si no, va directo por Cast.
-⚠️ Hoy la app no anuncia `play` ni `show`, así que en la práctica todo sigue saliendo por Cast.
 
 - **`play`**: espera `received` diez segundos (`ACK_TIMEOUT`) y después `done` hasta la
-  duración del clip más `FINISH_MARGIN`, con tope `FINISH_TIMEOUT`; sin duración, el tope.
-  Si no llega, o llega `failed`, anula la orden y **lo dice por Cast**.
+  duración del clip más `FINISH_MARGIN`, con tope `FINISH_TIMEOUT`; sin duración, el tope. A
+  cualquiera de los dos se le suman trece segundos (`APP_WAKE_MARGIN`): lo que la app espera a
+  que la tele prenda antes de sonar. Si no llega, o llega `failed`, anula la orden y **lo dice
+  por Cast**.
+- 🔴 **`APP_WAKE_MARGIN` son los diez segundos de `OrderRunner.wakeTimeoutMs` más los tres de
+  `settleMs`, en la app.** Si cambia uno, hay que cambiar el otro: con el margen corto el CT
+  repite por Cast un aviso que la app todavía va a decir.
 - ⚠️ **`received` sin `done` a tiempo también sale por Cast**, así que puede sonar dos veces:
   un aviso dicho dos veces sale más barato que uno perdido.
 - **Un `play` anulado por un `stop` no va a Cast.**
@@ -107,10 +112,11 @@ la tele está viva **y** anunció la capacidad (`TeleLink.can()`); si no, va dir
 - 🔴 **`stop`**: manda la orden a la app si está viva con la capacidad `play` (no `show`), y
   además corta por Cast si no lo está o si lo último que sonó en esa tele salió por Cast
   (`_by_cast`). Así «Apagar» corta donde de verdad está sonando.
-- **Lo demás sigue siempre por Cast**: `set_volume`, `turn_off`, `hide`, `showing` y el resto
-  de lo que tiene `Caster`.
-- ⚠️ **`hide`, o sea `/pantalla apagar`, todavía no cierra la vista de la app**: es la parte
-  cuatro.
+- **`hide`**: si la app está viva con `show`, le manda `hide` y espera `received`; sin él lo
+  anula y lo loguea. **Además cierra DashCast** si sigue abierto (`Caster.hide()`). Devuelve
+  verdadero si cerró cualquiera de los dos, y un error de DashCast no cuenta si la app ya cerró.
+- **Lo demás sigue siempre por Cast**: `set_volume`, `turn_off`, `showing` y el resto de lo
+  que tiene `Caster`.
 - 🔴 **La espera bloquea un hilo, nunca el event loop**: `TeleLink.wait()` duerme en una
   `threading.Condition`, en el mismo hilo donde antes esperaba el Cast.
 
@@ -132,7 +138,8 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
   el control el alias, de `devices`, y la persona, de `people`. Si `people` viene vacío se
   guarda sin persona. Queda en `SharedPreferences`.
 - ⚠️ **Hoy la elección no se puede cambiar** sin borrar los datos de la app desde Ajustes.
-- ⚠️ **La persona todavía no viaja al CT**: `hello` manda alias, versión y capacidades.
+- **La persona no viaja en `hello`**, que manda alias, versión y capacidades: solo la usa el OK
+  de la alarma.
 
 **Servicio.**
 
@@ -142,15 +149,56 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
   espera diez, veinte, cuarenta y sesenta segundos como tope (`BeatSchedule`), y vuelve a cinco
   con la primera respuesta buena. Un `hello` rechazado con 4xx también espera.
 - **Se vuelve a registrar** ante un 404 del `poll` o si cambian las capacidades.
-- **Capacidades: solo `overlay`, y solo si el permiso de superposición está concedido.** Se
-  mira en cada latido, así que concederlo o sacarlo dispara un `hello` nuevo. `play` y `show`
-  todavía no se anuncian.
-- ⚠️ El `poll` hoy solo anota en el log la alarma que llega: la app no la muestra.
+- 🔴 **Capacidades: `play` siempre; `show` y `overlay` solo con el permiso de superposición
+  concedido.** Sin él Android no deja a la app ponerse adelante desde el servicio: la alarma
+  suena pero no se ve. Se mira en cada latido, así que concederlo o sacarlo dispara un `hello`
+  nuevo.
 - Al abrirse, la app pide notificaciones y después «mostrar sobre otras apps», un permiso
   por vez y una vez por apertura.
 - El log va a logcat con el tag `DomoticaTele`.
 
-**Kiosco.** `MainActivity` es un WebView con JavaScript sobre `/pantalla?ver=1` del CT.
+**Kiosco.** `MainActivity` es un WebView con JavaScript sobre `/pantalla?ver=1` del CT, o
+sobre la URL que le pase un `show`. `Kiosk` es el puente entre el servicio y el kiosco abierto:
+si no hay kiosco abierto, lo que el servicio le pide se pierde sin error.
+
+**Órdenes en la app.** `OrderRunner`, en `:core`, ejecuta cada orden sobre `TeleDevice`, que en
+Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
+
+- **`play` corre en su propio hilo**, uno solo para todos los `play`, así el latido sigue y un
+  `stop` lo puede cortar a mitad. Prende la pantalla con un wake lock, espera que prenda con
+  tope de diez segundos —si no prende, suena igual— y, solo si estaba apagada, tres más
+  para que asiente: sin esa espera el audio se pierde mientras la tele despierta.
+- **Sube `STREAM_MUSIC` al piso de `min_volume`** (`VolumeFloor`): el CT lo manda de cero a
+  cien y se lleva a los pasos del equipo **redondeando para arriba**; sin valor, la mitad. Solo
+  sube, nunca baja, y **restaura el volumen al terminar o al fallar**.
+- Reproduce con `USAGE_MEDIA` y `CONTENT_TYPE_SPEECH`, con foco de audio transitorio. Contesta
+  `done` si el audio terminó y `failed` si no se pudo bajar, reproducir, o no terminó a tiempo
+  (la duración más quince segundos; sin duración, dos minutos).
+- **Un `play` cortado por un `stop`, antes o mientras suena, no contesta nada más**: el CT ya lo
+  anuló.
+- **`show`** prende la pantalla y pone adelante `MainActivity` con la `url`. **`stop`** corta el
+  audio y vuelve el kiosco a `/pantalla?ver=1`. **`hide`** vuelve al kiosco y manda la app
+  atrás. Un `play` o un `show` sin `url` contesta `failed`.
+- **Si un `ack` no llega al CT, la app no lo reintenta**: lo loguea, y el CT cae solo a Cast
+  cuando se le vence la espera.
+- 🔴 **Una orden repetida no se ejecuta de nuevo, pero se vuelve a confirmar**: `received` y,
+  si ya terminó, su `done` o `failed`. Un `ack` que no llegó al CT se repite así en el próximo
+  `poll`. `OrderInbox` recuerda los últimos sesenta y cuatro `seq` y `OrderRunner` el último
+  estado de otras tantas.
+- Una orden ilegible o de un tipo desconocido se descarta al leer el `poll`; el CT la da por
+  perdida a los diez segundos.
+
+**Alarma.** El `poll` trae la alarma que suena en la tele; cuando cambia, `Kiosk` la anota.
+
+- **Con el kiosco abierto carga `/alarma?job=<id>`, pero no lo pone adelante**: eso lo hace el
+  `show` que manda `Screens`. La vista de alarma vuelve sola al kiosco, igual que en DashCast.
+- 🔴 **El OK del control apaga la alarma a nombre de la persona elegida**: manda a
+  `/api/command` `{chat_id, data: "callar <id>"}`, el mismo botón que «🔕 Apagar» (`AlarmKey`).
+  Mientras hay alarma y persona, abajo dice «OK para apagar». **Sin persona, el OK no hace
+  nada** con la alarma y queda en el log.
+- ⚠️ **El OK solo llega si la app está adelante**: es una tecla de `MainActivity`. La respuesta
+  del CT se espera diez segundos, lo que dura cualquier pedido de la app; si tarda más queda un
+  error en el log, aunque el comando haya corrido.
 
 **Red.** 🔴 **Texto claro solo al host de `-Phouse`**: `networkConfig` genera el
 `network_security_config` con ese host y nada más. La URL de la casa sale de `-Phouse`
@@ -164,7 +212,7 @@ de nuevo.
   el SDK 34 y Gradle 8.7, con las descargas verificadas por sha256. La caché de Gradle queda
   en un volumen de Docker.
 - **`versionCode` y `versionName` van a mano en `version.properties`.** Una versión nueva
-  para instalar encima sube el `versionCode`.
+  para instalar encima sube el `versionCode`. Hoy es la `0.2.0`, `versionCode` 2.
 - **Del wrapper solo se versiona `gradle-wrapper.properties`, con el sha256 de la
   distribución.** `gradlew` y el jar se generan en Docker si faltan y están en `.gitignore`.
 - 🔴 **La firma de release usa una clave fija fuera del repo**, en `TELE_KEYS_DIR` (por

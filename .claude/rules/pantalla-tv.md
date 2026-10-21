@@ -39,6 +39,8 @@ la manda a otra tele y `apagar`, adelante o atrás, la saca.
 
 - **`apagar` solo cierra si DashCast sigue abierto** (`Caster.hide()`): si alguien ya puso
   otra app, `quit_app()` se la cortaría. Contesta que la pantalla no estaba prendida.
+- **Con la app de la tele viva y la capacidad `show`, `apagar` también cierra su vista**: la
+  app vuelve al kiosco y se va atrás. Ver `hide` en **Órdenes**, en `.claude/rules/app-tele.md`.
 - **Un equipo fuera de `SCREEN_DEVICES` contesta que no tiene pantalla**, sin castear nada.
 - **Trae «Apagar pantalla»**, que manda `pantalla apagar en <equipo>`.
 - 🔴 **Respeta las vacaciones pero no el descanso.** Mostrar no hace ruido: a las once de la
@@ -74,7 +76,8 @@ consulta `/api/ringing/<id>` cada cinco segundos.
 - **Cuando deja de sonar, la página también pasa sola a `/pantalla?ver=1`**: el feed contesta
   `ringing: false` y `alarm.js` cambia de dirección. Las dos reglas viven en `nextPage()`.
 - 🔴 **A los quince minutos de que deja de sonar se cierra DashCast** (`OFF_DELAY`), con el
-  timer `screen-off:<equipo>`, y **solo si sigue abierto**, igual que `apagar`. Una alarma
+  timer `screen-off:<equipo>`, y **solo si sigue abierto**, igual que `apagar`; con la app,
+  también cierra su vista. Una alarma
   nueva en esa tele antes del cierre lo cancela.
 - **Se rearma en `start()`**: un cierre pendiente vuelve a agendarse, uno vencido se cierra
   ya, y una tele de una alarma que ya no suena queda con quince minutos desde el arranque.
