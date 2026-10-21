@@ -190,6 +190,15 @@ def test_the_query_reaches_the_screen(with_web):
     assert request.query == {"start": "2026-10-05T00:00:00-03:00", "end": "2026-10-12"}
 
 
+def test_the_client_address_reaches_the_screen(with_web):
+    server, web = with_web
+
+    get(server, "/api/tele/comedor/poll")
+
+    [request] = web.asked
+    assert request.client == "127.0.0.1"
+
+
 def test_health_is_still_the_service_with_the_screen_on(with_web):
     server, web = with_web
 

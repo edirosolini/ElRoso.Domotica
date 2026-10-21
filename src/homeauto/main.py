@@ -71,6 +71,7 @@ from homeauto.schedule.stock import StockStore
 from homeauto.schedule.store import Store
 from homeauto.people import People, PeopleStore
 from homeauto.strangers import Strangers, StrangerStore
+from homeauto.tele import TeleLink, TeleStore
 from homeauto.voice import chime
 from homeauto.voice.caster import Caster
 from homeauto.voice.media_server import MediaServer
@@ -98,6 +99,7 @@ from homeauto.web.app import WebApp
 from homeauto.web.control import ControlService
 from homeauto.web.board import Board
 from homeauto.web.jobs import JobsService
+from homeauto.web.tele import TeleService
 
 CONFIG_PATH = os.environ.get("DOMOTICA_CONFIG", "/etc/domotica/domotica.env")
 PYTHON_BIN = os.environ.get("DOMOTICA_PYTHON", "/opt/domotica/venv/bin/python")
@@ -1156,6 +1158,13 @@ def main() -> None:
                     clock=datetime.now,
                 ),
                 apps=AppShelf(STATE_DIR / "app"),
+                tele=TeleService(
+                    link=TeleLink(TeleStore(db_path), clock=datetime.now),
+                    devices=config.screen_devices,
+                    people=people,
+                    chat_ids=config.allowed_chat_ids,
+                    screens=pages.store,
+                ),
             ),
         )
     else:

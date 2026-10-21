@@ -1341,6 +1341,41 @@ def test_without_allowed_chats_the_screen_does_not_write(wired, tmp_path, monkey
     assert response.status == 403
 
 
+def test_the_tele_app_registers_and_polls_on_the_one_database(wired, tmp_path, monkeypatch):
+    """Con API, la tele se registra y su consulta trae la alarma que guardó la pantalla."""
+    web = _wired_web(monkeypatch, tmp_path, HOUSE + "SCREEN_DEVICES=comedor,recamara\n")
+    tele = web.tele
+
+    assert tele.link.store.db_path == tmp_path / "jobs.db"
+    assert tele.screens.db_path == tmp_path / "jobs.db"
+    setup = json.loads(web.handle(Request(method="GET", path="/api/tele/setup")).body)
+    assert setup["devices"] == ["comedor", "recamara"]
+    assert [person["chat_id"] for person in setup["people"]] == [42, 77]
+
+    hello = web.handle(Request.from_target(
+        "POST", "/api/tele/hello", headers=WRITE, client="192.168.68.20",
+        body=json.dumps({"alias": "comedor", "version_name": "1.0", "version_code": 1,
+                         "caps": ["play", "show"]}).encode("utf-8")))
+    assert hello.status == 200
+    tele.screens.show("comedor", 17)
+
+    poll = web.handle(Request(method="GET", path="/api/tele/comedor/poll"))
+    assert poll.status == 200
+    assert json.loads(poll.body) == {"alarm": 17}
+    assert main.TeleStore(tmp_path / "jobs.db").get("comedor").address == "192.168.68.20"
+    assert tele.link.alive("comedor")
+
+
+def test_without_a_token_there_is_no_tele_app(wired, tmp_path, monkeypatch):
+    built = []
+    monkeypatch.setattr(main.TeleStore, "__init__", lambda self, *a, **k: built.append(a))
+    monkeypatch.setattr(main.TeleService, "__init__", lambda self, *a, **k: built.append(k))
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    assert built == []
+
+
 def test_without_a_token_there_is_no_screen(wired, tmp_path, monkeypatch):
     built = []
     monkeypatch.setattr(main.ApiServer, "__init__", lambda self, *a, **k: built.append(k))
