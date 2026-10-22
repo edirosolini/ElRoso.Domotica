@@ -1,10 +1,13 @@
 """El registro de la app de la tele y su consulta, sin HTTP."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
 from homeauto.people import Household, PeopleStore, PersonStore
+from homeauto.quiet import AwayStore, Hush, HushStore, QuietHours
+from homeauto.schedule.awaiting import AwaitingStore
+from homeauto.schedule.store import EVERYONE, PERSON
 from homeauto.screen import ScreenStore
 from homeauto.tele import TeleLink, TeleStore
 from homeauto.web.jobs import NotFound, WebError
@@ -30,7 +33,19 @@ def store(db):
 
 
 @pytest.fixture
-def service(db, screens, store):
+def awaiting(db):
+    return AwaitingStore(db)
+
+
+@pytest.fixture
+def hush(db):
+    return Hush(
+        QuietHours.parse("22:00", "05:25"), HushStore(db), clock=lambda: NOW, away=AwayStore(db)
+    )
+
+
+@pytest.fixture
+def service(db, screens, store, awaiting, hush):
     people = PeopleStore(db)
     people.remember(42, "Eze")
     return TeleService(
@@ -39,6 +54,10 @@ def service(db, screens, store):
         people=people,
         chat_ids=[77, 42],
         screens=screens,
+        awaiting=awaiting,
+        quiet=hush,
+        fallback="Comedor",
+        clock=lambda: NOW,
     )
 
 
@@ -137,7 +156,7 @@ def test_a_version_at_the_limit_is_accepted(service, store):
 def test_poll_without_an_alarm_says_null(service):
     service.hello(hello())
 
-    assert service.poll("comedor") == {"alarm": None, "orders": []}
+    assert service.poll("comedor") == {"alarm": None, "reminders": [], "orders": []}
 
 
 def test_poll_brings_the_alarm_of_that_tele(service, screens):
@@ -145,13 +164,13 @@ def test_poll_brings_the_alarm_of_that_tele(service, screens):
     screens.show("comedor", 17)
     screens.show("recamara", 18)
 
-    assert service.poll("Comedor") == {"alarm": 17, "orders": []}
+    assert service.poll("Comedor") == {"alarm": 17, "reminders": [], "orders": []}
 
 
 def test_poll_counts_as_a_beat(service, store):
     service.hello(hello(), address="192.168.68.20")
 
-    assert service.poll("comedor", address="192.168.68.21") == {"alarm": None, "orders": []}
+    assert service.poll("comedor", address="192.168.68.21") == {"alarm": None, "reminders": [], "orders": []}
     assert service.link.alive("comedor")
 
 
@@ -219,3 +238,98 @@ def test_ack_of_an_unregistered_or_unknown_tele_is_a_404(service, alias):
 
     with pytest.raises(NotFound):
         service.ack(alias, {"seq": 1, "state": "done"})
+
+
+# --- los recordatorios que esperan «Hecho» ---
+
+
+def ago(minutes):
+    return NOW - timedelta(minutes=minutes)
+
+
+def test_poll_brings_the_reminder_of_that_tele_and_not_of_another(service, awaiting):
+    service.hello(hello())
+    awaiting.remember(7, "tomar la pastilla", ago(5), devices="Comedor")
+    awaiting.remember(8, "regar", ago(5), devices="recamara")
+
+    assert service.poll("comedor")["reminders"] == [
+        {"id": 7, "message": "tomar la pastilla", "for": None, "nags": 0}
+    ]
+
+
+def test_a_reminder_on_several_devices_reaches_each(service, awaiting):
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(5), devices="habitacion, comedor")
+
+    assert [item["id"] for item in service.poll("comedor")["reminders"]] == [7]
+
+
+def test_a_reminder_without_devices_goes_to_the_default_device(service, awaiting):
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(5))
+
+    assert [item["id"] for item in service.poll("comedor")["reminders"]] == [7]
+
+
+def test_a_reminder_without_devices_is_not_on_another_tele(service, awaiting):
+    service.hello(hello(alias="recamara"))
+    awaiting.remember(7, "tomar", ago(5))
+
+    assert service.poll("recamara")["reminders"] == []
+
+
+def test_a_reminder_past_the_snooze_window_is_not_shown(service, awaiting):
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(31), devices="comedor")
+
+    assert service.poll("comedor")["reminders"] == []
+
+
+def test_in_quiet_hours_there_are_no_reminders(service, awaiting, db):
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(5), devices="comedor")
+    service.quiet = Hush(QuietHours.parse("11:00", "13:00"), HushStore(db), clock=lambda: NOW)
+
+    assert service.poll("comedor")["reminders"] == []
+
+
+def test_on_vacation_there_are_no_reminders(service, awaiting, hush):
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(5), devices="comedor")
+    hush.start_away(NOW + timedelta(days=3))
+
+    assert service.poll("comedor")["reminders"] == []
+
+
+def test_a_reminder_marked_done_is_gone(service, awaiting):
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(5), devices="comedor")
+    awaiting.take(7)
+
+    assert service.poll("comedor")["reminders"] == []
+
+
+def test_the_reminder_says_for_whom_and_its_nags(service, awaiting, household):
+    papa = household.add("Papá", 42)
+    service.household = household
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(15), devices="comedor", assignee=PERSON,
+                      assignee_id=papa.id)
+    awaiting.mark_nagged(7, None)
+    awaiting.remember(8, "regar", ago(10), devices="comedor", assignee=EVERYONE)
+    awaiting.remember(9, "sacar la basura", ago(5), devices="comedor", assignee=PERSON,
+                      assignee_id=999)
+
+    assert service.poll("comedor")["reminders"] == [
+        {"id": 7, "message": "tomar", "for": "Papá", "nags": 1},
+        {"id": 8, "message": "regar", "for": "todos", "nags": 0},
+        {"id": 9, "message": "sacar la basura", "for": None, "nags": 0},
+    ]
+
+
+def test_reminders_go_from_the_oldest_and_stop_at_five(service, awaiting):
+    service.hello(hello())
+    for job_id in range(1, 8):
+        awaiting.remember(job_id, f"aviso {job_id}", ago(20 - job_id), devices="comedor")
+
+    assert [item["id"] for item in service.poll("comedor")["reminders"]] == [1, 2, 3, 4, 5]
