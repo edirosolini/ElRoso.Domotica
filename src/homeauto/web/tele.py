@@ -87,22 +87,22 @@ class TeleService:
         return {"alias": tele.alias, "caps": list(tele.caps)}
 
     def poll(self, alias: str, address: str = "") -> dict:
-        """Cuenta como latido y devuelve la alarma que suena en esa tele y sus órdenes pendientes."""
+        """Cuenta como latido y devuelve la alarma, los recordatorios, las órdenes y si la casa calla."""
         alias = normalize(alias)
         if alias not in self.devices or not self.link.beat(alias, address):
             raise NotFound("Esa tele no está registrada.")
+        now = self.clock()
+        quiet = self.quiet is not None and self.quiet.is_quiet(now)
         return {
             "alarm": self.screens.job_for(alias),
-            "reminders": self._reminders(alias),
+            "reminders": [] if quiet else self._reminders(alias, now),
             "orders": self.link.orders(alias),
+            "quiet": quiet,
         }
 
-    def _reminders(self, alias: str) -> list[dict]:
-        """Lo que espera «Hecho» en esa tele dentro de `SNOOZE_WINDOW`; vacío si la casa calla."""
+    def _reminders(self, alias: str, now: datetime) -> list[dict]:
+        """Lo que espera «Hecho» en esa tele dentro de `SNOOZE_WINDOW`."""
         if self.awaiting is None:
-            return []
-        now = self.clock()
-        if self.quiet is not None and self.quiet.is_quiet(now):
             return []
         names = person_names(self.household)
         found = []

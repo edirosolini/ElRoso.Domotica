@@ -156,7 +156,7 @@ def test_a_version_at_the_limit_is_accepted(service, store):
 def test_poll_without_an_alarm_says_null(service):
     service.hello(hello())
 
-    assert service.poll("comedor") == {"alarm": None, "reminders": [], "orders": []}
+    assert service.poll("comedor") == {"alarm": None, "reminders": [], "orders": [], "quiet": False}
 
 
 def test_poll_brings_the_alarm_of_that_tele(service, screens):
@@ -164,13 +164,13 @@ def test_poll_brings_the_alarm_of_that_tele(service, screens):
     screens.show("comedor", 17)
     screens.show("recamara", 18)
 
-    assert service.poll("Comedor") == {"alarm": 17, "reminders": [], "orders": []}
+    assert service.poll("Comedor") == {"alarm": 17, "reminders": [], "orders": [], "quiet": False}
 
 
 def test_poll_counts_as_a_beat(service, store):
     service.hello(hello(), address="192.168.68.20")
 
-    assert service.poll("comedor", address="192.168.68.21") == {"alarm": None, "reminders": [], "orders": []}
+    assert service.poll("comedor", address="192.168.68.21") == {"alarm": None, "reminders": [], "orders": [], "quiet": False}
     assert service.link.alive("comedor")
 
 
@@ -299,6 +299,61 @@ def test_on_vacation_there_are_no_reminders(service, awaiting, hush):
     hush.start_away(NOW + timedelta(days=3))
 
     assert service.poll("comedor")["reminders"] == []
+
+
+def test_poll_says_quiet_in_quiet_hours(service, db):
+    service.hello(hello())
+    service.quiet = Hush(QuietHours.parse("11:00", "13:00"), HushStore(db), clock=lambda: NOW)
+
+    assert service.poll("comedor")["quiet"] is True
+
+
+def test_poll_says_quiet_while_hushed(service, hush):
+    service.hello(hello())
+    hush.start(timedelta(hours=1))
+
+    assert service.poll("comedor")["quiet"] is True
+
+
+def test_poll_says_quiet_on_vacation(service, hush):
+    service.hello(hello())
+    hush.start_away(NOW + timedelta(days=3))
+
+    assert service.poll("comedor")["quiet"] is True
+
+
+def test_poll_is_not_quiet_outside_the_quiet_hours(service):
+    service.hello(hello())
+
+    assert service.poll("comedor")["quiet"] is False
+
+
+def test_poll_without_hush_is_not_quiet(service):
+    service.hello(hello())
+    service.quiet = None
+
+    assert service.poll("comedor")["quiet"] is False
+
+
+class CountingHush:
+    """Un `Hush` que siempre calla y cuenta cuántas veces se le preguntó."""
+
+    def __init__(self):
+        self.asked = 0
+
+    def is_quiet(self, moment):
+        self.asked += 1
+        return True
+
+
+def test_poll_asks_the_hush_once(service, awaiting):
+    service.hello(hello())
+    awaiting.remember(7, "tomar", ago(5), devices="comedor")
+    service.quiet = CountingHush()
+
+    poll = service.poll("comedor")
+
+    assert (poll["quiet"], poll["reminders"], service.quiet.asked) == (True, [], 1)
 
 
 def test_a_reminder_marked_done_is_gone(service, awaiting):
