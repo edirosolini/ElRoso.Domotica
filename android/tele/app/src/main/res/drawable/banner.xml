@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Banner 320x180 del launcher de Android TV: fondo oscuro y una campana. -->
+<!-- Banner 320x180 del launcher de Android TV: la R blanca de El Roso sobre el gradiente naranja. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="320dp"
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
-    <path android:fillColor="#1E2A38" android:pathData="M0,0h320v180h-320z" />
-    <path android:fillColor="#F2B134" android:pathData="M0,150h320v30h-320z" />
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="320"
+                android:endY="180">
+                <item android:offset="0" android:color="#FFF55D00" />
+                <item android:offset="1" android:color="#FFD94E00" />
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M160,30c-22,0 -38,18 -38,40v32l-14,16v6h104v-6l-14,-16v-32c0,-22 -16,-40 -38,-40z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M148,128a12,12 0,0 0,24 0z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M157.97 43.33Q173.87 43.33 181.46 49.36Q189.05 55.4 189.05 67.59Q189.05 74.4 186.54 78.95Q184.03 83.49 180.14 86.18Q176.26 88.87 171.95 90.42L195.38 128.67H182.83L162.15 93.41H145.18V128.67H134.42V43.33ZM157.37 52.65H145.18V84.33H157.97Q168.37 84.33 173.15 80.2Q177.93 76.08 177.93 68.07Q177.93 59.7 172.91 56.18Q167.89 52.65 157.37 52.65Z" />
 </vector>

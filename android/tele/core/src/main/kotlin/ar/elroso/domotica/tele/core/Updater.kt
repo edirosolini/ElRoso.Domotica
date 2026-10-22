@@ -23,6 +23,7 @@ class Updater(
     private val installer: ApkInstaller,
     private val target: File,
     private val alarm: () -> Long?,
+    private val reminder: () -> Boolean,
     private val playing: () -> Boolean,
     private val awake: () -> Boolean,
     private val allowed: () -> Boolean,
@@ -65,13 +66,14 @@ class Updater(
 
     /** Si la política deja ofrecer esa versión ahora; si no, loguea por qué. */
     private fun ready(release: Release): Boolean {
-        val decision = policy.decide(release, alarm(), playing(), awake(), allowed())
+        val decision = policy.decide(release, alarm(), playing(), awake(), allowed(), reminder())
         val why = when (decision) {
             UpdateDecision.OFFER -> return true
             UpdateDecision.CURRENT -> return false
             UpdateDecision.REJECTED -> "falló al instalarse y no se vuelve a ofrecer"
             UpdateDecision.RECENT -> "ya se ofreció hace menos de seis horas"
             UpdateDecision.ALARM -> "hay una alarma sonando"
+            UpdateDecision.REMINDER -> "hay un recordatorio en pantalla"
             UpdateDecision.PLAYING -> "hay un audio en curso"
             UpdateDecision.ASLEEP -> "la tele está en reposo"
             UpdateDecision.NOT_ALLOWED -> "falta el permiso de instalar apps"

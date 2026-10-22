@@ -1,5 +1,6 @@
 package ar.elroso.domotica.tele.core
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -61,6 +62,15 @@ data class Order(
     val seconds: Double? = null,
 )
 
+/** Un recordatorio que sonó y espera su «Hecho»: para quién es, si se sabe, y cuántos re-avisos lleva. */
+@Serializable
+data class Reminder(
+    val id: Long,
+    val message: String,
+    @SerialName("for") val forName: String? = null,
+    val nags: Int = 0,
+)
+
 /** Lo que la app contesta de una orden. */
 enum class AckState(val wire: String) {
     RECEIVED("received"),
@@ -68,8 +78,12 @@ enum class AckState(val wire: String) {
     FAILED("failed"),
 }
 
-/** La respuesta de `poll`: la alarma que suena en la tele, o null, y las órdenes pendientes. */
-data class PollReply(val alarm: Long? = null, val orders: List<Order> = emptyList())
+/** La respuesta de `poll`: la alarma que suena en la tele, o null, las órdenes pendientes y los recordatorios. */
+data class PollReply(
+    val alarm: Long? = null,
+    val orders: List<Order> = emptyList(),
+    val reminders: List<Reminder> = emptyList(),
+)
 
 /** La versión publicada en `tele.json`, con el sha256 en minúsculas y el tamaño en bytes. */
 data class Release(val versionCode: Int, val versionName: String, val sha256: String, val size: Long)
@@ -90,21 +104,23 @@ object Protocol {
 
     fun parseHelloReply(body: String): HelloReply = json.decodeFromString(HelloReply.serializer(), body)
 
-    /** Lee el `poll`; una orden ilegible o de un tipo desconocido se descarta. */
+    /** Lee el `poll`; una orden o un recordatorio ilegible, o una orden de un tipo desconocido, se descarta. */
     fun parsePoll(body: String): PollReply {
         val root = json.parseToJsonElement(body) as? JsonObject ?: throw SerializationException("poll sin objeto")
         val alarm = (root["alarm"] as? JsonPrimitive)?.longOrNull
-        val orders = (root["orders"] as? JsonArray).orEmpty().mapNotNull {
+        return PollReply(alarm, root.items("orders", Order.serializer()), root.items("reminders", Reminder.serializer()))
+    }
+
+    private fun <T> JsonObject.items(key: String, serializer: KSerializer<T>): List<T> =
+        (get(key) as? JsonArray).orEmpty().mapNotNull {
             try {
-                json.decodeFromJsonElement(Order.serializer(), it)
+                json.decodeFromJsonElement(serializer, it)
             } catch (e: SerializationException) {
                 null
             } catch (e: IllegalArgumentException) {
                 null
             }
         }
-        return PollReply(alarm, orders)
-    }
 
     fun encodeAck(seq: Long, state: AckState): String = buildJsonObject {
         put("seq", seq)

@@ -49,6 +49,7 @@ class UpdaterTest {
     private val installer = FakeInstaller()
     private val logs = mutableListOf<String>()
     private var alarm: Long? = null
+    private var reminder = false
     private var playing = false
     private var awake = true
     private val target by lazy { folder.root.resolve("update.apk") }
@@ -61,6 +62,7 @@ class UpdaterTest {
             installer = installer,
             target = target,
             alarm = { alarm },
+            reminder = { reminder },
             playing = { playing },
             awake = { awake },
             allowed = { true },
@@ -114,6 +116,27 @@ class UpdaterTest {
         updater.check()
 
         assertEquals(emptyList<String>(), source.fetched)
+    }
+
+    @Test
+    fun notWithAReminderOnScreen() {
+        publish()
+        reminder = true
+
+        updater.check()
+
+        assertEquals(emptyList<String>(), source.fetched)
+        assertEquals("actualización: la 0.3.0 espera, hay un recordatorio en pantalla", logs.last())
+    }
+
+    @Test
+    fun aReminderThatAppearsDuringTheDownloadStopsTheInstall() {
+        publish()
+        source.onFetch = { reminder = true }
+
+        updater.check()
+
+        assertEquals(emptyList<String>(), installer.installed)
     }
 
     @Test
