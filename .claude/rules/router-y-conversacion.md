@@ -319,3 +319,9 @@ argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cance
   `purge_drop()`. Ver `.claude/rules/depurador.md`.
 - **`hecho`, `borrar`, `callar` y `confirmar` no están en `ALL_COMMANDS`**: son solo botones, en
   `Commands.press()`. Ni se escriben ni los nombra el router.
+- **`ayuda` es comando de Telegram y además botón** (`HELP_BUTTON`): en `press()` devuelve lo
+  mismo que `/ayuda`, `start()`. En Telegram lo cablea `main.py` y no está en `_dispatch()`.
+  No es de `CHATLESS_BUTTONS`: sin Telegram, `press_without_chat()` contesta `CHATLESS_ONLY`.
+- **`Commands.typed(name)` dice qué se puede escribir con barra fuera de Telegram**: `ayuda` o
+  un nombre de `_dispatch()`. Los botones de solo-botón y los alias de `main.py` quedan
+  afuera. Lo usa `/control`; ver **Control desde la web**, en `.claude/rules/web.md`.

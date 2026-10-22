@@ -419,6 +419,12 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **Todo `_dispatch()` y los botones de solo-botón (`hecho`, `callar`, `confirmar`, `borrar`)
   desde el día uno**, decisión del dueño. La respuesta vuelve con sus botones como
   `[{label, data}]`, y tocarlos vuelve a `/api/command`.
+- 🔴 **Un texto que arranca con «/» va a `press()` sin la barra solo si `Commands.typed()` lo
+  acepta**: `ayuda` o un comando de `_dispatch()`, con el nombre pasado a minúsculas
+  (`ControlService._typed()`). Lo demás sigue en `free_text()`: los de solo-botón escritos
+  (`/hecho 3`, `/callar`, `/borrar`, `/confirmar`), los nombres que no existen y los alias que
+  viven en `main.py` y no en `_dispatch()` (`/tiempo`, `/llama`, `/siesta`, `/stop`,
+  `/volume`, `/pregunta`, `/convertir`, `/donde`, `/start`, `/help`), que los toma el router.
 - **Se elige quién sos en «Soy»**, con `/api/people`: las personas del padrón, y con el padrón
   vacío, los chats de `ALLOWED_CHAT_IDS`. Una persona sin chat sale «(sin Telegram)». La
   elección queda en el `localStorage` del dispositivo como `p:<id>` o `c:<chat>`; una vieja,
