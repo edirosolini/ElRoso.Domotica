@@ -1355,12 +1355,16 @@ def test_without_allowed_chats_the_screen_does_not_write(wired, tmp_path, monkey
 
 
 def test_the_tele_app_registers_and_polls_on_the_one_database(wired, tmp_path, monkeypatch):
-    """Con API, la tele se registra y su consulta trae la alarma que guardó la pantalla."""
-    web = _wired_web(monkeypatch, tmp_path, HOUSE + "SCREEN_DEVICES=comedor,recamara\n")
+    """Con API, la tele se registra y su consulta trae la alarma y lo que espera «Hecho»."""
+    web = _wired_web(monkeypatch, tmp_path, HOUSE + "SCREEN_DEVICES=comedor,recamara\n"
+                     "QUIET_FROM=00:00\nQUIET_TO=00:00\n")
     tele = web.tele
 
     assert tele.link.store.db_path == tmp_path / "jobs.db"
     assert tele.screens.db_path == tmp_path / "jobs.db"
+    assert tele.awaiting.db_path == tmp_path / "jobs.db"
+    assert tele.quiet is web.control.quiet
+    assert tele.fallback == "parlante"
     setup = json.loads(web.handle(Request(method="GET", path="/api/tele/setup")).body)
     assert setup["devices"] == ["comedor", "recamara"]
     assert [person["chat_id"] for person in setup["people"]] == [42, 77]
@@ -1371,10 +1375,16 @@ def test_the_tele_app_registers_and_polls_on_the_one_database(wired, tmp_path, m
                          "caps": ["play", "show"]}).encode("utf-8")))
     assert hello.status == 200
     tele.screens.show("comedor", 17)
+    main.AwaitingStore(tmp_path / "jobs.db").remember(
+        23, "tomar la pastilla", datetime.now() - timedelta(minutes=5), devices="comedor")
 
     poll = web.handle(Request(method="GET", path="/api/tele/comedor/poll"))
     assert poll.status == 200
-    assert json.loads(poll.body) == {"alarm": 17, "orders": []}
+    assert json.loads(poll.body) == {
+        "alarm": 17,
+        "reminders": [{"id": 23, "message": "tomar la pastilla", "for": None, "nags": 0}],
+        "orders": [],
+    }
     assert main.TeleStore(tmp_path / "jobs.db").get("comedor").address == "192.168.68.20"
     assert tele.link.alive("comedor")
 

@@ -1225,6 +1225,10 @@ def main() -> None:
                     chat_ids=config.allowed_chat_ids,
                     screens=pages.store,
                     household=household,
+                    awaiting=awaiting,
+                    quiet=hush,
+                    fallback=config.default_device,
+                    clock=datetime.now,
                 ),
             ),
         )

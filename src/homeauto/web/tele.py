@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Iterable
 
 from homeauto.people import display_name
+from homeauto.schedule.reminders import SNOOZE_WINDOW
 from homeauto.tele import ACK_STATES, CAPS, TeleLink, normalize
+from homeauto.web.board import for_name, person_names
 from homeauto.web.jobs import NotFound, WebError
 
 MAX_VERSION = 40
+MAX_REMINDERS = 5
 
 
 class TeleService:
@@ -22,6 +26,10 @@ class TeleService:
         chat_ids: Iterable[int],
         screens,
         household=None,
+        awaiting=None,
+        quiet=None,
+        fallback: str | None = None,
+        clock=datetime.now,
     ):
         self.link = link
         self.devices = tuple(normalize(alias) for alias in devices)
@@ -30,6 +38,11 @@ class TeleService:
         # El `ScreenStore` que dice qué alarma suena en cada tele.
         self.screens = screens
         self.household = household
+        # Lo que espera «Hecho», el silencio de la casa y el equipo de siempre.
+        self.awaiting = awaiting
+        self.quiet = quiet
+        self.fallback = normalize(fallback) if fallback else None
+        self.clock = clock
 
     def setup(self) -> dict:
         """Las teles con pantalla, el padrón y los chats de la casa, para configurar la app."""
@@ -78,7 +91,40 @@ class TeleService:
         alias = normalize(alias)
         if alias not in self.devices or not self.link.beat(alias, address):
             raise NotFound("Esa tele no está registrada.")
-        return {"alarm": self.screens.job_for(alias), "orders": self.link.orders(alias)}
+        return {
+            "alarm": self.screens.job_for(alias),
+            "reminders": self._reminders(alias),
+            "orders": self.link.orders(alias),
+        }
+
+    def _reminders(self, alias: str) -> list[dict]:
+        """Lo que espera «Hecho» en esa tele dentro de `SNOOZE_WINDOW`; vacío si la casa calla."""
+        if self.awaiting is None:
+            return []
+        now = self.clock()
+        if self.quiet is not None and self.quiet.is_quiet(now):
+            return []
+        names = person_names(self.household)
+        found = []
+        for wait in self.awaiting.all():
+            if now - wait.fired_at >= SNOOZE_WINDOW or alias not in self._devices_of(wait.devices):
+                continue
+            found.append({
+                "id": wait.job_id,
+                "message": wait.message,
+                "for": for_name(wait.assignee, wait.assignee_id, names),
+                "nags": wait.nags,
+            })
+            if len(found) == MAX_REMINDERS:
+                break
+        return found
+
+    def _devices_of(self, devices: str | None) -> set[str]:
+        """Las teles de un aviso, normalizadas; sin equipos, el de siempre."""
+        named = {normalize(part) for part in (devices or "").split(",") if part.strip()}
+        if named:
+            return named
+        return {self.fallback} if self.fallback else set()
 
     def ack(self, alias: str, body: dict) -> dict:
         """Anota lo que la app dice de una orden; `accepted` es falso si ya no estaba abierta."""
