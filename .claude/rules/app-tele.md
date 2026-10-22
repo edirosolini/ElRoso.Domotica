@@ -16,7 +16,8 @@ paths:
 La app de la tele es una app Android propia para las teles de `SCREEN_DEVICES`. **La fase
 uno está cerrada**: existen el lado del CT (registro, latido, consulta de qué mostrar y
 órdenes con su Cast de respaldo) y la app, que ejecuta las órdenes, muestra la alarma, la
-apaga con el OK del control y se ofrece a actualizarse, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
+apaga con el OK del control, muestra el cartel de los recordatorios que esperan «Hecho» y se
+ofrece a actualizarse, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
 `.claude/rules/web.md`.
 
 Tres piezas, sin nada de HTTP en las dos primeras:
@@ -140,7 +141,7 @@ la tele está viva **y** anunció la capacidad (`TeleLink.can()`); si no, va dir
 Vive en `android/tele/`, en Kotlin, y **se compila en Docker**: sin Android Studio ni SDK en
 la máquina. Paquete `ar.elroso.domotica.tele`.
 
-- **Dos módulos.** `:core` es JVM puro —protocolo, URLs, latido, backoff, elección, actualización— y es lo
+- **Dos módulos.** `:core` es JVM puro —protocolo, URLs, latido, backoff, elección, recordatorios, actualización— y es lo
   único con tests (`android/tele/build.sh test`). `:app` es lo de Android: pantallas, servicio,
   arranque y el transporte HTTP. Lo que se puede probar sin Android va a `:core`.
 - 🔴 **`targetSdk` 34, no más.** Desde el 35 Android no deja arrancar desde `BOOT_COMPLETED`
@@ -159,8 +160,8 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
   BACK vuelve al kiosco sin cambiar nada. 🔴 **Si cambia la tele, se para y se vuelve a
   arrancar `TeleService`**, para que haga `hello` con el alias nuevo; si solo cambia la
   persona, el servicio sigue.
-- **La persona no viaja en `hello`**, que manda alias, versión y capacidades: solo la usa el OK
-  de la alarma.
+- **La persona no viaja en `hello`**, que manda alias, versión y capacidades: solo la usan el OK
+  de la alarma y el del cartel de recordatorio.
 
 **Servicio.**
 
@@ -176,7 +177,7 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
 - **Se vuelve a registrar** ante un 404 del `poll` o si cambian las capacidades.
 - 🔴 **Capacidades: `play` siempre; `show` y `overlay` solo con el permiso de superposición
   concedido.** Sin él Android no deja a la app ponerse adelante desde el servicio: la alarma
-  suena pero no se ve. Se mira en cada latido, así que concederlo o sacarlo dispara un `hello`
+  suena pero no se ve, y el cartel de recordatorio no sale. Se mira en cada latido, así que concederlo o sacarlo dispara un `hello`
   nuevo.
 - Al abrirse, la app pide notificaciones, «mostrar sobre otras apps» y después «instalar apps
   desconocidas» (`REQUEST_INSTALL_PACKAGES`, la pantalla de `MANAGE_UNKNOWN_APP_SOURCES`, que
@@ -245,6 +246,33 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
   del CT se espera diez segundos, lo que dura cualquier pedido de la app; si tarda más queda un
   error en el log, aunque el comando haya corrido.
 
+**Recordatorio.** El `poll` trae los recordatorios que esperan «Hecho» en esa tele (contrato en
+**Registro en el CT**). `ReminderBoard`, en `:core`, elige cuál va; `ReminderOverlay`, en
+`:app`, lo muestra.
+
+- 🔴 **Es una ventana `TYPE_APPLICATION_OVERLAY` del servicio, no `MainActivity`**: sale encima
+  de cualquier app —Movistar, el inicio— sin traer la app adelante. A pantalla completa, con el
+  fondo negro al sesenta por ciento y una tarjeta centrada al sesenta por ciento del ancho: el
+  mensaje en dos líneas como mucho, «Para <nombre>» si el `for` no es null, y «OK para marcar
+  hecho» si hay alguien elegido. Es enfocable, así que las teclas del control van a ella.
+- **Uno por vez: el de `id` más bajo** que no se cerró ni se marcó en la tele.
+- **Con alarma no se muestra**: `TeleService` le pasa la misma alarma del `poll` que a `Kiosk`,
+  y el cartel vuelve cuando la alarma se va.
+- 🔴 **El OK marca hecho a nombre de quien se eligió**: manda a `/api/command` `hecho <id>`
+  (`ReminderKey`), con `person_id` o `chat_id` como el OK de la alarma. Mientras espera dice ⏳;
+  si el CT contesta, «✅ Hecho» un segundo y se va; si falla, muestra el motivo y queda, y el OK
+  se puede volver a apretar.
+- **Sin nadie elegido no hay línea del OK, y el OK solo cierra**, igual que otra tecla.
+- **Cualquier otra tecla que llegue lo cierra hasta el próximo re-aviso**: `ReminderBoard`
+  guarda los `nags` con que se cerró y lo vuelve a mostrar cuando el `poll` trae más. Lo cerrado
+  o marcado se olvida cuando el `poll` deja de traerlo.
+- **Sin el permiso de superposición no se muestra**, y queda una vez en el log por recordatorio.
+- Un recordatorio ilegible se descarta al leer el `poll`, igual que una orden.
+- ⚠️ **Medido en la tele `habitacion`** (Chromecast con Google TV HD, Android 16, 2026-10-22),
+  con una prueba: el OK, las flechas y BACK llegan al cartel encima de Movistar y del inicio; el
+  volumen no llega, lo maneja la tele; HOME no llega y el cartel queda arriba del inicio hasta
+  otra tecla. Movistar no se pausa debajo.
+
 **Actualización.** `Updater`, en `:core`, busca una versión nueva en `/app/tele.json` del CT
 (contrato en **App de la tele**, `.claude/rules/web.md`) y la ofrece con `SessionInstaller`.
 
@@ -253,7 +281,8 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
 - **`UpdatePolicy` decide, en este orden**: `CURRENT` si el `versionCode` publicado no es mayor
   que el propio; `REJECTED` si esa misma versión ya falló de forma definitiva; `RECENT` si esa misma versión ya se ofreció hace menos de seis horas
   (`RETRY_MS`, guardado por versión en `SharedPreferences`, así que sobrevive un reinicio);
-  `ALARM` con una alarma en la tele (`Kiosk.alarm`); `PLAYING` con un `play` en curso
+  `ALARM` con una alarma en la tele (`Kiosk.alarm`); `REMINDER` con un cartel de recordatorio
+  en pantalla (`ReminderOverlay.visible`); `PLAYING` con un `play` en curso
   (`OrderRunner.playing`); `ASLEEP` con la tele en reposo; `NOT_ALLOWED` sin el permiso de
   instalar apps; si no, `OFFER`. Lo que no es `OFFER` ni `CURRENT` se loguea con el motivo.
 - 🔴 **Con la tele en reposo no se ofrece** (`ASLEEP`, `PowerManager.isInteractive`): la pantalla
@@ -265,9 +294,9 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
   (`rejected_code`) ante `STATUS_FAILURE_INCOMPATIBLE`, `_CONFLICT` o `_INVALID` —por ejemplo,
   un APK firmado con otra clave—. Una versión mayor sí se ofrece. Una cancelación, falta de
   espacio u otra falla siguen la regla de las seis horas.
-- 🔴 **Alarma, audio y reposo se miran dos veces**: antes de bajar y otra vez después de verificar,
-  justo antes de abrir la instalación. La pantalla de confirmar nunca tapa una alarma que
-  empezó durante la descarga.
+- 🔴 **Alarma, recordatorio, audio y reposo se miran dos veces**: antes de bajar y otra vez
+  después de verificar, justo antes de abrir la instalación. La pantalla de confirmar nunca tapa
+  una alarma ni un cartel que empezó durante la descarga.
 - **Baja a `cacheDir/update.apk` con tope de `size`** bytes: si pasa, corta. Después
   `ApkCheck` compara tamaño y sha256 con `tele.json`; si no coinciden, descarta y lo loguea. El
   archivo se borra al terminar, haya instalado o no.
@@ -294,7 +323,11 @@ de nuevo.
   en un volumen de Docker.
 - **`versionCode` y `versionName` van a mano en `version.properties`.** Una versión nueva
   para instalar encima sube el `versionCode`, y es lo único que mira `UpdatePolicy`. Hoy es la
-  `0.4.0`, `versionCode` 7.
+  `0.5.0`, `versionCode` 8.
+- **Ícono y banner.** El ícono es `@mipmap/ic_launcher`, la R de El Roso como ícono adaptativo
+  (la R en `ic_launcher_foreground` sobre el naranja de `ic_launcher_background`). El banner
+  del launcher de la tele es `drawable/banner`, vectorial: la R blanca sobre un gradiente
+  naranja.
 - **Del wrapper solo se versiona `gradle-wrapper.properties`, con el sha256 de la
   distribución.** `gradlew` y el jar se generan en Docker si faltan y están en `.gitignore`.
 - 🔴 **La firma de release usa una clave fija fuera del repo**, en `TELE_KEYS_DIR` (por
