@@ -33,7 +33,7 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 | --- | --- |
 | `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`; `persons`, el padrón como `{id, name, chat_id}`, y `people`, los chats como `{chat_id, name}` |
 | `POST /api/tele/hello` | registra la tele, o la actualiza, y cuenta como latido. Devuelve `{alias, caps}` |
-| `GET /api/tele/<alias>/poll` | cuenta como latido y devuelve `{"alarm": id o null, "orders": [...]}` |
+| `GET /api/tele/<alias>/poll` | cuenta como latido y devuelve `{"alarm": id o null, "reminders": [...], "orders": [...]}` |
 | `POST /api/tele/<alias>/ack` | lo que la app dice de una orden, `{seq, state}`. Devuelve `{"accepted": bool}` |
 
 - **`hello` pasa por `_refuse_write`**: `application/json` y `Origin` igual a `Host`, si no
@@ -51,6 +51,16 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 - 🔴 **La alarma del `poll` sale de `ScreenStore.job_for()`**, la misma tabla que usa DashCast.
   Ya respeta descanso y vacaciones: `Screens.ring()` no anota la alarma en esos casos. Ver
   **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
+- **`reminders` es lo que espera «Hecho» en esa tele**, de `AwaitingStore.all()`: cada uno
+  `{id, message, for, nags}`, con `id` el job que cierra `hecho <id>` y `for` de
+  `board.for_name()` (la persona, «Todos» o null). Entra si sus `devices` incluyen el alias
+  —sin equipos, el de siempre, `CAST_DEFAULT`— y sonó hace menos de `SNOOZE_WINDOW`, media
+  hora. Hasta cinco (`MAX_REMINDERS`), de lo que sonó antes a lo último.
+- 🔴 **`reminders` sale vacío si `Hush.is_quiet()`**: descanso, silencio pedido o vacaciones.
+  Con la casa callada la tele no muestra nada sola, igual que con la alarma.
+- **Deja de venir con «Hecho», posponer, `/cancelar` o al pasar la media hora**: el `poll`
+  lee `awaiting_done` en cada pedido, no guarda nada propio.
+- **`reminders` es aditivo**: una app que no lo lee, como la `0.4.0`, sigue igual.
 - Otro método es un 405 con `Allow`; una ruta de `/api/tele/` que no es ninguna de las cuatro,
   un 404. Un error del servicio es un 500 genérico y se loguea.
 
