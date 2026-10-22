@@ -42,6 +42,9 @@ class StubCommands:
         self.asked.append(("press_without_chat", data, who))
         return f"apretado sin chat {data}"
 
+    def typed(self, name):
+        return name in ("ayuda", "cancelar", "clima")
+
 
 class StubMonitor:
     def __init__(self, states):
@@ -238,6 +241,33 @@ def test_free_text_goes_through_the_router(db, commands):
 
     assert commands.asked == [("free_text", 42, "dame el clima")]
     assert answer["text"] == "Entendí: dame el clima"
+
+
+@pytest.mark.parametrize(
+    ("text", "data"),
+    [("/cancelar 5", "cancelar 5"), ("  /ayuda ", "ayuda"), ("/Clima", "clima")],
+)
+def test_a_typed_slash_command_runs_through_press_without_the_slash(db, commands, text, data):
+    answer = make(db, commands=commands).run({"chat_id": 42, "text": text})
+
+    assert commands.asked == [("press", 42, data, "Eze (pantalla)")]
+    assert answer["text"] == f"apretado {data}"
+
+
+@pytest.mark.parametrize("text", ["/hecho 3", "/callar 17", "/borrar 4", "/confirmar Seq", "/nada"])
+def test_a_typed_button_only_or_unknown_name_follows_the_router(db, commands, text):
+    make(db, commands=commands).run({"chat_id": 42, "text": text})
+
+    assert commands.asked == [("free_text", 42, text)]
+
+
+def test_a_person_without_a_chat_cannot_type_help(db, commands, house):
+    abuela = house.add("Abuela")
+
+    with pytest.raises(ReadOnly):
+        make(db, commands=commands, household=house).run(
+            {"person_id": abuela.id, "text": "/ayuda"})
+    assert commands.asked == []
 
 
 def test_a_command_that_breaks_is_answered_not_silenced(db):

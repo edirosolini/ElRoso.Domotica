@@ -196,6 +196,9 @@ class ControlService:
             raise WebError(f"El texto pasa de {MAX_TEXT} caracteres.")
 
         who = f"{name} (pantalla)"
+        typed = self._typed(value) if text is not None and chat_id is not None else None
+        if typed is not None:
+            data = value = typed
         if chat_id is None and (data is None or value.split()[0] not in CHATLESS_BUTTONS):
             raise ReadOnly(
                 f"{name} no tiene Telegram: desde la pantalla solo puede apagar una alarma"
@@ -212,3 +215,13 @@ class ControlService:
             log.exception("el comando de la pantalla se rompió")
             return {"text": BROKEN.format(reason=exc), "actions": []}
         return {"text": reply.text, "actions": _actions(reply.actions)}
+
+    def _typed(self, text: str) -> str | None:
+        """El comando sin la barra si `text` escribe uno que se puede escribir, o None."""
+        head, _, argument = text.strip().partition(" ")
+        if not head.startswith("/"):
+            return None
+        command = head[1:].lower()
+        if not self.commands.typed(command):
+            return None
+        return f"{command} {argument.strip()}".strip()

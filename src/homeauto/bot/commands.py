@@ -119,6 +119,8 @@ MAX_LABEL = 40
 # Los botones que puede tocar alguien de la casa sin Telegram.
 CHATLESS_BUTTONS = ("callar", "hecho")
 CHATLESS_ONLY = "Sin Telegram solo se puede apagar una alarma o marcar «Hecho»."
+# El botón que contesta lo mismo que /ayuda en Telegram.
+HELP_BUTTON = "ayuda"
 
 # Las tres formas de /pastillas con argumento: cambiar el aviso, reponer y atar un recordatorio.
 _PILL_THRESHOLD = re.compile(r"^(.+?)\s+aviso\s+(\d+)$", re.IGNORECASE)
@@ -1281,6 +1283,7 @@ class Commands:
             "borrar": self.discard,
             "callar": self.alarm_off,
             "confirmar": self.confirm,
+            HELP_BUTTON: lambda chat_id, _text="": self.start(chat_id),
         }
         run = {**self._dispatch(), **buttons}.get(command)
         answer, _, token = argument.strip().partition(" ")
@@ -1295,6 +1298,10 @@ class Commands:
             return run(chat_id, argument)
         finally:
             _WHO.reset(token)
+
+    def typed(self, name: str) -> bool:
+        """Si `name` se puede escribir con barra fuera de Telegram: un comando de `_dispatch` o la ayuda."""
+        return name == HELP_BUTTON or name in self._dispatch()
 
     def press_without_chat(self, data: str, who: str = "") -> str:
         """Un botón de alguien de la casa sin chat: solo apagar una alarma o marcar «Hecho»."""
