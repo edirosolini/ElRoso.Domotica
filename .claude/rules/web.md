@@ -114,6 +114,12 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   el aviso se ve como antes. Lo futuro trae la asignación del job; lo pasado, la foto de lo
   que sonó. ⚠️ **El turno no cuenta hasta que suena**: una ocurrencia futura de un turno de
   alguien del padrón se muestra con la asignación del job, no con la de esa persona.
+- **Un evento de Google con dueño trae `persons`, `label` y `for`** en `extendedProps`, y el
+  título «<label> · para <for>»; `for` es `join_names()` («Papá», «Papá y Mamá»). Solo con
+  el prefijo, el título es «para Papá» y `for` va en `None`, así el kiosco no lo repite.
+  `[Todos]` da «· para todos» sin `persons`. El dueño lo decide `agenda/owners.py`: ver
+  **De quién es un evento de Google**, en `.claude/rules/agenda.md`. «Hoy» y «Lo próximo»
+  del kiosco lo muestran sin JS propio.
 - **A quién le toca se ve en la agenda y en el kiosco.** `month.occurrences_between()` le
   pone el prefijo de `with_turn()` a cada ocurrencia futura y el historial ya lo trae, así
   que viaja en el mensaje: los scripts no cambiaron.
@@ -125,7 +131,9 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   guarda la casa sus jobs.
 - **Google se cachea cinco minutos por rango** (`CALENDAR_TTL`), con tope de treinta y dos
   rangos (`MAX_CACHED_RANGES`): navegar meses no le pega a Google en cada clic. ⚠️ Un
-  calendario caído también queda cacheado: el aviso dura hasta cinco minutos.
+  calendario caído también queda cacheado: el aviso dura hasta cinco minutos. El caché
+  guarda los `Event` crudos y el dueño se resuelve en cada pedido, con el padrón de ese
+  pedido: un cambio del padrón se ve enseguida.
 - **El clima se cachea quince minutos** (`WEATHER_TTL`) y **una falla no se cachea**: se
   vuelve a pedir en el polling siguiente.
 - Un error al armar un feed devuelve 500 y se loguea; no tumba el servidor de `/say`.
@@ -138,7 +146,8 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   el descanso termina a las 05:25.
 - **«Ver» filtra la agenda por persona**, con «Toda la casa» y cada persona del padrón; sin
   padrón no aparece. Con una persona elegida, de lo de la casa se ve lo suyo y lo de todos,
-  y se esconde lo de nadie y lo de otro; Google y los feriados se ven siempre
+  y se esconde lo de nadie y lo de otro. De Google, lo que trae `persons` se ve solo para
+  esas personas; sin `persons` (de todos o sin dueño), siempre. Los feriados se ven siempre
   (`visibleFor()`). Se oculta con `display: none`, igual que lo plegado, sin pedir el feed de
   nuevo. La elección queda en el `localStorage` del dispositivo (`casa.agenda.ver`); una
   persona que ya no está vuelve a «Toda la casa».
