@@ -66,6 +66,10 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   falla solo se loguea: no frena el chat ni el próximo re-aviso.
 - **«Hecho», posponer y `/cancelar` lo cortan.** Los tres sacan el job de `awaiting_done` y
   desagendan su timer.
+- **Lo que espera «Hecho» también se ofrece a la tele con la app**, por el `poll`, mientras
+  no pasó `SNOOZE_WINDOW` desde que sonó y la casa no calla. Ver **Registro en el CT**, en
+  `.claude/rules/app-tele.md`. ⚠️ Una espera sin `devices`, de antes de esa columna, ahí
+  cuenta como del equipo de siempre, no del equipo del job como en el re-aviso.
 - 🔴 **El timer del re-aviso usa la clave `nag:<id>`, no la del job.** Un recordatorio diario
   se rearma con `str(id)` al sonar: con la misma clave, el rearme pisaría el re-aviso.
 - **Sobrevive un reinicio**: `nags` y `next_nag` viven en `awaiting_done`. Al arrancar, un
