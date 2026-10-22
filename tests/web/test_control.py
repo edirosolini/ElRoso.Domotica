@@ -463,3 +463,19 @@ def test_what_can_be_postponed_says_who_it_is_for(db, house):
                            assignee="person", assignee_id=china.id)
 
     assert control.live(42)["snooze"]["for"] == "China"
+
+
+def test_live_says_a_chat_can_command(db):
+    assert make(db).live(42)["can_command"] is True
+
+
+def test_live_says_a_person_with_a_chat_can_command(db, house):
+    diego = house.add("Diego", 77)
+
+    assert make(db, household=house).live(person_id=diego.id)["can_command"] is True
+
+
+def test_live_says_a_person_without_a_chat_cannot_command(db, house):
+    abuela = house.add("Abuela")
+
+    assert make(db, household=house).live(person_id=abuela.id)["can_command"] is False

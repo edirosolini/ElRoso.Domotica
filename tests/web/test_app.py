@@ -964,35 +964,125 @@ def test_the_control_offers_the_meal_menu_next_to_the_lists(app):
     assert '<button type="button" class="cmd" data-verb="menu">Menú</button>' in lists
 
 
-def test_the_control_offers_to_purge_next_to_the_scheduled(app):
+def folded(page, summary):
+    """Lo de adentro del <details> cuyo <summary> dice eso."""
+    start = page.index(f"<summary>{summary}</summary>")
+    assert page.rfind("<details", 0, start) > page.rfind("</details>", 0, start), summary
+    return page[start:page.index("</details>", start)]
+
+
+def test_the_control_folds_the_house_settings_with_people_and_purge_at_the_end(app):
     page = get(app, "/control").body.decode("utf-8")
 
-    scheduled = page[page.index("<h2>⏰ Programado</h2>"):]
-    scheduled = scheduled[:scheduled.index("</section>")]
-    assert '<button type="button" class="cmd" data-verb="depurar">🧹 Depurar</button>' in scheduled
+    settings = folded(page, "⚙️ Ajustes de la casa")
+    assert '<button type="button" class="cmd" data-verb="depurar">🧹 Depurar</button>' in settings
+    assert 'id="persons-card"' in settings
+    assert page.index("⚙️ Ajustes de la casa") > page.index("<summary>Más</summary>")
+
+
+def test_the_control_folds_the_rare_commands_under_more(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    more = folded(page, "Más")
+    for verb in ("usar", "equipos", "volumen", "pantalla", "turnos", "pastillas", "calcular",
+                 "traducir"):
+        assert f'data-verb="{verb}"' in more, verb
+        assert page.count(f'data-verb="{verb}"') == 1, verb
 
 
 def test_the_control_has_one_pills_and_one_turns_field_that_also_reads(app):
     page = get(app, "/control").body.decode("utf-8")
 
-    scheduled = page[page.index("<h2>⏰ Programado</h2>"):]
-    scheduled = scheduled[:scheduled.index("</section>")]
     for verb in ("pastillas", "turnos"):
-        assert scheduled.count(f'data-verb="{verb}"') == 1, verb
-        form = scheduled[scheduled.index(f'data-verb="{verb}"'):]
+        assert page.count(f'data-verb="{verb}"') == 1, verb
+        form = page[page.index(f'data-verb="{verb}"'):]
         form = form[:form.index(">")]
         assert "data-need" not in form, verb
+    scheduled = page[page.index("<h2>⏰ Programado</h2>"):]
+    scheduled = scheduled[:scheduled.index("</section>")]
     assert '<a class="btn secondary" href="/agenda">Crear en la agenda</a>' in scheduled
 
 
-def test_the_control_placeholders_are_short_and_the_example_goes_to_the_title(app):
+def test_the_control_placeholders_are_short_and_the_help_is_visible(app):
     page = get(app, "/control").body.decode("utf-8")
 
     placeholders = re.findall(r'placeholder="([^"]*)"', page)
     assert placeholders
     for text in placeholders:
         assert len(text) <= 20, text
-    assert 'title="' in page
+    assert 'title="' not in page
+    assert page.count('class="hint"') >= 8
+    assert "min-height" not in rule(stylesheet(app), ".control .hint")
+
+
+def test_the_control_asks_who_you_are_before_anything(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    assert '<section id="who-card" class="card who-card" hidden>' in page
+    assert "<h2>¿Quién sos?</h2>" in page
+    assert 'id="who-options"' in page and 'id="who-change"' in page
+    assert "<select" not in page[:page.index("</header>")]
+
+
+def test_the_control_tells_who_has_no_telegram_what_they_can_do(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    assert ("Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a"
+            " Papá o Mamá.") in page
+    assert 'class="needs-chat"' in page
+
+
+def test_the_control_offers_examples_that_fill_the_free_text(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    examples = re.findall(r'data-example="([^"]*)"', page)
+    assert examples == [
+        "poné un timer de 10 minutos", "recordame mañana a las 9 llamar al médico",
+        "alarma a las 7 de lunes a viernes", "agregá leche a compras",
+        "decí en el comedor que bajen a comer", "silencio por 2 horas",
+    ]
+
+
+def test_the_control_has_quick_shortcuts_without_the_model(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    quick = page[page.index('id="quick"'):]
+    quick = quick[:quick.index("</section>")]
+    assert 'data-verb="timer"' in quick
+    assert 'data-verb="silencio"' in quick and 'placeholder="1h"' in quick
+    assert 'href="/agenda?nuevo=1"' in quick
+    assert 'data-verb="compras"' in quick
+    assert 'data-verb="agregar"' in quick
+    assert 'data-verb="decir" data-target="1"' in quick and 'id="devices"' in quick
+
+
+def test_the_control_names_its_buttons_for_anyone(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    assert 'data-verb="parar" data-target="1">Cortar lo que suena</button>' in page
+    assert 'data-verb="apagar" data-target="1">Apagar el equipo</button>' in page
+    assert "<button type=\"submit\">Equipo de siempre</button>" in page
+
+
+def test_the_control_folds_the_checks_under_now(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    now = page[page.index('id="urgent-card"'):]
+    now = now[:now.index("</section>")]
+    assert '<details id="status-box"' in now and 'id="status"' in now
+
+
+def test_the_control_says_how_to_add_it_to_the_home_screen(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    assert "Agregalo a la pantalla de inicio: ⋮ → Agregar a pantalla principal" in page
+
+
+def test_the_root_goes_to_the_control(app):
+    response = get(app, "/")
+
+    assert response.status == 302
+    assert response.headers["Location"] == "/control"
 
 
 def test_the_alarm_says_for_whom_apart_from_the_eyebrow(app):
