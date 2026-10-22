@@ -34,7 +34,7 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 | --- | --- |
 | `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`; `persons`, el padrón como `{id, name, chat_id}`, y `people`, los chats como `{chat_id, name}` |
 | `POST /api/tele/hello` | registra la tele, o la actualiza, y cuenta como latido. Devuelve `{alias, caps}` |
-| `GET /api/tele/<alias>/poll` | cuenta como latido y devuelve `{"alarm": id o null, "reminders": [...], "orders": [...]}` |
+| `GET /api/tele/<alias>/poll` | cuenta como latido y devuelve `{"alarm": id o null, "reminders": [...], "orders": [...], "quiet": bool}` |
 | `POST /api/tele/<alias>/ack` | lo que la app dice de una orden, `{seq, state}`. Devuelve `{"accepted": bool}` |
 
 - **`hello` pasa por `_refuse_write`**: `application/json` y `Origin` igual a `Host`, si no
@@ -57,11 +57,13 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
   `board.for_name()` (la persona, «Todos» o null). Entra si sus `devices` incluyen el alias
   —sin equipos, el de siempre, `CAST_DEFAULT`— y sonó hace menos de `SNOOZE_WINDOW`, media
   hora. Hasta cinco (`MAX_REMINDERS`), de lo que sonó antes a lo último.
-- 🔴 **`reminders` sale vacío si `Hush.is_quiet()`**: descanso, silencio pedido o vacaciones.
-  Con la casa callada la tele no muestra nada sola, igual que con la alarma.
+- 🔴 **`quiet` es `Hush.is_quiet()`**: verdadero en descanso, silencio pedido o vacaciones;
+  sin `Hush`, falso. Se calcula una vez por `poll`, y con él `reminders` sale vacío: con la
+  casa callada la tele no muestra nada sola, igual que con la alarma.
 - **Deja de venir con «Hecho», posponer, `/cancelar` o al pasar la media hora**: el `poll`
   lee `awaiting_done` en cada pedido, no guarda nada propio.
-- **`reminders` es aditivo**: una app que no lo lee, como la `0.4.0`, sigue igual.
+- **`reminders` y `quiet` son aditivos**: una app que no los lee sigue igual; la `0.4.0` ignora
+  los dos y la `0.5.0`, `quiet`.
 - Otro método es un 405 con `Allow`; una ruta de `/api/tele/` que no es ninguna de las cuatro,
   un 404. Un error del servicio es un 500 genérico y se loguea.
 
@@ -268,7 +270,7 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
   o marcado se olvida cuando el `poll` deja de traerlo.
 - **Sin el permiso de superposición no se muestra**, y queda una vez en el log por recordatorio.
 - Un recordatorio ilegible se descarta al leer el `poll`, igual que una orden.
-- ⚠️ **Medido en la tele `habitacion`** (Chromecast con Google TV HD, Android 16, 2026-10-22),
+- ⚠️ **Medido en la tele `habitacion`** (Chromecast con Google TV HD, Android 14, 2026-10-22),
   con una prueba: el OK, las flechas y BACK llegan al cartel encima de Movistar y del inicio; el
   volumen no llega, lo maneja la tele; HOME no llega y el cartel queda arriba del inicio hasta
   otra tecla. Movistar no se pausa debajo.
