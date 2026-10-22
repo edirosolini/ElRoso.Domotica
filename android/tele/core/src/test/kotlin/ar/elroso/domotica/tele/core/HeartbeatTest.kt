@@ -13,6 +13,7 @@ class HeartbeatTest {
     private val alarms = mutableListOf<Long?>()
     private val handed = mutableListOf<Order>()
     private val repeated = mutableListOf<Order>()
+    private val reminders = mutableListOf<List<Reminder>>()
 
     private fun heartbeat(choice: TeleChoice = TeleChoice("comedor", 11)) = Heartbeat.forChoice(
         choice = choice,
@@ -23,6 +24,7 @@ class HeartbeatTest {
         onAlarm = { alarms += it },
         onOrders = { handed += it },
         onRepeated = { repeated += it },
+        onReminders = { reminders += listOf(it) },
     )
 
     private fun ready() = heartbeat()!!
@@ -139,5 +141,28 @@ class HeartbeatTest {
 
         assertEquals(listOf(Order(4, OrderKind.SHOW, "u"), Order(5, OrderKind.STOP)), handed)
         assertEquals(listOf(Order(4, OrderKind.SHOW, "u")), repeated)
+    }
+
+    @Test
+    fun handsTheRemindersOnlyWhenTheyChange() {
+        val beat = ready()
+        transport.reply(200, """{"alias": "comedor", "caps": []}""")
+        val first = """{"id": 9, "message": "Regar", "for": null, "nags": 0}"""
+        val nagged = """{"id": 9, "message": "Regar", "for": null, "nags": 1}"""
+        val other = """{"id": 10, "message": "Basura", "for": "Enano", "nags": 0}"""
+        listOf("[]", "[$first]", "[$first]", "[$nagged]", "[$nagged, $other]", "[$nagged, $other]", "[]")
+            .forEach { transport.reply(200, """{"alarm": null, "reminders": $it}""") }
+
+        repeat(8) { beat.tick() }
+
+        assertEquals(
+            listOf(
+                listOf(Reminder(9, "Regar", null, 0)),
+                listOf(Reminder(9, "Regar", null, 1)),
+                listOf(Reminder(9, "Regar", null, 1), Reminder(10, "Basura", "Enano", 0)),
+                emptyList(),
+            ),
+            reminders,
+        )
     }
 }

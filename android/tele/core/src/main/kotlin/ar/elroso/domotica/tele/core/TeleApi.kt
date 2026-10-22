@@ -27,7 +27,11 @@ sealed interface HelloResult {
 
 /** Cómo terminó un `poll`. */
 sealed interface PollResult {
-    data class Alarm(val id: Long?, val orders: List<Order> = emptyList()) : PollResult
+    data class Alarm(
+        val id: Long?,
+        val orders: List<Order> = emptyList(),
+        val reminders: List<Reminder> = emptyList(),
+    ) : PollResult
     data object NotRegistered : PollResult
     data class Failed(val reason: String) : PollResult
 }
@@ -77,7 +81,7 @@ class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
         return when (reply.status) {
             200 -> {
                 val poll = parse({ Protocol.parsePoll(reply.body) }) { return PollResult.Failed(it) }
-                PollResult.Alarm(poll.alarm, poll.orders)
+                PollResult.Alarm(poll.alarm, poll.orders, poll.reminders)
             }
             404 -> PollResult.NotRegistered
             else -> PollResult.Failed(describe(reply))

@@ -16,7 +16,8 @@ class UpdatePolicyTest {
         playing: Boolean = false,
         awake: Boolean = true,
         allowed: Boolean = true,
-    ) = policy.decide(release, alarm, playing, awake, allowed)
+        reminder: Boolean = false,
+    ) = policy.decide(release, alarm, playing, awake, allowed, reminder)
 
     @Test
     fun offersANewerVersion() {
@@ -96,5 +97,16 @@ class UpdatePolicyTest {
         policy.rejected(6)
 
         assertEquals(UpdateDecision.OFFER, decide(next.copy(versionCode = 7)))
+    }
+
+    @Test
+    fun notWithAReminderOnScreen() {
+        assertEquals(UpdateDecision.REMINDER, decide(reminder = true))
+    }
+
+    @Test
+    fun theAlarmGoesBeforeTheReminderAndTheReminderBeforeTheAudio() {
+        assertEquals(UpdateDecision.ALARM, decide(alarm = 7, reminder = true))
+        assertEquals(UpdateDecision.REMINDER, decide(reminder = true, playing = true))
     }
 }

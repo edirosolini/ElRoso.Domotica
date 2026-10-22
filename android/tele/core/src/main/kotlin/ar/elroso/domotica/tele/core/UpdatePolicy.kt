@@ -43,6 +43,7 @@ enum class UpdateDecision {
     REJECTED,
     RECENT,
     ALARM,
+    REMINDER,
     PLAYING,
     ASLEEP,
     NOT_ALLOWED,
@@ -60,11 +61,19 @@ class UpdatePolicy(
         const val RETRY_MS = 6 * 3_600_000L
     }
 
-    fun decide(release: Release, alarm: Long?, playing: Boolean, awake: Boolean, allowed: Boolean): UpdateDecision = when {
+    fun decide(
+        release: Release,
+        alarm: Long?,
+        playing: Boolean,
+        awake: Boolean,
+        allowed: Boolean,
+        reminder: Boolean = false,
+    ): UpdateDecision = when {
         release.versionCode <= own -> UpdateDecision.CURRENT
         release.versionCode == offers.rejected() -> UpdateDecision.REJECTED
         recent(release) -> UpdateDecision.RECENT
         alarm != null -> UpdateDecision.ALARM
+        reminder -> UpdateDecision.REMINDER
         playing -> UpdateDecision.PLAYING
         !awake -> UpdateDecision.ASLEEP
         !allowed -> UpdateDecision.NOT_ALLOWED

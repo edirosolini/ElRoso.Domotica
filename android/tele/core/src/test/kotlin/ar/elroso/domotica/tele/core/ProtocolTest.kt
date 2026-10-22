@@ -113,6 +113,37 @@ class ProtocolTest {
     }
 
     @Test
+    fun parsesPollReminders() {
+        val reply = Protocol.parsePoll(
+            """{"alarm": null, "orders": [], "reminders": [
+                {"id": 9, "message": "Sacar la basura", "for": "Enano", "nags": 2, "extra": 1},
+                {"id": 4, "message": "Regar", "for": null, "nags": 0}]}""",
+        )
+
+        assertEquals(listOf(Reminder(9, "Sacar la basura", "Enano", 2), Reminder(4, "Regar", null, 0)), reply.reminders)
+    }
+
+    @Test
+    fun pollWithoutRemindersHasNone() {
+        assertEquals(emptyList<Reminder>(), Protocol.parsePoll("""{"alarm": null}""").reminders)
+    }
+
+    @Test
+    fun pollSkipsBrokenReminders() {
+        val reply = Protocol.parsePoll(
+            """{"alarm": null, "reminders": [
+                {"id": "x", "message": "a", "nags": 0},
+                {"message": "b", "nags": 0},
+                {"id": 2, "nags": 0},
+                {"id": 3, "message": "c", "nags": "mucho"},
+                "d",
+                {"id": 5, "message": "e", "nags": 1}]}""",
+        )
+
+        assertEquals(listOf(Reminder(5, "e", null, 1)), reply.reminders)
+    }
+
+    @Test
     fun encodesTheAck() {
         assertEquals("""{"seq":11,"state":"received"}""", Protocol.encodeAck(11, AckState.RECEIVED))
         assertEquals("""{"seq":11,"state":"done"}""", Protocol.encodeAck(11, AckState.DONE))

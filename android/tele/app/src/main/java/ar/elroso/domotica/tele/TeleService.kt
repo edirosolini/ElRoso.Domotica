@@ -43,6 +43,7 @@ class TeleService : Service() {
     private var executor: ScheduledExecutorService? = null
     private var player: ExecutorService? = null
     private var updates: ScheduledExecutorService? = null
+    private var reminders: ReminderOverlay? = null
     private var foreground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -63,13 +64,17 @@ class TeleService : Service() {
             log = Tele::log,
         )
         val plays = Executors.newSingleThreadExecutor()
+        val overlay = ReminderOverlay(this, Tele.api) { Tele.choice(this).caller }
         val heartbeat = Heartbeat.forChoice(
             choice = choice,
             api = Tele.api,
             version = Tele.version,
             caps = { Tele.caps(this) },
             log = Tele::log,
-            onAlarm = Kiosk::alarmChanged,
+            onAlarm = { id ->
+                Kiosk.alarmChanged(id)
+                overlay.alarmChanged(id)
+            },
             onOrders = { orders -> orders.forEach { dispatch(it, runner, plays) } },
             onRepeated = { orders ->
                 orders.forEach {
@@ -77,6 +82,7 @@ class TeleService : Service() {
                     runner.resend(it)
                 }
             },
+            onReminders = overlay::remindersChanged,
         )
         if (heartbeat == null) {
             plays.shutdown()
@@ -88,6 +94,7 @@ class TeleService : Service() {
         val beats = Executors.newSingleThreadScheduledExecutor()
         executor = beats
         player = plays
+        reminders = overlay
         beats.execute(object : Runnable {
             override fun run() {
                 val delay = try {
@@ -99,7 +106,7 @@ class TeleService : Service() {
                 if (!beats.isShutdown) beats.schedule(this, delay, TimeUnit.MILLISECONDS)
             }
         })
-        updates = scheduleUpdates(runner)
+        updates = scheduleUpdates(runner, overlay)
         return START_STICKY
     }
 
@@ -116,11 +123,13 @@ class TeleService : Service() {
         player = null
         updates?.shutdownNow()
         updates = null
+        reminders?.close()
+        reminders = null
         super.onDestroy()
     }
 
     /** Agenda la búsqueda de versiones nuevas en un hilo propio, aparte del latido. */
-    private fun scheduleUpdates(runner: OrderRunner): ScheduledExecutorService {
+    private fun scheduleUpdates(runner: OrderRunner, overlay: ReminderOverlay): ScheduledExecutorService {
         val updater = Updater(
             api = Tele.api,
             urls = Tele.urls,
@@ -129,6 +138,7 @@ class TeleService : Service() {
             installer = SessionInstaller(this),
             target = File(cacheDir, "update.apk"),
             alarm = { Kiosk.alarm },
+            reminder = { overlay.visible },
             playing = { runner.playing },
             awake = { getSystemService(PowerManager::class.java).isInteractive },
             allowed = { Tele.canInstall(this) },
