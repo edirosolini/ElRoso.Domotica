@@ -78,6 +78,8 @@ consulta `/api/ringing/<id>` cada cinco segundos.
 - **Una alarma cuyo equipo está en `SCREEN_DEVICES` prende la vista en esa tele al sonar**
   (`Screens.ring()` al disparar y `light()` después del primer anuncio). Sin equipo, cuenta
   el `CAST_DEFAULT`.
+- **Un recordatorio no prende la vista**: con la app de la tele sale como cartel encima de lo
+  que haya, sin DashCast. Ver **Recordatorio**, en `.claude/rules/app-tele.md`.
 - 🔴 **Qué equipos tienen pantalla es config, no se deduce**: `SCREEN_DEVICES`, default
   `comedor,recamara,habitacion`. `model_name` no sirve para saberlo (ver **Gotchas**, en `.claude/rules/voz.md`).
 - **Mientras suena, lo que se restaura después de cada repetición es la vista de alarma**, no

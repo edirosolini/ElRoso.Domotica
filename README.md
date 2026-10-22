@@ -848,7 +848,7 @@ La primera vez que se abre, con el control:
 2. Elegir de quién es, de las personas de la casa; sin personas cargadas, de los chats.
 3. Aceptar las notificaciones y después «mostrar sobre otras apps». En Google TV abre la lista
    general: bajar hasta la app y activarla. Sin ese permiso la alarma suena en la tele pero no
-   se ve.
+   se ve, y no sale el cartel de los recordatorios.
 4. Darle a la app de Domótica «instalar apps desconocidas». Sin ese permiso no se puede
    actualizar sola.
 
@@ -864,7 +864,8 @@ la app y después cada hora; si hay una nueva, la baja, la verifica y abre la pa
 instalar: se confirma con el control. En el emulador el foco arrancó en «Cancelar», así que
 puede hacer falta moverse hasta el botón de instalar.
 
-No la ofrece con la tele apagada, mientras suena una alarma o mientras la tele está hablando; si
+No la ofrece con la tele apagada, mientras suena una alarma, con un recordatorio en pantalla o
+mientras la tele está hablando; si
 una versión falla al instalar —por ejemplo, firmada con otra clave— no la vuelve a ofrecer, y si
 se cancela no vuelve a
 preguntar por esa versión hasta seis horas después. Al terminar de instalar, la app vuelve a
@@ -873,6 +874,12 @@ desinstalar ni volver a elegir la tele.
 
 Cuando suena una alarma, la tele muestra la hora grande y abajo «OK para apagar»: el OK del
 control la apaga a nombre de la persona elegida. Sin persona elegida, el OK no la apaga.
+
+Un recordatorio que espera «Hecho» sale como cartel encima de lo que se esté mirando, incluso
+otra app, sin pausarla: el mensaje, para quién es y «OK para marcar hecho». El OK lo marca hecho
+a nombre de la persona elegida; cualquier otra tecla lo cierra hasta el próximo re-aviso. Sin
+persona elegida, el OK solo lo cierra. Con una alarma sonando no aparece, y en el horario de
+descanso o de vacaciones tampoco. HOME no lo cierra: queda arriba del inicio hasta otra tecla.
 
 ## Desarrollo
 
