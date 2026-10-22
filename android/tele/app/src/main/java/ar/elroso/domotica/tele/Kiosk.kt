@@ -22,6 +22,7 @@ object Kiosk {
     /** Anota la alarma del `poll` y se la pasa al kiosco abierto. */
     fun alarmChanged(id: Long?) {
         alarm = id
+        if (id != null) Dream.stop("suena la alarma $id")
         view?.get()?.onAlarm(id)
     }
 

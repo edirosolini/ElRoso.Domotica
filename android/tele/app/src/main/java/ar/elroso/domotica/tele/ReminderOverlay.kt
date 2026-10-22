@@ -137,6 +137,7 @@ class ReminderOverlay(
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
         ).apply { gravity = Gravity.CENTER }
+        Dream.stop("hay un recordatorio")
         try {
             windows.addView(frame, params)
         } catch (e: Exception) {

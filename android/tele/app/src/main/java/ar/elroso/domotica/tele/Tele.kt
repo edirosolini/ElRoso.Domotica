@@ -7,6 +7,7 @@ import ar.elroso.domotica.tele.core.AppVersion
 import ar.elroso.domotica.tele.core.Caps
 import ar.elroso.domotica.tele.core.Offer
 import ar.elroso.domotica.tele.core.OfferLog
+import ar.elroso.domotica.tele.core.ScreensaverSetting
 import ar.elroso.domotica.tele.core.TeleApi
 import ar.elroso.domotica.tele.core.TeleChoice
 import ar.elroso.domotica.tele.core.TeleUrls
@@ -21,11 +22,13 @@ object Tele {
     private const val KEY_OFFER_CODE = "offer_code"
     private const val KEY_OFFER_AT = "offer_at"
     private const val KEY_REJECTED = "rejected_code"
+    private const val SCREENSAVER = "screensaver_components"
 
     val urls = TeleUrls(BuildConfig.HOUSE_URL)
     val transport = HttpTransport()
     val api = TeleApi(transport, urls)
     val version = AppVersion(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+    private val screensaver = ScreensaverSetting(BuildConfig.APPLICATION_ID, KioskDream::class.java.name)
 
     fun log(event: String) {
         Log.i(TAG, event)
@@ -50,6 +53,16 @@ object Tele {
 
     /** Lo que la app sabe hacer hoy en este equipo. */
     fun caps(context: Context): List<String> = Caps.of(overlay = Settings.canDrawOverlays(context))
+
+    /** Loguea si el protector de pantalla elegido es el kiosco de la casa. */
+    fun logScreensaver(context: Context) {
+        val value = try {
+            Settings.Secure.getString(context.contentResolver, SCREENSAVER)
+        } catch (e: SecurityException) {
+            return log("protector: no se puede leer")
+        }
+        log(if (screensaver.isOurs(value)) "protector: es el de la casa" else "protector: es otro ($value)")
+    }
 
     /** Si el sistema deja a la app pedir instalar paquetes. */
     fun canInstall(context: Context): Boolean = context.packageManager.canRequestPackageInstalls()

@@ -52,6 +52,7 @@ class UpdaterTest {
     private var reminder = false
     private var playing = false
     private var awake = true
+    private var dreaming = false
     private val target by lazy { folder.root.resolve("update.apk") }
     private val updater by lazy {
         Updater(
@@ -65,6 +66,7 @@ class UpdaterTest {
             reminder = { reminder },
             playing = { playing },
             awake = { awake },
+            dreaming = { dreaming },
             allowed = { true },
             log = { logs += it },
         )
@@ -214,5 +216,31 @@ class UpdaterTest {
         assertEquals(1, source.fetched.size)
         assertEquals(1, installer.installed.size)
         assertEquals(true, logs.any { "reposo" in it })
+    }
+
+    @Test
+    fun notWithTheScreensaverOnButYesWhenItEnds() {
+        publish()
+        publish()
+        dreaming = true
+
+        updater.check()
+        dreaming = false
+        updater.check()
+
+        assertEquals(1, source.fetched.size)
+        assertEquals(1, installer.installed.size)
+        assertEquals("actualización: la 0.3.0 espera, el protector de pantalla está activo", logs.first())
+    }
+
+    @Test
+    fun aScreensaverThatStartsDuringTheDownloadStopsTheInstall() {
+        publish()
+        source.onFetch = { dreaming = true }
+
+        updater.check()
+
+        assertEquals(emptyList<String>(), installer.installed)
+        assertFalse(target.exists())
     }
 }

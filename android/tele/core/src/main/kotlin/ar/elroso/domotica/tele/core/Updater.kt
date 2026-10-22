@@ -26,6 +26,7 @@ class Updater(
     private val reminder: () -> Boolean,
     private val playing: () -> Boolean,
     private val awake: () -> Boolean,
+    private val dreaming: () -> Boolean,
     private val allowed: () -> Boolean,
     private val log: (String) -> Unit,
 ) {
@@ -66,7 +67,7 @@ class Updater(
 
     /** Si la política deja ofrecer esa versión ahora; si no, loguea por qué. */
     private fun ready(release: Release): Boolean {
-        val decision = policy.decide(release, alarm(), playing(), awake(), allowed(), reminder())
+        val decision = policy.decide(release, alarm(), playing(), awake(), allowed(), reminder(), dreaming())
         val why = when (decision) {
             UpdateDecision.OFFER -> return true
             UpdateDecision.CURRENT -> return false
@@ -76,6 +77,7 @@ class Updater(
             UpdateDecision.REMINDER -> "hay un recordatorio en pantalla"
             UpdateDecision.PLAYING -> "hay un audio en curso"
             UpdateDecision.ASLEEP -> "la tele está en reposo"
+            UpdateDecision.DREAMING -> "el protector de pantalla está activo"
             UpdateDecision.NOT_ALLOWED -> "falta el permiso de instalar apps"
         }
         log("actualización: la ${release.versionName} espera, $why")

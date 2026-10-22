@@ -46,6 +46,7 @@ enum class UpdateDecision {
     REMINDER,
     PLAYING,
     ASLEEP,
+    DREAMING,
     NOT_ALLOWED,
 }
 
@@ -68,6 +69,7 @@ class UpdatePolicy(
         awake: Boolean,
         allowed: Boolean,
         reminder: Boolean = false,
+        dreaming: Boolean = false,
     ): UpdateDecision = when {
         release.versionCode <= own -> UpdateDecision.CURRENT
         release.versionCode == offers.rejected() -> UpdateDecision.REJECTED
@@ -76,6 +78,7 @@ class UpdatePolicy(
         reminder -> UpdateDecision.REMINDER
         playing -> UpdateDecision.PLAYING
         !awake -> UpdateDecision.ASLEEP
+        dreaming -> UpdateDecision.DREAMING
         !allowed -> UpdateDecision.NOT_ALLOWED
         else -> UpdateDecision.OFFER
     }

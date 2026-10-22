@@ -17,7 +17,8 @@ class UpdatePolicyTest {
         awake: Boolean = true,
         allowed: Boolean = true,
         reminder: Boolean = false,
-    ) = policy.decide(release, alarm, playing, awake, allowed, reminder)
+        dreaming: Boolean = false,
+    ) = policy.decide(release, alarm, playing, awake, allowed, reminder, dreaming)
 
     @Test
     fun offersANewerVersion() {
@@ -108,5 +109,23 @@ class UpdatePolicyTest {
     fun theAlarmGoesBeforeTheReminderAndTheReminderBeforeTheAudio() {
         assertEquals(UpdateDecision.ALARM, decide(alarm = 7, reminder = true))
         assertEquals(UpdateDecision.REMINDER, decide(reminder = true, playing = true))
+    }
+
+    @Test
+    fun notWithTheScreensaverOn() {
+        assertEquals(UpdateDecision.DREAMING, decide(dreaming = true))
+    }
+
+    @Test
+    fun theScreensaverGoesAfterTheAudioAndBeforeThePermission() {
+        assertEquals(UpdateDecision.PLAYING, decide(playing = true, dreaming = true))
+        assertEquals(UpdateDecision.DREAMING, decide(dreaming = true, allowed = false))
+    }
+
+    @Test
+    fun aScreensaverIsNotCountedAsOffered() {
+        assertEquals(UpdateDecision.DREAMING, decide(dreaming = true))
+
+        assertEquals(UpdateDecision.OFFER, decide())
     }
 }
