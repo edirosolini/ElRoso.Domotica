@@ -66,9 +66,16 @@
     return rule.showDays && Boolean(checked);
   }
 
-  // Si un evento se ve con el filtro de esa persona: lo suyo y lo de todos; lo que no es de la casa, siempre.
+  // Si un evento se ve con el filtro de esa persona: lo suyo y lo de todos; los feriados, siempre.
   function visibleFor(props, personId) {
-    if (personId === null || props.source !== "casa") {
+    if (personId === null) {
+      return true;
+    }
+    if (props.source === "google") {
+      var persons = props.persons || [];
+      return persons.length === 0 || persons.indexOf(personId) !== -1;
+    }
+    if (props.source !== "casa") {
       return true;
     }
     return props.assignee === "all" ||

@@ -880,6 +880,214 @@ def test_the_kiosk_today_and_next_say_who_it_is_for(parts, tmp_path):
     assert screen["next"]["title"] == "📌 la pastilla · para China"
 
 
+# --- de quién es lo de Google ---
+
+PAPA_URL = "https://calendar.google.com/calendar/ical/papa-privado/basic.ics"
+FAMILY_URL = "https://calendar.google.com/calendar/ical/familia-privado/basic.ics"
+
+
+def ics(*events):
+    """Un calendario con eventos (uid, inicio, fin, título); fecha sola es de todo el día."""
+    body = []
+    for uid, starts, ends, summary in events:
+        if len(starts) == 8:
+            when = [f"DTSTART;VALUE=DATE:{starts}", f"DTEND;VALUE=DATE:{ends}"]
+        else:
+            when = [f"DTSTART;TZID=America/Argentina/Buenos_Aires:{starts}",
+                    f"DTEND;TZID=America/Argentina/Buenos_Aires:{ends}"]
+        body += ["BEGIN:VEVENT", f"UID:{uid}", *when, f"SUMMARY:{summary}", "END:VEVENT"]
+    return "\n".join(["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//prueba//ES", *body,
+                      "END:VCALENDAR", ""])
+
+
+def family_calendars(family, papa=None, calls=None):
+    """Un calendario `papa` y uno `familia`, con lo que se les pase."""
+    payloads = {PAPA_URL: ics(*(papa or [])), FAMILY_URL: ics(*family)}
+
+    def fetch(url):
+        if calls is not None:
+            calls.append(url)
+        return payloads[url]
+
+    return CalendarClient({"papa": PAPA_URL, "familia": FAMILY_URL}, timezone=TZ, fetch=fetch,
+                          cache_seconds=0)
+
+
+def family(tmp_path):
+    house = household(tmp_path)
+    return house, house.add("Papá"), house.add("Mamá")
+
+
+def owned_board(parts, house, calendar, clock=None, holidays=None):
+    return Board(store=parts["store"], history=parts["history"], clock=clock or Clock(),
+                 timezone=TZ, calendar=calendar, household=house, holidays=holidays)
+
+
+def google_by_label(found):
+    return {e["extendedProps"].get("label", e["title"]): e for e in found
+            if e["extendedProps"]["source"] == "google"}
+
+
+def test_a_google_prefix_says_whose_it_is(parts, tmp_path):
+    house, papa, _ = family(tmp_path)
+    calendar = family_calendars([("d@t", "20261006T100000", "20261006T110000", "[Papá] Dentista")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["title"] == "Dentista · para Papá"
+    assert event["extendedProps"]["persons"] == [papa.id]
+    assert event["extendedProps"]["for"] == "Papá"
+    assert event["extendedProps"]["label"] == "Dentista"
+    assert event["extendedProps"]["calendar"] == "familia"
+
+
+def test_a_calendar_named_after_a_person_is_hers(parts, tmp_path):
+    house, papa, _ = family(tmp_path)
+    calendar = family_calendars([], papa=[("f@t", "20261006T100000", "20261006T110000", "Fútbol")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["title"] == "Fútbol · para Papá"
+    assert event["extendedProps"]["persons"] == [papa.id]
+    assert event["extendedProps"]["for"] == "Papá"
+    assert event["extendedProps"]["label"] == "Fútbol"
+
+
+def test_the_prefix_wins_over_the_calendar(parts, tmp_path):
+    house, _, mama = family(tmp_path)
+    calendar = family_calendars([], papa=[("c@t", "20261006T100000", "20261006T110000",
+                                           "[Mamá] Cena")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["extendedProps"]["persons"] == [mama.id]
+    assert event["title"] == "Cena · para Mamá"
+
+
+def test_several_owners_go_together(parts, tmp_path):
+    house, papa, mama = family(tmp_path)
+    calendar = family_calendars([("c@t", "20261006T210000", "20261006T220000",
+                                  "[Papá][Mamá] Cena")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["extendedProps"]["persons"] == [papa.id, mama.id]
+    assert event["extendedProps"]["for"] == "Papá y Mamá"
+    assert event["title"] == "Cena · para Papá y Mamá"
+
+
+def test_an_all_day_google_event_has_its_owner_too(parts, tmp_path):
+    house, papa, _ = family(tmp_path)
+    calendar = family_calendars([("v@t", "20261007", "20261008", "[Papá] Viaje")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["allDay"] is True
+    assert event["title"] == "Viaje · para Papá"
+    assert event["extendedProps"]["persons"] == [papa.id]
+
+
+def test_a_title_that_is_only_the_prefix_says_for_whom(parts, tmp_path):
+    house, papa, _ = family(tmp_path)
+    calendar = family_calendars([("p@t", "20261006T100000", "20261006T110000", "[Papá]")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["title"] == "para Papá"
+    assert event["extendedProps"]["persons"] == [papa.id]
+    # Sin resto, la etiqueta ya dice para quién y `for` queda vacío.
+    assert (event["extendedProps"]["label"], event["extendedProps"]["for"]) == ("para Papá", None)
+
+
+def test_todos_is_for_everyone_without_persons(parts, tmp_path):
+    house, _, _ = family(tmp_path)
+    calendar = family_calendars([("a@t", "20261006T130000", "20261006T150000", "[Todos] Asado")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["title"] == "Asado · para todos"
+    assert event["extendedProps"]["persons"] == []
+    assert event["extendedProps"]["for"] == "todos"
+
+
+def test_a_name_out_of_the_padron_leaves_the_event_for_everyone(parts, tmp_path):
+    house, _, _ = family(tmp_path)
+    calendar = family_calendars([("e@t", "20261006T100000", "20261006T110000", "[Eze] Dentista")])
+
+    [event] = owned_board(parts, house, calendar).events(*WEEK)["events"]
+
+    assert event["title"] == "[Eze] Dentista"
+    assert event["extendedProps"] == {"source": "google", "calendar": "familia", "location": ""}
+
+
+def test_a_broken_padron_leaves_google_as_it_was(parts):
+    class Broken:
+        def list(self):
+            raise OSError("sin base")
+
+    calendar = family_calendars([], papa=[("d@t", "20261006T100000", "20261006T110000",
+                                           "[Papá] Dentista")])
+
+    [event] = owned_board(parts, Broken(), calendar).events(*WEEK)["events"]
+
+    assert event["title"] == "[Papá] Dentista"
+    assert "persons" not in event["extendedProps"]
+
+
+def test_the_kiosk_shows_whose_google_event_it_is(parts, tmp_path):
+    house, _, _ = family(tmp_path)
+    calendar = family_calendars([("d@t", "20261005T150000", "20261005T160000", "[Papá] Dentista")])
+
+    screen = owned_board(parts, house, calendar).screen()
+
+    assert screen["today"][0]["label"] == "Dentista"
+    assert screen["today"][0]["for"] == "Papá"
+    assert screen["next"]["title"] == "Dentista · para Papá"
+
+
+def test_a_padron_rename_shows_without_waiting_for_the_cache(parts, tmp_path):
+    house, papa, _ = family(tmp_path)
+    calls = []
+    calendar = family_calendars([("d@t", "20261006T100000", "20261006T110000", "[Viejo] Dentista")],
+                                calls=calls)
+    built = owned_board(parts, house, calendar)
+    assert built.events(*WEEK)["events"][0]["title"] == "[Viejo] Dentista"
+
+    house.rename(papa.id, "Viejo")
+    [event] = built.events(*WEEK)["events"]
+
+    assert len(calls) == 2
+    assert event["title"] == "Dentista · para Viejo"
+    assert event["extendedProps"]["persons"] == [papa.id]
+
+
+def test_the_cache_is_not_touched_by_building_the_events(parts, tmp_path):
+    house, papa, _ = family(tmp_path)
+    calendar = family_calendars([("d@t", "20261006T100000", "20261006T110000", "[Papá] Dentista")])
+    built = owned_board(parts, house, calendar)
+
+    first = built.events(*WEEK)["events"]
+    first[0]["extendedProps"]["persons"].append(99)
+    first[0]["title"] = "otra cosa"
+
+    [event] = built.events(*WEEK)["events"]
+    assert event["title"] == "Dentista · para Papá"
+    assert event["extendedProps"]["persons"] == [papa.id]
+
+
+def test_holidays_do_not_change_with_owners(parts, tmp_path):
+    house, _, _ = family(tmp_path)
+    calendar = family_calendars([])
+
+    found = owned_board(parts, house, calendar, holidays=with_holidays(parts)).events(
+        datetime(2026, 10, 12), datetime(2026, 10, 13)
+    )["events"]
+
+    [holiday] = found
+    assert holiday["extendedProps"] == {"source": "feriado", "kind": MOVABLE}
+    assert holiday["title"] == f"🏖 {COLUMBUS.name}"
+
+
 # --- la idea del menú ---
 
 
