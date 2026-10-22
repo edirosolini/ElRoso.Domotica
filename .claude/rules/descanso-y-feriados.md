@@ -45,8 +45,8 @@ reunión. `quiet.Hush` la implementa.
   sueltas no hay nada que mover y contestan que no está configurado, en vez de reventar.
 - **En descanso la tele no se prende sola**: ni la vista de alarma ni el kiosco después de un
   anuncio. `/pantalla` a pedido sí, porque mostrar no hace ruido. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
-- **En descanso, silencio o vacaciones el `poll` de la app de la tele no trae recordatorios**:
-  `TeleService` le pregunta a `Hush.is_quiet()`. Ver **Registro en el CT**, en `.claude/rules/app-tele.md`.
+- **En descanso, silencio o vacaciones el `poll` de la app de la tele no trae recordatorios
+  y lo informa con `"quiet": true`**: `TeleService` le pregunta a `Hush.is_quiet()` una vez por `poll`. Ver **Registro en el CT**, en `.claude/rules/app-tele.md`.
 
 ### Modo vacaciones
 
