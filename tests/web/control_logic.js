@@ -16,7 +16,8 @@ assert.strictEqual(control.targeted("clima", null, ""), "clima");
 // Quién soy: con padrón vacío, se eligen chats.
 var people = [{ chat_id: 42, name: "Eze" }, { chat_id: 77, name: "Chat 77" }];
 var chats = control.whoOptions({ people: people, persons: [] });
-assert.deepStrictEqual(chats, [{ key: "c:42", label: "Eze" }, { key: "c:77", label: "Chat 77" }]);
+assert.deepStrictEqual(chats, [{ key: "c:42", label: "Eze", name: "Eze" },
+  { key: "c:77", label: "Chat 77", name: "Chat 77" }]);
 assert.deepStrictEqual(control.whoOptions({ people: people }), chats);
 assert.deepStrictEqual(control.whoOptions({}), []);
 
@@ -24,19 +25,20 @@ assert.deepStrictEqual(control.whoOptions({}), []);
 var persons = [{ id: 3, name: "Abuela", chat_id: null }, { id: 5, name: "Eze", chat_id: 42 }];
 var options = control.whoOptions({ people: people, persons: persons });
 assert.deepStrictEqual(options, [
-  { key: "p:3", label: "Abuela (sin Telegram)", chat_id: null },
-  { key: "p:5", label: "Eze", chat_id: 42 },
+  { key: "p:3", label: "Abuela (sin Telegram)", name: "Abuela", chat_id: null },
+  { key: "p:5", label: "Eze", name: "Eze", chat_id: 42 },
 ]);
 
-// El guardado si sigue, uno viejo por número de chat, si no el primero.
+// El guardado si sigue, uno viejo por número de chat; sin guardado válido, nadie.
 assert.strictEqual(control.pickWho(chats, "c:77"), "c:77");
 assert.strictEqual(control.pickWho(chats, "77"), "c:77");
-assert.strictEqual(control.pickWho(chats, "c:99"), "c:42");
-assert.strictEqual(control.pickWho(chats, null), "c:42");
+assert.strictEqual(control.pickWho(chats, "c:99"), null);
+assert.strictEqual(control.pickWho(chats, null), null);
 assert.strictEqual(control.pickWho(options, "p:5"), "p:5");
 assert.strictEqual(control.pickWho(options, "42"), "p:5");
 assert.strictEqual(control.pickWho(options, "c:42"), "p:5");
-assert.strictEqual(control.pickWho(options, "p:9"), "p:3");
+assert.strictEqual(control.pickWho(options, "p:9"), null);
+assert.strictEqual(control.pickWho(options, null), null);
 assert.strictEqual(control.pickWho([], "42"), null);
 
 // Un botón viaja como data, lo escrito suelto como text, a nombre del chat o de la persona.
@@ -125,5 +127,38 @@ assert.strictEqual(control.isCalm([{ kind: "awaiting" }, { kind: "quiet" }]), fa
 assert.strictEqual(control.statusText([{ name: "vps", up: false }, { name: "web", up: true }]),
   "🔴 vps · ✅ web");
 assert.strictEqual(control.statusText([]), "");
+
+// «?soy=<persona>» elige a esa persona si está en el padrón.
+assert.strictEqual(control.whoFromQuery("?soy=5", options), "p:5");
+assert.strictEqual(control.whoFromQuery("?x=1&soy=3", options), "p:3");
+assert.strictEqual(control.whoFromQuery("?soy=9", options), null);
+assert.strictEqual(control.whoFromQuery("?soy=5x", options), null);
+assert.strictEqual(control.whoFromQuery("", options), null);
+assert.strictEqual(control.whoFromQuery("?soy=42", chats), null);
+
+// «Ahora» en calma dice que todo está en orden.
+assert.strictEqual(control.calmTitle([]), "Todo en orden");
+assert.strictEqual(control.calmTitle([{ kind: "quiet" }]), "Todo en orden");
+assert.strictEqual(control.calmTitle(items), "Ahora");
+
+// Lo urgente trae de quién es, y lo de quien eligió va primero dentro de cada tipo.
+assert.strictEqual(assigned[0].owner, "China");
+assert.strictEqual(items[0].owner, null);
+var mixed = [
+  { kind: "ringing", title: "a", owner: null }, { kind: "ringing", title: "b", owner: "Papá" },
+  { kind: "awaiting", title: "c", owner: "China" }, { kind: "awaiting", title: "d", owner: "Papá" },
+  { kind: "outage", title: "e", owner: null }, { kind: "quiet", title: "f", owner: null },
+];
+assert.deepStrictEqual(control.mineFirst(mixed, "Papá").map(function (item) { return item.title; }),
+  ["b", "a", "d", "c", "e", "f"]);
+assert.deepStrictEqual(control.mineFirst(mixed, null).map(function (item) { return item.title; }),
+  ["a", "b", "c", "d", "e", "f"]);
+
+// El timer rápido: minutos y qué; sin minutos válidos no manda nada.
+assert.strictEqual(control.timerCommand("10", " sacar la pizza "), "timer 10m sacar la pizza");
+assert.strictEqual(control.timerCommand("5", ""), "timer 5m");
+assert.strictEqual(control.timerCommand("", "pizza"), null);
+assert.strictEqual(control.timerCommand("0", "pizza"), null);
+assert.strictEqual(control.timerCommand("2.5", "pizza"), null);
 
 console.log("ok");

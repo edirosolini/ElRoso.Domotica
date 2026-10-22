@@ -70,6 +70,7 @@ PAGES = {
     "/control": "control.html",
 }
 FEEDS = ("/api/events", "/api/board")
+HOME = "/"
 RINGING = re.compile(r"/api/ringing/(\d+)")
 
 PEOPLE = "/api/people"
@@ -205,12 +206,15 @@ class WebApp:
             return self._tele(request, path)
 
         ringing = RINGING.fullmatch(path)
-        known = path in PAGES or path in FEEDS or ringing or path.startswith("/static/")
+        known = (path == HOME or path in PAGES or path in FEEDS or ringing
+                 or path.startswith("/static/"))
         if request.method != "GET":
             if known:
                 return _json(405, {"error": "método no permitido"}, Allow="GET")
             return _json(404, {"error": "no existe"})
 
+        if path == HOME:
+            return _respond(302, b"", TEXT, REVALIDATE, Location="/control")
         if path in PAGES:
             return self._page(PAGES[path])
         if path == "/api/events":

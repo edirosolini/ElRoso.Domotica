@@ -149,4 +149,11 @@ assert.deepStrictEqual(agenda.brokenCalendars(calendars,
 assert.deepStrictEqual(agenda.brokenCalendars(calendars, []), []);
 assert.deepStrictEqual(agenda.brokenCalendars(calendars, ["No pude leer la agenda."]), []);
 
+// «?nuevo=1» abre el formulario de un aviso nuevo.
+assert.strictEqual(agenda.opensNew("?nuevo=1"), true);
+assert.strictEqual(agenda.opensNew("?m=2026-10&nuevo=1"), true);
+assert.strictEqual(agenda.opensNew("?nuevo=0"), false);
+assert.strictEqual(agenda.opensNew("?nuevo=10"), false);
+assert.strictEqual(agenda.opensNew(""), false);
+
 console.log("ok");

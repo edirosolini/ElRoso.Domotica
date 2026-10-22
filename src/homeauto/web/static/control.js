@@ -29,18 +29,18 @@
       for (i = 0; i < persons.length; i++) {
         options.push({ key: "p:" + persons[i].id,
           label: persons[i].name + (persons[i].chat_id === null ? " (sin Telegram)" : ""),
-          chat_id: persons[i].chat_id });
+          name: persons[i].name, chat_id: persons[i].chat_id });
       }
       return options;
     }
     var people = (data && data.people) || [];
     for (i = 0; i < people.length; i++) {
-      options.push({ key: "c:" + people[i].chat_id, label: people[i].name });
+      options.push({ key: "c:" + people[i].chat_id, label: people[i].name, name: people[i].name });
     }
     return options;
   }
 
-  // El guardado si sigue; uno viejo, solo el número de chat, por su chat; si no, el primero.
+  // El guardado si sigue; uno viejo, solo el número de chat, por su chat; si no, null.
   function pickWho(options, saved) {
     var i;
     var chat = String(saved).replace(/^c:/, "");
@@ -55,7 +55,30 @@
         return options[i].key;
       }
     }
-    return options.length ? options[0].key : null;
+    return null;
+  }
+
+  // La persona que pide «?soy=<id>», si está entre las opciones; si no, null.
+  function whoFromQuery(search, options) {
+    var match = /(?:^\?|&)soy=(\d+)(?:&|$)/.exec(search || "");
+    if (!match) {
+      return null;
+    }
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].key === "p:" + match[1]) {
+        return options[i].key;
+      }
+    }
+    return null;
+  }
+
+  // El comando del timer rápido: minutos enteros y qué; null sin minutos válidos.
+  function timerCommand(minutes, what) {
+    var text = String(minutes || "").replace(/^\s+|\s+$/g, "");
+    if (!/^\d+$/.test(text) || parseInt(text, 10) < 1) {
+      return null;
+    }
+    return targeted("timer " + parseInt(text, 10) + "m", [], what);
   }
 
   // El cuerpo del POST: un botón viaja como data, lo escrito suelto como text.
@@ -151,28 +174,29 @@
     for (i = 0; i < ringing.length; i++) {
       items.push({ kind: "ringing", title: "⏰ " + ringing[i].message,
         meta: "Sonando " + sinceText(ringing[i].since, now) + forSuffix(ringing[i]),
-        actions: ringing[i].actions });
+        owner: ringing[i].for || null, actions: ringing[i].actions });
     }
     var awaiting = live.awaiting || [];
     for (i = 0; i < awaiting.length; i++) {
       items.push({ kind: "awaiting", title: "🔔 " + awaiting[i].message,
         meta: "Espera su «Hecho» · sonó " + sinceText(awaiting[i].since, now) +
           forSuffix(awaiting[i]),
-        actions: awaiting[i].actions });
+        owner: awaiting[i].for || null, actions: awaiting[i].actions });
     }
     if (live.snooze) {
       items.push({ kind: "snooze", title: "↻ " + live.snooze.message,
         meta: "Sonó " + sinceText(live.snooze.since, now) + " · se puede posponer" +
           forSuffix(live.snooze),
-        actions: live.snooze.actions });
+        owner: live.snooze.for || null, actions: live.snooze.actions });
     }
     var outages = live.outages || [];
     for (i = 0; i < outages.length; i++) {
       items.push({ kind: "outage", title: "🚨 " + outages[i].name + " no responde",
-        meta: "Caído " + sinceText(outages[i].since, now), actions: outages[i].actions });
+        meta: "Caído " + sinceText(outages[i].since, now), owner: null,
+        actions: outages[i].actions });
     }
     if (live.quiet) {
-      items.push({ kind: "quiet", title: quietTitle(live.quiet), meta: "",
+      items.push({ kind: "quiet", title: quietTitle(live.quiet), meta: "", owner: null,
         actions: live.quiet.actions });
     }
     return items;
@@ -186,6 +210,27 @@
       }
     }
     return true;
+  }
+
+  // El título de «Ahora»: «Todo en orden» si no hay nada más que el silencio.
+  function calmTitle(items) {
+    return isCalm(items) ? "Todo en orden" : "Ahora";
+  }
+
+  // Lo urgente con lo de esa persona primero dentro de cada tipo, sin cambiar el orden de los tipos.
+  function mineFirst(items, name) {
+    var sorted = [];
+    var i = 0;
+    while (i < items.length) {
+      var mine = [];
+      var rest = [];
+      var kind = items[i].kind;
+      for (; i < items.length && items[i].kind === kind; i++) {
+        (name && items[i].owner === name ? mine : rest).push(items[i]);
+      }
+      sorted = sorted.concat(mine, rest);
+    }
+    return sorted;
   }
 
   function statusText(status) {
@@ -202,6 +247,8 @@
       liveUrl: liveUrl, chatLabel: chatLabel, freeChats: freeChats, personBody: personBody,
       sinceText: sinceText, quietTitle: quietTitle, urgentItems: urgentItems,
       statusText: statusText, formCommand: formCommand, isCalm: isCalm,
+      whoFromQuery: whoFromQuery, timerCommand: timerCommand, calmTitle: calmTitle,
+      mineFirst: mineFirst,
     };
   }
   if (typeof document === "undefined") {
@@ -210,6 +257,8 @@
 
   // La clave de quien eligió el dispositivo: «p:<persona>» o «c:<chat>».
   var who = null;
+  var whoName = null;
+  var choices = [];
   var busy = false;
 
   function byId(id) {
@@ -275,8 +324,10 @@
   function renderLive(live) {
     var list = byId("urgent");
     clear(list);
-    var items = urgentItems(live);
+    var items = mineFirst(urgentItems(live), whoName);
     byId("urgent-card").classList.toggle("calm", isCalm(items));
+    byId("urgent-title").textContent = calmTitle(items);
+    showCommands(live.can_command !== false);
     for (var i = 0; i < items.length; i++) {
       var row = element("li", "urgent-item " + items[i].kind);
       var text = element("div", "urgent-text");
@@ -289,7 +340,17 @@
       list.appendChild(row);
     }
     byId("status").textContent = statusText(live.status);
+    byId("status-box").hidden = !(live.status || []).length;
     showProblem("");
+  }
+
+  // Con chat, el texto libre y los paneles; sin chat, solo «Ahora» y lo que puede hacer.
+  function showCommands(can) {
+    var blocks = document.querySelectorAll(".needs-chat");
+    for (var i = 0; i < blocks.length; i++) {
+      blocks[i].hidden = !can;
+    }
+    byId("chatless").hidden = can;
   }
 
   function poll() {
@@ -317,11 +378,12 @@
     answer.appendChild(body);
     answer.appendChild(buttonsFor(actions));
     answer.hidden = false;
+    answer.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   function setBusy(value) {
     busy = value;
-    var buttons = document.querySelectorAll("button.action, .cmd button, button.cmd");
+    var buttons = document.querySelectorAll("button.action, .cmd button, button.cmd, #timer button");
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].disabled = value;
     }
@@ -424,6 +486,37 @@
     });
   }
 
+  // Un ejemplo tocado se copia al texto libre, sin mandarse.
+  function wireExamples() {
+    var examples = document.querySelectorAll("[data-example]");
+    for (var i = 0; i < examples.length; i++) {
+      examples[i].addEventListener("click", copyExample(examples[i]));
+    }
+  }
+
+  function copyExample(button) {
+    return function () {
+      var input = byId("free-text");
+      input.value = button.getAttribute("data-example");
+      input.focus();
+    };
+  }
+
+  function wireTimer() {
+    byId("timer").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var minutes = byId("timer-minutes");
+      var command = timerCommand(minutes.value, byId("timer-what").value);
+      if (command === null) {
+        minutes.focus();
+        return;
+      }
+      send(command, false);
+      minutes.value = "";
+      byId("timer-what").value = "";
+    });
+  }
+
   // Marca el chip del equipo según su casilla.
   function markDevice(label, check) {
     return function () {
@@ -452,16 +545,42 @@
     return node;
   }
 
+  // La tarjeta «¿Quién sos?», con un botón por persona.
   function fillWho(options) {
-    var select = byId("who");
-    clear(select);
+    var box = byId("who-options");
+    clear(box);
     for (var i = 0; i < options.length; i++) {
-      select.appendChild(option(options[i].key, options[i].label));
+      var button = element("button", "who-option", options[i].label);
+      button.type = "button";
+      button.addEventListener("click", chooseWho(options[i].key));
+      box.appendChild(button);
     }
-    who = pickWho(options, readSaved());
-    if (who !== null) {
-      select.value = who;
+  }
+
+  function chooseWho(key) {
+    return function () {
+      choose(key);
+    };
+  }
+
+  // Elige a quien maneja la casa desde este dispositivo y lo guarda; null pregunta.
+  function choose(key) {
+    who = key;
+    whoName = null;
+    for (var i = 0; i < choices.length; i++) {
+      if (choices[i].key === key) {
+        whoName = choices[i].name;
+      }
     }
+    byId("who-card").hidden = who !== null;
+    byId("house").hidden = who === null;
+    byId("who-bar").hidden = who === null;
+    if (who === null) {
+      return;
+    }
+    save(who);
+    byId("who").textContent = whoName;
+    poll();
   }
 
   // Llena un desplegable con «Sin Telegram» y los chats que esa persona puede tomar.
@@ -572,8 +691,10 @@
           showProblem("Sin ALLOWED_CHAT_IDS la pantalla no maneja la casa.");
           return;
         }
+        choices = options;
         fillWho(options);
-        poll();
+        var asked = whoFromQuery(window.location.search, options);
+        choose(asked !== null ? asked : pickWho(options, readSaved()));
       })
       .catch(function () {
         showProblem(LOST);
@@ -581,13 +702,13 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    byId("who").addEventListener("change", function () {
-      who = byId("who").value;
-      save(who);
-      poll();
+    byId("who-change").addEventListener("click", function () {
+      choose(null);
     });
     wireCommands();
     wireFree();
+    wireExamples();
+    wireTimer();
     wirePersons();
     loadPeople();
     setInterval(poll, POLL_MS);

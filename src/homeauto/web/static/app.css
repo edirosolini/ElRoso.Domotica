@@ -325,7 +325,33 @@ button.ghost { color: var(--text); }
 .control .person-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
 .control .person-add input { grid-column: 1 / -1; }
 .control .person-add select { width: 100%; }
-/* Celular: el título con «Soy» arriba y los enlaces abajo. */
+.control .house { display: flex; flex-direction: column; gap: var(--space-4); }
+.control .needs-chat { display: flex; flex-direction: column; gap: var(--space-4); }
+.control .who-name { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.control .who-change { min-height: var(--tap); padding: 0 var(--space-2); border: 0; background: transparent; color: var(--accent-ink); font: inherit; text-decoration: underline; cursor: pointer; }
+.control .who-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+.control .who-option { min-height: 64px; padding: var(--space-3) var(--space-4); border: 0; border-radius: 16px; background: var(--accent-soft); color: var(--accent-ink); font-size: 20px; font-weight: 600; cursor: pointer; }
+.control .hint { margin: calc(var(--space-2) * -1) 0 0; color: var(--muted); font-size: 14px; }
+.control .install { margin: 0; text-align: center; }
+.control .free-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.control .free-card .hint { margin: 0; }
+.control .examples { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.control .example { min-height: var(--tap); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: 999px; background: var(--card-2); color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.control .timer { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) auto; gap: var(--space-2); }
+.control .timer button { min-height: var(--tap); min-width: 7.5rem; padding: 0 var(--space-4); border-radius: 12px; border: 0; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; cursor: pointer; }
+.control .timer button:disabled { opacity: .5; cursor: default; }
+.control .chatless { margin: 0; font-size: 17px; }
+.control .status-box summary, .control .fold > summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; }
+.control .status-box summary { color: var(--muted); font-size: 14px; min-height: 32px; }
+.control .fold > summary { font-size: 20px; font-weight: 600; }
+.control .status-box summary, .control .fold > summary { list-style: none; }
+.control .status-box summary::-webkit-details-marker, .control .fold > summary::-webkit-details-marker { display: none; }
+.control .status-box summary::before, .control .fold > summary::before { content: "▸"; margin-right: var(--space-2); }
+.control .status-box[open] summary::before, .control .fold[open] > summary::before { content: "▾"; }
+.control .fold[open] > summary { margin-bottom: var(--space-3); }
+.control .fold .panel .card-head h2 { font-size: 17px; }
+.control .settings .card { box-shadow: none; padding: var(--space-3) 0 0; }
+/* Celular: el título con quién sos arriba y los enlaces abajo. */
 @media (max-width: 640px) {
   .control .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2) var(--space-3);
     grid-template-areas: "title who" "links links"; }
@@ -336,6 +362,8 @@ button.ghost { color: var(--text); }
 /* Muy angosto: el botón de cada fila abajo del campo, a lo ancho. */
 @media (max-width: 400px) {
   .control .cmd.row { grid-template-columns: minmax(0, 1fr); }
+  .control .timer { grid-template-columns: 6.5em minmax(0, 1fr); }
+  .control .timer button { grid-column: 1 / -1; }
 }
 
 /* Celular angosto: el kiosco en una sola columna que se desplaza. */

@@ -149,9 +149,15 @@
     });
   }
 
+  // Si la dirección pide abrir el formulario de un aviso nuevo («?nuevo=1»).
+  function opensNew(search) {
+    return /(^\?|&)nuevo=1(&|$)/.test(search || "");
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       startView: startView,
+      opensNew: opensNew,
       brokenCalendars: brokenCalendars,
       isPastToday: isPastToday,
       toLocalInput: toLocalInput,
@@ -614,6 +620,9 @@
         device.appendChild(option(alias, alias));
       });
       byId("new-job").hidden = !state.writable;
+      if (state.writable && opensNew(window.location.search)) {
+        openEditor(null, null);
+      }
     }).catch(function () {
       state.writable = false;
     });

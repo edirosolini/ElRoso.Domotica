@@ -91,6 +91,7 @@ class ControlService:
         now = self.clock()
         return {
             "now": now.isoformat(),
+            "can_command": chat_id is not None,
             "ringing": self._ringing(),
             "awaiting": self._awaiting(now),
             "snooze": self._snooze(chat_id, now) if chat_id is not None else None,
