@@ -15,6 +15,7 @@ class Heartbeat private constructor(
     private val onOrders: (List<Order>) -> Unit,
     private val onRepeated: (List<Order>) -> Unit,
     private val onReminders: (List<Reminder>) -> Unit,
+    private val onQuiet: (Boolean) -> Unit,
 ) {
     companion object {
         /** Arma el latido de esa elección, o null si todavía no tiene tele. */
@@ -29,9 +30,10 @@ class Heartbeat private constructor(
             onOrders: (List<Order>) -> Unit = {},
             onRepeated: (List<Order>) -> Unit = {},
             onReminders: (List<Reminder>) -> Unit = {},
+            onQuiet: (Boolean) -> Unit = {},
         ): Heartbeat? {
             val alias = choice.alias?.takeIf { choice.ready } ?: return null
-            return Heartbeat(alias, api, version, caps, log, schedule, onAlarm, onOrders, onRepeated, onReminders)
+            return Heartbeat(alias, api, version, caps, log, schedule, onAlarm, onOrders, onRepeated, onReminders, onQuiet)
         }
     }
 
@@ -39,6 +41,7 @@ class Heartbeat private constructor(
     private var announced: List<String>? = null
     private var alarm: Long? = null
     private var reminders: List<Pair<Long, Int>> = emptyList()
+    private var quiet = false
     private val inbox = OrderInbox()
 
     /** Saluda si hace falta, si no consulta la alarma; devuelve los milisegundos hasta el próximo latido. */
@@ -73,6 +76,11 @@ class Heartbeat private constructor(
                 reminders = current
                 log("recordatorios en la tele: ${current.joinToString { "${it.first}/${it.second}" }}")
                 onReminders(result.reminders)
+            }
+            if (result.quiet != quiet) {
+                quiet = result.quiet
+                log(if (quiet) "la casa está callada" else "la casa ya no está callada")
+                onQuiet(quiet)
             }
             val sorted = inbox.sort(result.orders)
             if (sorted.repeated.isNotEmpty()) onRepeated(sorted.repeated)

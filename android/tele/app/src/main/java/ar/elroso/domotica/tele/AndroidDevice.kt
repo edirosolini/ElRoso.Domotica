@@ -44,6 +44,7 @@ class AndroidDevice(private val context: Context) : TeleDevice {
     override val maxVolume: Int get() = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
 
     override fun wake() {
+        Dream.stop("hay que despertar la tele")
         wakeLock.acquire(WAKE_HOLD_MS)
         // En Android 14 el wake lock no prende la pantalla: la prende la actividad con turnScreenOn.
         if (!power.isInteractive) {
@@ -113,6 +114,7 @@ class AndroidDevice(private val context: Context) : TeleDevice {
     }
 
     override fun show(url: String) {
+        Dream.stop("hay que mostrar una página")
         val intent = Intent(context, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_URL, url)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)

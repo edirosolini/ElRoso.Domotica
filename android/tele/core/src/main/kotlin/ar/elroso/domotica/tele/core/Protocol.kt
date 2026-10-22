@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
@@ -78,11 +79,12 @@ enum class AckState(val wire: String) {
     FAILED("failed"),
 }
 
-/** La respuesta de `poll`: la alarma que suena en la tele, o null, las órdenes pendientes y los recordatorios. */
+/** La respuesta de `poll`: la alarma que suena en la tele, o null, las órdenes pendientes, los recordatorios y si la casa está callada. */
 data class PollReply(
     val alarm: Long? = null,
     val orders: List<Order> = emptyList(),
     val reminders: List<Reminder> = emptyList(),
+    val quiet: Boolean = false,
 )
 
 /** La versión publicada en `tele.json`, con el sha256 en minúsculas y el tamaño en bytes. */
@@ -104,11 +106,12 @@ object Protocol {
 
     fun parseHelloReply(body: String): HelloReply = json.decodeFromString(HelloReply.serializer(), body)
 
-    /** Lee el `poll`; una orden o un recordatorio ilegible, o una orden de un tipo desconocido, se descarta. */
+    /** Lee el `poll`; una orden o un recordatorio ilegible, o una orden de un tipo desconocido, se descarta, y `quiet` ausente o ilegible es false. */
     fun parsePoll(body: String): PollReply {
         val root = json.parseToJsonElement(body) as? JsonObject ?: throw SerializationException("poll sin objeto")
         val alarm = (root["alarm"] as? JsonPrimitive)?.longOrNull
-        return PollReply(alarm, root.items("orders", Order.serializer()), root.items("reminders", Reminder.serializer()))
+        val quiet = (root["quiet"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: false
+        return PollReply(alarm, root.items("orders", Order.serializer()), root.items("reminders", Reminder.serializer()), quiet)
     }
 
     private fun <T> JsonObject.items(key: String, serializer: KSerializer<T>): List<T> =

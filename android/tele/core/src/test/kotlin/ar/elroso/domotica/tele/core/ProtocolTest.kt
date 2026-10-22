@@ -144,6 +144,22 @@ class ProtocolTest {
     }
 
     @Test
+    fun readsQuietFromThePoll() {
+        assertEquals(true, Protocol.parsePoll("""{"alarm": null, "quiet": true}""").quiet)
+        assertEquals(false, Protocol.parsePoll("""{"alarm": null, "quiet": false}""").quiet)
+    }
+
+    @Test
+    fun aMissingOrUnreadableQuietIsFalse() {
+        assertEquals(false, Protocol.parsePoll("""{"alarm": null}""").quiet)
+        assertEquals(false, Protocol.parsePoll("""{"alarm": null, "quiet": "si"}""").quiet)
+        assertEquals(false, Protocol.parsePoll("""{"alarm": null, "quiet": "true"}""").quiet)
+        assertEquals(false, Protocol.parsePoll("""{"alarm": null, "quiet": 1}""").quiet)
+        assertEquals(false, Protocol.parsePoll("""{"alarm": null, "quiet": null}""").quiet)
+        assertEquals(false, Protocol.parsePoll("""{"alarm": null, "quiet": [true]}""").quiet)
+    }
+
+    @Test
     fun encodesTheAck() {
         assertEquals("""{"seq":11,"state":"received"}""", Protocol.encodeAck(11, AckState.RECEIVED))
         assertEquals("""{"seq":11,"state":"done"}""", Protocol.encodeAck(11, AckState.DONE))

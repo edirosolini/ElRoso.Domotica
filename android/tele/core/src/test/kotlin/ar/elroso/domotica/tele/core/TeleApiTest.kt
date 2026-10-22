@@ -114,6 +114,13 @@ class TeleApiTest {
     }
 
     @Test
+    fun pollReadsQuiet() {
+        transport.reply(200, """{"alarm": null, "quiet": true}""")
+
+        assertEquals(PollResult.Alarm(null, quiet = true), api.poll("comedor"))
+    }
+
+    @Test
     fun ackPostsTheStateOfTheOrder() {
         transport.reply(200, """{"accepted": true}""")
 

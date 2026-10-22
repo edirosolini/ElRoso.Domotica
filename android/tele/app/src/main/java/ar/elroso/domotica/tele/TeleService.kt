@@ -83,6 +83,10 @@ class TeleService : Service() {
                 }
             },
             onReminders = overlay::remindersChanged,
+            onQuiet = { quiet ->
+                Dream.quiet = quiet
+                if (quiet) Dream.stop("la casa está callada")
+            },
         )
         if (heartbeat == null) {
             plays.shutdown()
@@ -91,6 +95,8 @@ class TeleService : Service() {
             return START_NOT_STICKY
         }
         Tele.log("servicio arrancado, versión ${Tele.version.name}")
+        Tele.logScreensaver(this)
+        Dream.reminder = { overlay.visible }
         val beats = Executors.newSingleThreadScheduledExecutor()
         executor = beats
         player = plays
@@ -125,6 +131,8 @@ class TeleService : Service() {
         updates = null
         reminders?.close()
         reminders = null
+        Dream.reminder = { false }
+        Dream.quiet = false
         super.onDestroy()
     }
 
@@ -141,11 +149,13 @@ class TeleService : Service() {
             reminder = { overlay.visible },
             playing = { runner.playing },
             awake = { getSystemService(PowerManager::class.java).isInteractive },
+            dreaming = { Dream.active },
             allowed = { Tele.canInstall(this) },
             log = Tele::log,
         )
         val checks = Executors.newSingleThreadScheduledExecutor()
         checks.scheduleWithFixedDelay({
+            Tele.logScreensaver(this)
             try {
                 updater.check()
             } catch (e: Exception) {

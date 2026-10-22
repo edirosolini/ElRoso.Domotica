@@ -14,6 +14,7 @@ class HeartbeatTest {
     private val handed = mutableListOf<Order>()
     private val repeated = mutableListOf<Order>()
     private val reminders = mutableListOf<List<Reminder>>()
+    private val quiet = mutableListOf<Boolean>()
 
     private fun heartbeat(choice: TeleChoice = TeleChoice("comedor", 11)) = Heartbeat.forChoice(
         choice = choice,
@@ -25,6 +26,7 @@ class HeartbeatTest {
         onOrders = { handed += it },
         onRepeated = { repeated += it },
         onReminders = { reminders += listOf(it) },
+        onQuiet = { quiet += it },
     )
 
     private fun ready() = heartbeat()!!
@@ -164,5 +166,18 @@ class HeartbeatTest {
             ),
             reminders,
         )
+    }
+
+    @Test
+    fun handsQuietOnlyWhenItChanges() {
+        val beat = ready()
+        transport.reply(200, """{"alias": "comedor", "caps": []}""")
+        listOf("false", "true", "true", "false").forEach { transport.reply(200, """{"alarm": null, "quiet": $it}""") }
+
+        repeat(5) { beat.tick() }
+
+        assertEquals(listOf(true, false), quiet)
+        assertEquals(1, logs.count { it == "la casa está callada" })
+        assertEquals(1, logs.count { it == "la casa ya no está callada" })
     }
 }

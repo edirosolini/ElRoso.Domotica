@@ -8,4 +8,6 @@
     <string name="reminder_waiting">⏳</string>
     <string name="reminder_done">✅ Hecho</string>
     <string name="reminder_failed">No se pudo marcar: %1$s</string>
+    <string name="dream_label">Kiosco de la casa</string>
+    <string name="dream_offline">Sin conexión con la casa</string>
 </resources>
