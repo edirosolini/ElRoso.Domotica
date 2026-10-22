@@ -1384,6 +1384,7 @@ def test_the_tele_app_registers_and_polls_on_the_one_database(wired, tmp_path, m
         "alarm": 17,
         "reminders": [{"id": 23, "message": "tomar la pastilla", "for": None, "nags": 0}],
         "orders": [],
+        "quiet": False,
     }
     assert main.TeleStore(tmp_path / "jobs.db").get("comedor").address == "192.168.68.20"
     assert tele.link.alive("comedor")
