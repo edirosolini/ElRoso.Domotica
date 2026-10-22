@@ -17,7 +17,7 @@ La app de la tele es una app Android propia para las teles de `SCREEN_DEVICES`. 
 uno está cerrada**: existen el lado del CT (registro, latido, consulta de qué mostrar y
 órdenes con su Cast de respaldo) y la app, que ejecuta las órdenes, muestra la alarma, la
 apaga con el OK del control, muestra el cartel de los recordatorios que esperan «Hecho» y se
-ofrece a actualizarse, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
+ofrece a actualizarse y hace de protector de pantalla, en **La app Android**. Cómo se baja el APK está en **App de la tele**, en
 `.claude/rules/web.md`.
 
 Tres piezas, sin nada de HTTP en las dos primeras:
@@ -141,7 +141,7 @@ la tele está viva **y** anunció la capacidad (`TeleLink.can()`); si no, va dir
 Vive en `android/tele/`, en Kotlin, y **se compila en Docker**: sin Android Studio ni SDK en
 la máquina. Paquete `ar.elroso.domotica.tele`.
 
-- **Dos módulos.** `:core` es JVM puro —protocolo, URLs, latido, backoff, elección, recordatorios, actualización— y es lo
+- **Dos módulos.** `:core` es JVM puro —protocolo, URLs, latido, backoff, elección, recordatorios, actualización, protector— y es lo
   único con tests (`android/tele/build.sh test`). `:app` es lo de Android: pantallas, servicio,
   arranque y el transporte HTTP. Lo que se puede probar sin Android va a `:core`.
 - 🔴 **`targetSdk` 34, no más.** Desde el 35 Android no deja arrancar desde `BOOT_COMPLETED`
@@ -273,6 +273,36 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
   volumen no llega, lo maneja la tele; HOME no llega y el cartel queda arriba del inicio hasta
   otra tecla. Movistar no se pausa debajo.
 
+**Protector de pantalla.** `KioskDream` es un `DreamService` que muestra el kiosco,
+`Tele.urls.kiosk`, cuando la tele queda inactiva. `Dream`, en `:app`, es el puente entre el
+servicio y el protector abierto; `DreamPolicy` y `ScreensaverSetting` están en `:core`.
+
+- 🔴 **Google TV no deja elegirlo en Ajustes**: se elige por adb en cada tele, y la app no lo
+  puede elegir sola. Ver **El protector de pantalla**, en el `README.md`.
+- **Lo corta lo que tiene que verse**: una alarma (`Kiosk.alarmChanged`), `wake()` y `show()`
+  de `AndroidDevice`, el cartel de recordatorio justo antes de mostrarse, y `quiet` del `poll`
+  (descanso, silencio pedido o vacaciones del CT; contrato en **Registro en el CT**). `stop()`
+  hace `finish()` en el hilo principal y lo loguea con el motivo.
+- **Si al arrancar ya hay alarma, cartel o `quiet`, no se queda**: `DreamPolicy` decide en ese
+  orden y hace `finish()` enseguida, con el motivo en el log.
+- **Sin tope de tiempo en la app**: lo que lo termina, además de una tecla o un corte, es el
+  apagado de pantalla de Google TV, que se recomienda fijar en unas cuatro horas.
+- **Sin red**: pantalla negra con «Sin conexión con la casa», que se mueve a otro lugar al azar
+  cada treinta segundos (`DRIFT_MS`). Reintenta el kiosco con
+  `BeatSchedule`, el mismo backoff del latido, y saca el cartel cuando carga.
+- 🔴 **`quiet` solo cuenta como booleano JSON**: ausente, `null`, `"true"`, `1` o una lista son
+  falso (`Protocol.parsePoll`). `Heartbeat` llama a `onQuiet` y lo loguea solo cuando cambia.
+- **El log dice si el protector elegido es el de la casa**: «protector: es el de la casa», «es
+  otro (<valor>)» o «no se puede leer», según `screensaver_components`, al arrancar el servicio,
+  a los treinta segundos y después cada hora, con el chequeo de actualización.
+  `ScreensaverSetting` acepta la forma corta `pkg/.Cls` y la larga, en una lista con comas.
+- ⚠️ **Medido en la tele `habitacion`** (Chromecast con Google TV HD, Android 14, 2026-10-22),
+  con una prueba: arranca solo por inactividad, una tecla lo corta, y con video reproduciendo
+  no arranca.
+- ⚠️ **Sin verificar en una tele real**: que el audio de un `play` salga bien después de cortar
+  el protector en `wake()`; cómo se comporta en `comedor` (Google TV Streamer); qué hace la tele
+  cuando el protector termina por `quiet`.
+
 **Actualización.** `Updater`, en `:core`, busca una versión nueva en `/app/tele.json` del CT
 (contrato en **App de la tele**, `.claude/rules/web.md`) y la ofrece con `SessionInstaller`.
 
@@ -283,18 +313,19 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
   (`RETRY_MS`, guardado por versión en `SharedPreferences`, así que sobrevive un reinicio);
   `ALARM` con una alarma en la tele (`Kiosk.alarm`); `REMINDER` con un cartel de recordatorio
   en pantalla (`ReminderOverlay.visible`); `PLAYING` con un `play` en curso
-  (`OrderRunner.playing`); `ASLEEP` con la tele en reposo; `NOT_ALLOWED` sin el permiso de
+  (`OrderRunner.playing`); `ASLEEP` con la tele en reposo; `DREAMING` con el protector de la
+  casa en pantalla (`Dream.active`); `NOT_ALLOWED` sin el permiso de
   instalar apps; si no, `OFFER`. Lo que no es `OFFER` ni `CURRENT` se loguea con el motivo.
 - 🔴 **Con la tele en reposo no se ofrece** (`ASLEEP`, `PowerManager.isInteractive`): la pantalla
   de confirmar quedaría abierta sin nadie que la vea. No cuenta como oferta, así que se vuelve a
-  mirar en el chequeo siguiente.
+  mirar en el chequeo siguiente. **Con el protector, lo mismo** (`DREAMING`).
 - **Antes de abrir una sesión nueva se abandonan las propias que quedaron abiertas**
   (`SessionInstaller.abandonOpen()`), para que no se apilen pantallas de confirmar.
 - **Una falla definitiva no se vuelve a ofrecer**: `InstallReceiver` guarda el `versionCode`
   (`rejected_code`) ante `STATUS_FAILURE_INCOMPATIBLE`, `_CONFLICT` o `_INVALID` —por ejemplo,
   un APK firmado con otra clave—. Una versión mayor sí se ofrece. Una cancelación, falta de
   espacio u otra falla siguen la regla de las seis horas.
-- 🔴 **Alarma, recordatorio, audio y reposo se miran dos veces**: antes de bajar y otra vez
+- 🔴 **Alarma, recordatorio, audio, reposo y protector se miran dos veces**: antes de bajar y otra vez
   después de verificar, justo antes de abrir la instalación. La pantalla de confirmar nunca tapa
   una alarma ni un cartel que empezó durante la descarga.
 - **Baja a `cacheDir/update.apk` con tope de `size`** bytes: si pasa, corta. Después
@@ -323,7 +354,7 @@ de nuevo.
   en un volumen de Docker.
 - **`versionCode` y `versionName` van a mano en `version.properties`.** Una versión nueva
   para instalar encima sube el `versionCode`, y es lo único que mira `UpdatePolicy`. Hoy es la
-  `0.5.0`, `versionCode` 8.
+  `0.6.0`, `versionCode` 9.
 - **Ícono y banner.** El ícono es `@mipmap/ic_launcher`, la R de El Roso como ícono adaptativo
   (la R en `ic_launcher_foreground` sobre el naranja de `ic_launcher_background`). El banner
   del launcher de la tele es `drawable/banner`, vectorial: la R blanca sobre un gradiente

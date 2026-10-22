@@ -856,6 +856,41 @@ Después muestra la pantalla de la casa y, al prender la tele, se conecta sola c
 elección queda guardada. Para cambiarla, bajar con el control hasta «Cambiar tele o persona»,
 abajo a la derecha; BACK vuelve sin cambiar nada.
 
+### El protector de pantalla
+
+La app trae un protector de pantalla, «Kiosco de la casa», que muestra la pantalla de la casa
+cuando la tele queda sin usar. Google TV no deja elegirlo en Ajustes: se elige por adb, una vez
+en cada tele.
+
+```bash
+adb shell settings put secure screensaver_components ar.elroso.domotica.tele/.KioskDream
+adb shell settings put secure screensaver_enabled 1
+adb shell settings put secure screensaver_activate_on_sleep 1
+```
+
+Para volver al de Google:
+
+```bash
+adb shell settings put secure screensaver_components com.google.android.apps.tv.dreamx/.service.Backdrop
+```
+
+La app no le pone tope de tiempo: conviene fijar el apagado de pantalla de Google TV, en los
+ajustes de energía, en unas cuatro horas.
+
+Para probarlo sin esperar, bajar el tiempo de inactividad a treinta segundos y después
+devolverlo a diez minutos (`cmd dreams` pide root):
+
+```bash
+adb shell settings put system screen_off_timeout 30000
+adb shell settings put system screen_off_timeout 600000
+```
+
+Una tecla del control lo corta, y con un video reproduciendo no arranca. También se va solo
+cuando suena una alarma, sale un recordatorio, la casa habla por esa tele o empieza el horario
+de descanso, el silencio pedido o el modo vacaciones; si alguna de esas cosas ya está al
+arrancar, no se queda. Sin conexión con el CT muestra una pantalla negra con «Sin conexión con
+la casa», que cambia de lugar cada treinta segundos, y vuelve a intentar sola.
+
 ### Actualizar una tele
 
 Se sube el `versionCode` en `version.properties`, se compila y se publica con
@@ -864,8 +899,8 @@ la app y después cada hora; si hay una nueva, la baja, la verifica y abre la pa
 instalar: se confirma con el control. En el emulador el foco arrancó en «Cancelar», así que
 puede hacer falta moverse hasta el botón de instalar.
 
-No la ofrece con la tele apagada, mientras suena una alarma, con un recordatorio en pantalla o
-mientras la tele está hablando; si
+No la ofrece con la tele apagada, mientras suena una alarma, con un recordatorio en pantalla,
+mientras la tele está hablando o con el protector de pantalla; si
 una versión falla al instalar —por ejemplo, firmada con otra clave— no la vuelve a ofrecer, y si
 se cancela no vuelve a
 preguntar por esa versión hasta seis horas después. Al terminar de instalar, la app vuelve a
