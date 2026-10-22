@@ -52,10 +52,11 @@ separada del transporte HTTP y se prueba sin red.
 
 | Ruta | Qué es |
 | --- | --- |
-| `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes |
+| `/agenda` | FullCalendar con lo de la casa y lo de Google, en mes, semana, día y lista. `?m=AAAA-MM` abre en ese mes; `?nuevo=1`, si la pantalla escribe, abre el formulario de un aviso nuevo (`opensNew()`) |
 | `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy, la idea del menú y las dos listas. `?ver=1` es solo lectura |
 | `/alarma?job=<id>` | la vista de una alarma que suena, para la tele. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md` |
-| `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre y los comandos en paneles. Ver **Control desde la web** |
+| `/` | un 302 a `/control`; otro método es 405 |
+| `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre, «A mano» y los comandos en paneles. `?soy=<id>` elige a esa persona del padrón y la guarda. Ver **Control desde la web** |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
 | `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje, para quién (`for`) y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima, `meal` y listas como `[{id, text}]` |
@@ -66,7 +67,7 @@ separada del transporte HTTP y se prueba sin red.
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
 | `POST /api/lists/<lista>` | suma a compras o pendientes lo escrito, partido como en el chat |
 | `POST /api/lists/<lista>/<id>/done` | tacha un ítem de compras o pendientes |
-| `GET /api/live?chat=<id>` o `?person=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat o esa persona |
+| `GET /api/live?chat=<id>` o `?person=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat o esa persona, y si puede mandar comandos (`can_command`) |
 | `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` o de `person_id` |
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 | `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader o con un explorador de archivos con acceso a la red. Ver **App de la tele** |
@@ -425,10 +426,21 @@ sabe de HTTP; `WebApp._control()` la rutea.
   (`/hecho 3`, `/callar`, `/borrar`, `/confirmar`), los nombres que no existen y los alias que
   viven en `main.py` y no en `_dispatch()` (`/tiempo`, `/llama`, `/siesta`, `/stop`,
   `/volume`, `/pregunta`, `/convertir`, `/donde`, `/start`, `/help`), que los toma el router.
-- **Se elige quién sos en «Soy»**, con `/api/people`: las personas del padrón, y con el padrón
-  vacío, los chats de `ALLOWED_CHAT_IDS`. Una persona sin chat sale «(sin Telegram)». La
-  elección queda en el `localStorage` del dispositivo como `p:<id>` o `c:<chat>`; una vieja,
-  solo el número de chat, pasa a la persona de ese chat.
+- **Se elige quién sos en la tarjeta «¿Quién sos?»**, un botón por opción de `/api/people`:
+  las personas del padrón, y con el padrón vacío, los chats de `ALLOWED_CHAT_IDS`. Una persona
+  sin chat sale «(sin Telegram)». La elección queda en el `localStorage` del dispositivo como
+  `p:<id>` o `c:<chat>`; una vieja, solo el número de chat, pasa a la persona de ese chat.
+- 🔴 **Sin elección guardada que siga valiendo, la página no elige por nadie**: `pickWho()`
+  devuelve `null` y se ve solo «¿Quién sos?». Antes caía en la primera opción, y un
+  dispositivo nuevo manejaba la casa a nombre de quien encabezara la lista. Elegido, arriba
+  dice «<nombre> · cambiar», y «cambiar» vuelve a preguntar.
+- **`?soy=<id>` elige a esa persona y la guarda** (`whoFromQuery()`), y pisa lo guardado: es
+  el enlace de cada persona. Un id que no está en el padrón, o un chat, no elige nada.
+- **`/api/live` trae `can_command`**: si quien llama tiene chat. Con `false` la página esconde
+  todo lo `.needs-chat` —texto libre, ejemplos, «A mano», paneles, «Más» y «Ajustes»— y
+  muestra «Ahora» con «Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás,
+  pedíselo a Papá o Mamá.». 🔴 **Esconder no es la defensa**: el 403 de `/api/command` sigue
+  siéndolo.
 - **`ControlService._caller()` resuelve a nombre de quién se corre.** `chat_id` y `person_id`
   juntos es un 400. Sin `ALLOWED_CHAT_IDS`, con un chat fuera de la lista o con una persona que
   no existe, `/api/live` y `/api/command` contestan 403 «Elegí quién sos.». Una persona con
@@ -462,23 +474,41 @@ sabe de HTTP; `WebApp._control()` la rutea.
   pospondría lo que no es.
 - **«Confirmar» solo si el chat elegido es de `ALERT_CHAT_IDS`**, que es a quien
   `Monitor.acknowledge()` deja confirmar. La caída se ve igual para todos.
+- **La respuesta se lleva a la vista** (`scrollIntoView`) al mandar y al contestar: en el
+  celular quedaba abajo de los paneles, fuera de la pantalla.
+- **El texto libre tiene ejemplos tocables** (`data-example`) y la ayuda «Escribilo como se lo
+  dirías a alguien.». Tocar un ejemplo lo copia al campo **sin mandarlo**.
+- **«A mano» (`#quick`) junta lo de todos los días**: «Compras», «➕ Nuevo aviso» (un enlace
+  a `/agenda?nuevo=1`), Timer, «Agregar a compras», «🤫 Silencio» y «Decir» con los chips de
+  equipos. El timer arma `timer <N>m <qué>` (`timerCommand()`): sin minutos enteros mayores a
+  cero no se manda. «Silencio» vacío dice cómo está la casa.
 - **El panel «🛒 Listas» tiene «Menú»** al lado de «Compras» y «Pendientes»: corre `menu`
   como `/menu` en Telegram, con sus botones. Ver **Menú semanal**, en `.claude/rules/consultas.md`.
-- **Los paneles van en tres columnas armadas a mano** (`.panel-col`): Casa; Consultas y
-  Listas; Programado y Personas. Cada columna apila sus tarjetas sin estirarlas al alto de la
-  vecina. Cada fila campo y botón es una grilla, y por debajo de 400 px el botón baja a lo
-  ancho.
+- **Los paneles van en tres columnas armadas a mano** (`.panel-col`): Casa y Programado;
+  Consultas; Listas. Cada columna apila sus tarjetas sin estirarlas al alto de la vecina. Cada
+  fila campo y botón es una grilla, y por debajo de 400 px el botón baja a lo ancho.
+- **Lo de menos uso va plegado en `<details>`**: «Más» —Equipo de siempre, Equipos, Volumen,
+  Pantalla, Turnos, Pastillas, Calcular y Traducir— y, al final, «⚙️ Ajustes de la casa» con
+  «🧹 Depurar» y «👪 Personas». Las etiquetas dicen qué hacen: «Cortar lo que suena»
+  (`parar`), «Apagar el equipo» (`apagar`), «Equipo de siempre» (`usar`).
 - 🔴 **«Pastillas» y «Turnos» son un solo formulario cada uno, sin `data-need`**: vacío
   consulta (`pastillas`, `turnos`), con texto carga. `formCommand()` decide; sin dato
   obligatorio vacío devuelve `null` y no se manda nada.
-- **Lo que explica un campo va en su `title`**; el placeholder queda corto.
+- **Lo que explica un campo va en un `.hint` visible abajo**, no en `title`: en el celular y
+  en la tele un `title` no se ve nunca. El placeholder queda corto.
 - **«Ahora» se compacta en calma** (`isCalm()`): si lo único es el silencio, la tarjeta pasa
-  a una fila.
-- **Los equipos de «Casa» son chips con estado**: el tildado se marca con la clase `on`.
+  a una fila y el título dice «Todo en orden» (`calmTitle()`). El estado de los chequeos va
+  plegado en «Chequeos de la casa», y sin chequeos no se muestra.
+- **El orden de «Ahora» es por tipo**: sonando, espera «Hecho», posponer, caídas y silencio.
+  Dentro de cada tipo, lo que es para la persona elegida va primero (`mineFirst()`, por el
+  `for`); el orden de los tipos no cambia.
+- **Los equipos de «A mano» son chips con estado**: el tildado se marca con la clase `on`, y
+  valen para todo comando con `data-target`, también los de «Casa» y «Más».
 - **En «👪 Personas», un chat que todavía no le escribió al bot se lista «Todavía no escribió
   (·NNNN)»**, con los últimos cuatro dígitos (`chatLabel()`). Borrar es un botón de peligro.
-- **El panel «⏰ Programado» tiene «🧹 Depurar»**: corre `depurar`, el mismo comando, con sus botones. Se ve para todos; quién
-  puede usarlo lo decide `Commands`, no la página. Ver `.claude/rules/depurador.md`.
+- **«⚙️ Ajustes de la casa» tiene «🧹 Depurar»**: corre `depurar`, el mismo comando, con sus
+  botones. Se ve para todo el que tiene chat; quién puede usarlo lo decide `Commands`, no la
+  página. Ver `.claude/rules/depurador.md`.
 - **Un solo botón de silencio, según el estado**: «Cortar vacaciones» en vacaciones, «Hablar
   ya» con un silencio pedido y si no «Silenciar 1 h».
 - 🔴 **`/api/live` no manda el `detail` de los chequeos**, solo nombre y si está arriba: el
@@ -489,11 +519,12 @@ sabe de HTTP; `WebApp._control()` la rutea.
   de la agenda, con más alcance.
 - **Manifest e íconos para «Agregar a pantalla de inicio»**, sobre http y **sin service
   worker**: una PWA instalable de verdad y el micrófono piden HTTPS, y la casa sirve http.
-- **Se llega desde `/agenda` y `/pantalla`**; el enlace del kiosco se esconde con `?ver=1`, y
+  Después de elegir, al pie, la página dice cómo: «⋮ → Agregar a pantalla principal».
+- **Se llega desde `/agenda` y `/pantalla`, o por `/` a secas**, que redirige; el enlace del kiosco se esconde con `?ver=1`, y
   lo que se castea sigue siendo `/pantalla?ver=1`.
 - ⚠️ **La parte DOM de `control.js` no tiene test automático.** `control_logic.js` cubre la
-  lógica pura —el comando con los equipos, a quién elegir, el cuerpo del POST, el orden de lo
-  urgente—; lo demás se prueba a mano en el navegador, o con las capturas.
+  lógica pura —el comando con los equipos, a quién elegir y `?soy=`, el timer, el cuerpo del
+  POST, el orden de lo urgente y su título—; lo demás se prueba a mano en el navegador, o con las capturas.
 
 **Capturas de la web.** `deploy/capture-ui.sh` saca las páginas con un Chrome o Chromium
 headless, en cinco tamaños (celular, tablet, PC, tele 1080p y tele 720p), en tema claro y
@@ -504,7 +535,7 @@ oscuro, y las largas enteras. Solo hace GET: no escribe nada en la casa. Uso y v
 
 `people.Household` sobre `PersonStore` (tabla `persons`) es quién vive en la casa, tenga o no
 Telegram. `PeopleStore` (`people`) sigue siendo otra cosa: el nombre que el chat muestra en
-Telegram. Se carga desde la tarjeta «👪 Personas» de `/control`.
+Telegram. Se carga desde la tarjeta «👪 Personas», en «⚙️ Ajustes de la casa» de `/control`.
 
 - **Escribir exige pantalla escribible**: `POST /api/persons` y `PUT`/`DELETE
   /api/persons/<id>` pasan por `_refuse_write` y sin `ALLOWED_CHAT_IDS` son 403. Otro método es

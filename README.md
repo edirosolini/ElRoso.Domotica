@@ -658,10 +658,13 @@ dispositivo de la casa, y una cuarta para la tele:
 ```
 http://192.168.68.10:8099/agenda              # la agenda, en la última vista elegida
 http://192.168.68.10:8099/agenda?m=2026-11    # abre en ese mes
+http://192.168.68.10:8099/agenda?nuevo=1      # abre con el formulario de un aviso nuevo
 http://192.168.68.10:8099/pantalla            # el kiosco, para dejar fijo en una pantalla
 http://192.168.68.10:8099/pantalla?ver=1      # el kiosco solo para mirar, como va a la tele
 http://192.168.68.10:8099/alarma?job=7        # la alarma #7 mientras suena; después, el kiosco
 http://192.168.68.10:8099/control             # manejar la casa sin Telegram
+http://192.168.68.10:8099/control?soy=3       # el control, ya elegida la persona 3 del padrón
+http://192.168.68.10:8099                     # lo mismo que /control
 ```
 
 **La agenda** junta lo de la casa y lo de Google Calendar. Arriba están el mes o la semana que
@@ -739,36 +742,54 @@ Para dejarlo fijo en una tablet o un teléfono viejo:
 2. Que no se apague la pantalla y que quede enchufado al cargador se configura en el
    dispositivo, no acá.
 
-**El control** hace desde el navegador lo mismo que Telegram. Se llega desde el enlace
-«Control» de la agenda y del kiosco (el kiosco de solo lectura, `?ver=1`, no lo muestra).
+**El control** hace desde el navegador lo mismo que Telegram, y es por donde maneja la casa
+quien no tiene Telegram o cuando Telegram no anda. Se llega con `http://192.168.68.10:8099`
+a secas, que lleva a `/control`, o desde el enlace «Control» de la agenda y del kiosco (el
+kiosco de solo lectura, `?ver=1`, no lo muestra).
 
-1. Arriba, en «Soy», elegir quién sos: las personas de la casa o, si todavía no se cargó
-   ninguna, los chats de Telegram. El dispositivo lo recuerda. Todo lo que hagas va a tu
-   nombre, y a los demás chats les llega como «<tu nombre> (pantalla)», igual que si
-   hubieras tocado el botón en Telegram. Alguien sin Telegram solo puede apagar una alarma o
-   marcar «Hecho», y eso les llega a todos los chats.
-2. **Ahora** muestra lo que pide atención, con sus botones: la alarma que suena («🔕 Apagar»),
+1. La primera vez pregunta **«¿Quién sos?»**, con un botón por persona de la casa o, si
+   todavía no se cargó ninguna, por chat de Telegram. Hasta elegir no se ve nada más. El
+   dispositivo lo recuerda, y arriba queda «<tu nombre> · cambiar». Un enlace con
+   `?soy=<número>` ya elige a esa persona y sirve para pasarle a cada uno su enlace. El número
+   es el `id` de la persona en el padrón; la página no lo muestra, se lee en `/api/people`
+   (`persons`). Todo lo que hagas va a tu nombre, y a los demás chats
+   les llega como «<tu nombre> (pantalla)», igual que si hubieras tocado el botón en Telegram.
+2. Alguien **sin Telegram** ve solo «Ahora» y el aviso «Desde acá podés apagar una alarma y
+   marcar «Hecho». Para lo demás, pedíselo a Papá o Mamá.». Lo que apague o marque les llega
+   a todos los chats.
+3. **Ahora** muestra lo que pide atención, con sus botones: la alarma que suena («🔕 Apagar»),
    lo que espera su «Hecho», lo último que sonó en tu chat si todavía se puede posponer, las
    caídas sin confirmar («✅ Confirmar», solo si tu chat recibe las alertas) y un botón para
-   silenciar la casa, hacerla hablar ya o cortar las vacaciones. Abajo, el estado de cada
-   chequeo. Se actualiza cada cinco segundos.
-3. El campo de texto acepta lo mismo que un mensaje sin barra en Telegram («poné una alarma a
-   las 7»), y los paneles tienen los comandos con sus campos. Los equipos tildados en «Casa»
-   van como `en <equipo>`. Si falta un dato, pregunta como en el chat, y la pregunta se puede
-   contestar desde acá o desde Telegram. «Pastillas» y «Turnos» tienen un solo botón cada
-   uno: con el campo vacío muestran lo que hay; con texto («7 enalapril 30»), lo cargan.
-4. Un comando que tarda —una pregunta con búsqueda— muestra «⏳ Procesando…» hasta que
+   silenciar la casa, hacerla hablar ya o cortar las vacaciones. Lo que es para vos va
+   primero. Sin nada pendiente dice «Todo en orden». El estado de cada chequeo está plegado
+   en «Chequeos de la casa». Se actualiza cada cinco segundos.
+4. El campo de texto acepta lo mismo que un mensaje sin barra en Telegram: se escribe como se
+   lo dirías a alguien («poné una alarma a las 7»). Debajo hay ejemplos; tocar uno lo copia
+   al campo para cambiarlo, sin mandarlo. La respuesta aparece arriba del campo y la página
+   se mueve hasta ella. Si falta un dato, pregunta como en el chat, y la pregunta se puede
+   contestar desde acá o desde Telegram.
+5. **A mano** tiene lo de todos los días: «🛒 Compras», «➕ Nuevo aviso» (abre la agenda con
+   el formulario), un timer con minutos y para qué, «Agregar a compras», «🤫 Silencio» (vacío
+   dice si la casa está callada) y «Decir» con los equipos. Los equipos tildados van como
+   `en <equipo>`; sin tildar, habla el equipo de siempre.
+6. Abajo siguen los paneles (Casa, Programado, Consultas, Listas) y, plegados, **Más**
+   (equipo de siempre, equipos, volumen, pantalla en la tele, pastillas, turnos, cuentas y
+   traducir) y **⚙️ Ajustes de la casa** (depurar y las personas). Cada campo dice abajo qué
+   espera. «Pastillas» y «Turnos» tienen un solo botón cada uno: con el campo vacío muestran
+   lo que hay; con texto («7 enalapril 30»), lo cargan.
+7. Un comando que tarda —una pregunta con búsqueda— muestra «⏳ Procesando…» hasta que
    contesta, aunque tarde un minuto.
 
-**Las personas de la casa** se cargan en la tarjeta «👪 Personas», al pie del control: nombre
+**Las personas de la casa** se cargan en «👪 Personas», dentro de «⚙️ Ajustes de la casa», al pie del control: nombre
 y, si tiene, su Telegram, elegido de los chats de `ALLOWED_CHAT_IDS` que no son de nadie, o
 «Sin Telegram». Un chat que todavía no le escribió al bot aparece como «Todavía no escribió
 (·1234)», con los últimos cuatro números. El nombre es el que dice la casa: letras y espacios, sin números ni guiones,
 sin repetir y sin «todos» ni «nadie». Cada fila se renombra, cambia de Telegram o se borra.
 Sumar o sacar a alguien no avisa a nadie.
 
-En el teléfono, el menú del navegador ofrece **«Agregar a pantalla de inicio»** y queda como un
-ícono «Casa» que abre directo en el control. No es una app instalada: la casa sirve http, y
+En el teléfono, el menú del navegador ofrece **«Agregar a pantalla de inicio»** (⋮ → Agregar
+a pantalla principal, como lo recuerda el pie del control) y queda como un ícono «Casa» que
+abre directo en el control. No es una app instalada: la casa sirve http, y
 eso, igual que usar el micrófono, pide HTTPS.
 
 Sin `ALLOWED_CHAT_IDS` el control no maneja nada: no hay a nombre de quién.
