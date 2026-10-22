@@ -693,6 +693,14 @@ la casa que todavía no sonó aparecen «Editar» y «Borrar»; si repite, se ed
 serie entera, y el autor no cambia; borrar pide confirmación. Lo de Google Calendar y lo que
 ya sonó son solo para mirar.
 
+**De quién es un evento de Google.** Con nombres entre corchetes al principio del título:
+`[Papá] Dentista` es de Papá y en la agenda se ve «Dentista · para Papá»; `[Papá][Mamá] Cena`
+es de los dos. Los nombres son los de las personas de la casa, sin importar mayúsculas ni
+tildes. Si alguno no es de la casa, el evento queda de todos con el título como está.
+`[Todos]` lo hace de todos. Sin corchetes, un calendario que se llama como una persona
+(`CALENDAR_URL_PAPA`) es de ella; los corchetes ganan. El kiosco lo muestra igual que la
+agenda. El parlante y los resúmenes todavía leen el título como está, con los corchetes.
+
 Cada alta, cambio o baja se avisa en todos los chats. El de un alta o un cambio trae
 «Cancelar #N», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
 borró.
@@ -708,7 +716,7 @@ no se cargó a nadie, lista los chats de `ALLOWED_CHAT_IDS`: cada uno aparece co
 <número>» hasta que le escribe algo al bot; desde ahí, con su nombre de Telegram.
 
 Arriba, «Ver» muestra la agenda de toda la casa o la de una persona: lo suyo y lo de todos,
-más Google y los feriados. Cada dispositivo recuerda lo elegido. Lo que viene por turnos entra
+más los feriados. De Google, lo que es de otra persona se esconde. Cada dispositivo recuerda lo elegido. Lo que viene por turnos entra
 en la vista de esa persona recién cuando suena, salvo que el aviso sea suyo o de todos.
 **Con `ALLOWED_CHAT_IDS` vacío la pantalla no escribe**: no aparece «Nuevo aviso» ni se
 puede editar, borrar, agregar ni tachar.

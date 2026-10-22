@@ -38,3 +38,24 @@ aparecer; si algún día hace falta que sea inmediato, ahí sí hay que migrar a
   «tenés una cosa.» y una oración por evento, sonaba robótico cada vez que el pulidor no lo
   reescribía. Lo de día completo va primero; el día vacío sigue diciendo «No tenés nada
   agendado».
+
+## De quién es un evento de Google
+
+`agenda/owners.py` decide de quién es cada evento, contra el padrón. Lo usa solo la web
+(`Board._google_event()`); ver **Para quién es cada aviso**, en `.claude/rules/web.md`.
+
+- **Por prefijo**: uno o más `[Nombre]` al principio del título, como `[Papá][Mamá] Dentista`.
+  Mismos caracteres que `announcer._CALLED` (letras, con espacios adentro del nombre); el
+  espacio de adelante del título y el de entre corchetes no cuentan. Se compara con `fold()`,
+  sin mayúsculas ni tildes.
+- 🔴 **Todo o nada.** Un solo nombre fuera del padrón deja el evento de todos, con el título
+  tal cual: un corchete que no es un nombre (`[URGENTE]`) no se come.
+- **`[Todos]` es reservado**: el evento es de todos, el título dice «· para todos» y gana
+  sobre los otros nombres del prefijo.
+- ⚠️ **Dos personas que se pliegan igual** (José y Jose) reciben las dos el evento.
+- **Por calendario**: si el alias (`CALENDAR_URL_PAPA` → `papa`) plegado es el nombre de
+  alguien del padrón, sus eventos sin prefijo son de esa persona. **El prefijo gana** sobre
+  el calendario. Al 2026-10-22 la casa usa `familia` y `familia_privado`, de todos, y `papa`,
+  de Papá.
+- ⚠️ **Lo hablado no lo usa**: el resumen de la mañana, el cierre del día, los avisos de
+  evento y `/agenda` de Telegram leen el título literal, con los corchetes.
