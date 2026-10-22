@@ -90,6 +90,13 @@ assert.strictEqual(agenda.visibleFor(everyone, 3), true);
 assert.strictEqual(agenda.visibleFor(nobody, 3), false);
 assert.strictEqual(agenda.visibleFor({ source: "google" }, 3), true);
 assert.strictEqual(agenda.visibleFor({ source: "feriado" }, 3), true);
+// Lo de Google con dueño se ve solo para sus personas; sin dueño, para todos.
+var dentist = { source: "google", persons: [3] };
+assert.strictEqual(agenda.visibleFor(dentist, 3), true);
+assert.strictEqual(agenda.visibleFor(dentist, 5), false);
+assert.strictEqual(agenda.visibleFor({ source: "google", persons: [3, 5] }, 5), true);
+assert.strictEqual(agenda.visibleFor({ source: "google", persons: [] }, 5), true);
+assert.strictEqual(agenda.visibleFor(dentist, null), true);
 // Sin filtro se ve todo.
 assert.strictEqual(agenda.visibleFor(diego, null), true);
 assert.strictEqual(agenda.visibleFor(nobody, null), true);

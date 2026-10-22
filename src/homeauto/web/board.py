@@ -7,6 +7,7 @@ import threading
 from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Callable
 
+from homeauto.agenda.owners import calendar_owner, owners
 from homeauto.lists import LISTS
 from homeauto.meals import DINNER, LUNCH, MEAL_ENDS, upcoming
 from homeauto.schedule.store import EVERYONE, PERSON
@@ -121,6 +122,13 @@ def for_name(assignee: str, assignee_id: int | None, names: dict[int, str]) -> s
     return None
 
 
+def join_names(names: tuple[str, ...]) -> str:
+    """Los nombres en una frase: «Papá», «Papá y Mamá», «Papá, Mamá y China»."""
+    if len(names) < 2:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} y {names[-1]}"
+
+
 def _house_event(item: Item, names: dict[int, str]) -> dict:
     """Un ítem de la casa en el formato de evento de FullCalendar."""
     found = marks(item)
@@ -227,8 +235,8 @@ class Board:
         now = self.clock()
         names = person_names(self.household)
         timed = [(item.at, _house_event(item, names)) for item in self._house(start, end, now)]
-        google, problems = self._google(start, end, now)
-        timed.extend(google)
+        read, problems = self._google(start, end, now)
+        timed.extend((self._naive(event.start), self._google_event(event, names)) for event in read)
         timed.extend(self._holidays(start, end))
         timed.sort(key=lambda pair: (pair[0], pair[1]["title"]))
         return {
@@ -287,7 +295,7 @@ class Board:
         return found, problems
 
     def _read_calendar(self, start: datetime, end: datetime) -> tuple[list, list[str]]:
-        """Los eventos de Google y qué calendarios no se pudieron leer, solo por alias."""
+        """Los eventos crudos de Google y qué calendarios no se pudieron leer, solo por alias."""
         try:
             read = self.calendar.between(
                 start.replace(tzinfo=self.timezone), end.replace(tzinfo=self.timezone)
@@ -296,8 +304,7 @@ class Board:
         except Exception:  # noqa: BLE001
             log.warning("could not read any calendar", exc_info=True)
             read, broken = [], self.aliases
-        found = [(self._naive(event.start), self._google_event(event)) for event in read]
-        return found, [f"No pude leer el calendario {alias}." for alias in broken]
+        return list(read), [f"No pude leer el calendario {alias}." for alias in broken]
 
     def _naive(self, moment: datetime) -> datetime:
         """La hora local sin zona, como guarda la casa sus jobs."""
@@ -305,27 +312,37 @@ class Board:
             return moment
         return moment.astimezone(self.timezone).replace(tzinfo=None)
 
-    def _google_event(self, event) -> dict:
-        """Un evento de Google en el formato de FullCalendar, de solo lectura."""
+    def _google_event(self, event, names: dict[int, str]) -> dict:
+        """Un evento de Google en el formato de FullCalendar, de solo lectura y con su dueño."""
         if event.all_day:
             start: str = self._naive(event.start).date().isoformat()
             end: str = self._naive(event.end).date().isoformat()
         else:
             start = self._naive(event.start).isoformat()
             end = self._naive(event.end).isoformat()
+        props = {"source": GOOGLE, "calendar": event.calendar, "location": event.location}
+        ids, whom, label = owners(event.summary, names)
+        if not whom:
+            ids, whom = calendar_owner(event.calendar, names)
+            label = event.summary
+        title = event.summary
+        if whom:
+            whom_text = join_names(whom)
+            if label:
+                title = f"{label} · para {whom_text}"
+                props.update({"persons": list(ids), "label": label, "for": whom_text})
+            else:
+                title = f"para {whom_text}"
+                props.update({"persons": list(ids), "label": title, "for": None})
         return {
-            "title": event.summary,
+            "title": title,
             "start": start,
             "end": end,
             "allDay": event.all_day,
             "editable": False,
             "color": self._color(event.calendar),
             "classNames": [GOOGLE],
-            "extendedProps": {
-                "source": GOOGLE,
-                "calendar": event.calendar,
-                "location": event.location,
-            },
+            "extendedProps": props,
         }
 
     def _stamp(self, now: datetime) -> str:
