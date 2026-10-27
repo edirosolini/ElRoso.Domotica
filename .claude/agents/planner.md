@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Analiza un pedido de Domotica (o una entrada de .claude/memory/backlog.md) y entrega un plan de ejecución con TDD, riesgos, decisiones pendientes y estimación Fibonacci. No modifica código ni memoria. Usar antes de implementar cualquier feature, fix o refactor.
+description: Analiza un pedido de Domotica (o una entrada de .claude/memory/backlog.md) y entrega un plan de ejecución con TDD, riesgos y decisiones pendientes (estimación de horas solo si se pide). No modifica código ni memoria. Usar antes de implementar cualquier feature, fix o refactor.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -50,12 +50,9 @@ Pedido del dueño / entrada de backlog.md "<título>"
 ## Decisiones pendientes
 ## Verificación fuera de la suite
   (medición del router, prueba en el parlante o en el Telegram real, si aplica)
-## Estimación
-Análisis: Xh | Tests: Xh | Impl: Xh | Docs: Xh | Verif: Xh = Nh total
 ## Ramas y PRs
 <tipo>/<slug> desde origin/mainline · cuántos PRs salen (un PR por tipo de cambio)
 ```
 
-- Estimación: solo 1, 2, 3, 5, 8, 13, 21, 34, 55, 89 por ítem; total = suma aritmética; ninguna tarea supera 89 h (partirla).
-- Tests y documentación estimados explícitamente.
+- Sin estimación de horas salvo que el dueño la pida explícitamente. Si la pide: sección `## Estimación` con `Análisis: Xh | Tests: Xh | Impl: Xh | Docs: Xh | Verif: Xh = Nh total`, solo valores 1, 2, 3, 5, 8, 13, 21, 34, 55, 89 por ítem, total = suma aritmética, ninguna tarea supera 89 h (partirla).
 - Español, corto, directo. Sin relleno.
