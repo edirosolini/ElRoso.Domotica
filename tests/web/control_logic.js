@@ -166,4 +166,26 @@ assert.strictEqual(control.deviceLabel({ recamara: "Recámara" }, "recamara"), "
 assert.strictEqual(control.deviceLabel({}, "comedor"), "comedor");
 assert.strictEqual(control.deviceLabel(undefined, "comedor"), "comedor");
 
+// En el panel de un tema van los botones de Commands, salvo los que tienen formulario propio.
+var avisos = { key: "avisos", label: "⏰ Avisos", buttons: [
+  { label: "Avisame en…", data: "armar timer" }, { label: "Alarma", data: "armar alarma" },
+  { label: "Mis avisos", data: "lista" }, { label: "Pastillas", data: "pastillas" },
+] };
+assert.deepStrictEqual(control.panelButtons(avisos, ["timer", "alarma", "decir"]),
+  [{ label: "Mis avisos", data: "lista" }, { label: "Pastillas", data: "pastillas" }]);
+assert.deepStrictEqual(control.panelButtons(avisos, []), avisos.buttons);
+assert.deepStrictEqual(control.panelButtons({ key: "hoy", label: "📅 Hoy" }, ["timer"]), []);
+
+// Quien no tiene Telegram lee a quién pedirle lo demás, con los nombres del padrón.
+assert.strictEqual(control.chatlessText("Papá o a Mamá"),
+  "Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a Papá o a Mamá.");
+assert.strictEqual(control.chatlessText(null),
+  "Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a quien maneja la casa.");
+assert.strictEqual(control.chatlessText(""), control.chatlessText(null));
+
+// Tocar un tema lo abre; tocar el abierto lo cierra.
+assert.strictEqual(control.openTopic(null, "avisos"), "avisos");
+assert.strictEqual(control.openTopic("hoy", "avisos"), "avisos");
+assert.strictEqual(control.openTopic("avisos", "avisos"), null);
+
 console.log("ok");

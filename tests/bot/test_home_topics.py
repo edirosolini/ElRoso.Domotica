@@ -124,6 +124,27 @@ def test_the_settings_do_not_open_for_the_family(tmp_path):
     assert reply.text == with_actions(build(tmp_path).press, FAMILY, "tema nada").text
 
 
+def test_topics_for_gives_the_family_its_topics_without_the_way_back(tmp_path):
+    topics = build(tmp_path).topics_for(FAMILY)
+
+    assert list(topics) == ["avisos", "parlante", "comida", "hoy", "preguntar", "silencio"]
+    for _, actions in topics.values():
+        assert "inicio" not in [data for _, data in actions]
+
+
+def test_topics_for_adds_the_settings_for_an_alert_chat(tmp_path):
+    topics = build(tmp_path).topics_for(OWNER)
+
+    assert list(topics)[-1] == "ajustes"
+    assert topics["ajustes"] == TOPICS["ajustes"]
+
+
+def test_the_house_topic_turns_off_the_tv_or_the_speaker(tmp_path):
+    reply = with_actions(build(tmp_path).press, FAMILY, "tema parlante")
+
+    assert ("Apagar la tele o el parlante", "apagar") in reply.actions
+
+
 def test_every_button_fits_in_telegram():
     for label, actions in TOPICS.values():
         assert len(label) <= MAX_LABEL

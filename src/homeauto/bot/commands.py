@@ -154,6 +154,7 @@ TOPICS = {
         ("Decir algo", "armar decir"),
         ("Llamar a comer", "llamar"),
         ("Callar el parlante", "parar"),
+        ("Apagar la tele o el parlante", "apagar"),
         ("Volumen", "armar volumen"),
     )),
     "comida": ("🛒 Compras y comida", (
@@ -717,9 +718,9 @@ class Commands:
         """El detalle técnico para un chat de alertas; para los demás, a quién avisarle."""
         if chat_id in self.config.alert_recipients:
             return detail
-        return f"Esto todavía no está configurado. Avisale a {self._alert_names()}."
+        return f"Esto todavía no está configurado. Avisale a {self.alert_names()}."
 
-    def _alert_names(self) -> str:
+    def alert_names(self) -> str:
         """Los nombres del padrón de los chats de alertas, o «quien maneja la casa»."""
         fallback = "quien maneja la casa"
         if self.household is None:
@@ -776,6 +777,10 @@ class Commands:
         """Los temas que ve ese chat: «Ajustes» solo los de alertas."""
         alerts = chat_id in self.config.alert_recipients
         return {key: topic for key, topic in TOPICS.items() if key != SETTINGS_TOPIC or alerts}
+
+    def topics_for(self, chat_id: int) -> dict:
+        """Los temas de ese chat con sus botones, sin el de volver a los temas."""
+        return self._topics(chat_id)
 
     def _topic_buttons(self, chat_id: int) -> tuple[tuple[str, str], ...]:
         return tuple(
