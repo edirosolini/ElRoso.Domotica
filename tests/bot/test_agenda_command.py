@@ -87,11 +87,11 @@ def test_the_target_does_not_eat_the_day_word():
 
 
 def test_a_word_it_does_not_understand_is_explained():
-    cmd, spk = build(agenda=FakeAgenda(boom=ValueError("No entiendo 'el jueves'. Probá con hoy o mañana.")))
+    cmd, spk = build(agenda=FakeAgenda(boom=ValueError("No entendí qué día. Probá con hoy o mañana.")))
 
     reply = cmd.agenda_command(OWNER, "el jueves")
 
-    assert "No entiendo" in reply
+    assert "No entendí qué día" in reply
     assert spk["parlante"].said == []
 
 

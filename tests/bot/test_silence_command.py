@@ -53,11 +53,17 @@ def test_without_a_duration_it_reports_what_is_going_on(cmd):
     assert "14:00" in cmd.silence(OWNER, "")
 
 
+def test_a_garbled_duration_keeps_the_duration_hint(cmd):
+    reply = cmd.silence(OWNER, "2x")
+
+    assert reply == "No entendí cuánto tiempo. Probá así: 10m o 1h30m"
+
+
 def test_a_duration_it_cannot_read_is_explained(cmd):
     reply = cmd.silence(OWNER, "un rato largo")
 
     assert cmd.quiet.is_quiet(NOON) is False
-    assert "no entiendo" in reply.lower()
+    assert reply == "No entendí cuánto tiempo. Probá así: 10m o 1h30m"
 
 
 def test_speaking_again_cuts_the_silence_short(cmd):

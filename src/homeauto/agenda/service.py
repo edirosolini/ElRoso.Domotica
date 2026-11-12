@@ -46,7 +46,7 @@ class AgendaService:
                 self.calendar.day(now + timedelta(days=1)), label="mañana", place=place
             )
 
-        raise ValueError(f"No entiendo '{when}'. Probá con hoy o mañana.")
+        raise ValueError("No entendí qué día. Probá con hoy o mañana.")
 
     def briefing(self) -> str:
         """El día entero, para el resumen de la mañana: la hora y el título.

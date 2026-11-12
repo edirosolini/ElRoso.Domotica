@@ -57,6 +57,12 @@ HOLIDAY_FREE_WORDS = ("hábiles", "habiles")
 DAY_NAMES = {1: "lun", 2: "mar", 3: "mié", 4: "jue", 5: "vie", 6: "sáb", 7: "dom"}
 
 
+DURATION_HINT = "No entendí cuánto tiempo. Probá así: 10m o 1h30m"
+CLOCK_HINT = "No entendí la hora. Probá así: 7:30 o mañana 9:00"
+DATE_HINT = "No entendí la fecha. Probá así: 25/10 o 25/10 18:00"
+WHEN_HINT = "No entendí cuándo. Probá así: 10m, 7:30 o mañana 9:00"
+
+
 class TimeSpecError(ValueError):
     """El texto no describe un momento que se sepa agendar."""
 
@@ -69,9 +75,17 @@ def _split_head(text: str) -> tuple[str, str]:
 
 
 def parse_duration(token: str) -> timedelta:
+    delta = _read_duration(token)
+    if delta is None:
+        raise TimeSpecError(DURATION_HINT)
+    return delta
+
+
+def _read_duration(token: str) -> timedelta | None:
+    """La duración del token, o None si no es una; levanta TimeSpecError si es cero."""
     match = _DURATION_RE.fullmatch(token)
     if match is None or not any(match.groups()):
-        raise TimeSpecError(f"No entiendo cuándo: '{token}'")
+        return None
 
     hours, minutes_long, minutes_short, seconds = match.groups()
     delta = timedelta(
@@ -87,11 +101,11 @@ def parse_duration(token: str) -> timedelta:
 def _parse_clock(token: str, now: datetime, *, force_tomorrow: bool) -> datetime:
     match = _CLOCK_RE.fullmatch(token)
     if match is None:
-        raise TimeSpecError(f"No entiendo la hora: '{token}'")
+        raise TimeSpecError(CLOCK_HINT)
 
     hour, minute = int(match.group(1)), int(match.group(2))
     if hour > 23 or minute > 59:
-        raise TimeSpecError(f"No entiendo la hora: '{token}'")
+        raise TimeSpecError(CLOCK_HINT)
 
     when = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     # Una hora que ya pasó hoy significa la próxima, mañana.
@@ -114,7 +128,10 @@ def parse_schedule(text: str, now: datetime) -> tuple[datetime, str]:
     elif _CLOCK_RE.fullmatch(head):
         when = _parse_clock(head, now, force_tomorrow=False)
     else:
-        when = now + parse_duration(head)
+        delta = _read_duration(head)
+        if delta is None:
+            raise TimeSpecError(WHEN_HINT)
+        when = now + delta
 
     message = rest.strip()
     if not message:
@@ -204,7 +221,7 @@ def parse_return_date(text: str, now: datetime) -> datetime:
     date_part, _, clock_part = text.strip().partition(" ")
     match = _DATE_RE.fullmatch(date_part)
     if match is None:
-        raise TimeSpecError(f"No entiendo la fecha: '{text.strip()}'. Así: 25/10 o 25/10 18:00")
+        raise TimeSpecError(DATE_HINT)
 
     day, month = int(match.group(1)), int(match.group(2))
     hour = minute = 0
@@ -212,16 +229,16 @@ def parse_return_date(text: str, now: datetime) -> datetime:
     if clock_part:
         clock = _CLOCK_RE.fullmatch(clock_part)
         if clock is None:
-            raise TimeSpecError(f"No entiendo la hora: '{clock_part}'")
+            raise TimeSpecError(CLOCK_HINT)
         hour, minute = int(clock.group(1)), int(clock.group(2))
         if hour > 23 or minute > 59:
-            raise TimeSpecError(f"No entiendo la hora: '{clock_part}'")
+            raise TimeSpecError(CLOCK_HINT)
 
     def build(year: int) -> datetime:
         try:
             return datetime(year, month, day, hour, minute)
         except ValueError as exc:
-            raise TimeSpecError(f"Esa fecha no existe: '{date_part}'") from exc
+            raise TimeSpecError("Esa fecha no existe. Probá así: 25/10 o 25/10 18:00") from exc
 
     if match.group(3):
         when = build(int(match.group(3)))

@@ -54,7 +54,8 @@ def test_timer_rejects_what_it_cannot_parse(cmd):
     reply = cmd.timer(OWNER, "cuando salga el sol avisame")
 
     assert cmd.reminders.list(OWNER) == []
-    assert "No entiendo" in reply
+    assert "No entendí cuándo. Probá así: 10m, 7:30 o mañana 9:00" in reply
+    assert "salga" not in reply
 
 
 def test_timer_without_message_explains(cmd):
@@ -430,6 +431,14 @@ def test_a_name_of_two_words_outside_the_roster_says_so(cmd):
     assert reply.startswith("«Tía Rosa» no está en el padrón")
 
 
+def test_an_alarm_it_cannot_place_in_time_explains_when(cmd):
+    reply = cmd.alarm(OWNER, "cuando salga el sol arriba")
+
+    assert cmd.reminders.list(OWNER) == []
+    assert "No entendí cuándo. Probá así: 10m, 7:30 o mañana 9:00" in reply
+    assert "salga" not in reply
+
+
 def test_para_the_hour_is_not_a_person(cmd):
     reply = cmd.alarm(OWNER, "para las ocho arriba")
 
@@ -441,7 +450,7 @@ def test_para_tomorrow_is_not_a_person(cmd):
     reply = cmd.alarm(OWNER, "para mañana 7:30 arriba")
 
     assert cmd.reminders.list(OWNER) == []
-    assert "No entiendo" in reply
+    assert "No entendí cuándo. Probá así: 10m, 7:30 o mañana 9:00" in reply
     assert "padrón" not in reply
 
 
