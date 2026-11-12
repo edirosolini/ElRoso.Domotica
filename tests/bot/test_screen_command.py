@@ -91,7 +91,7 @@ def test_without_argument_it_shows_in_the_dining_room(house):
     reply = with_actions(house.build().screen, OWNER, "")
 
     assert house.tvs["comedor"].page == KIOSK
-    assert "comedor" in reply.text
+    assert "Comedor" in reply.text
     assert reply.actions == (("Apagar pantalla", "pantalla apagar en comedor"),)
 
 
@@ -113,7 +113,7 @@ def test_apagar_closes_the_screen(house):
     reply = house.build().screen(OWNER, "apagar")
 
     assert house.tvs["comedor"].page is None
-    assert reply == "Apagué la pantalla del comedor."
+    assert reply == "Apagué la pantalla del Comedor."
 
 
 def test_apagar_names_another_tv(house):
@@ -122,11 +122,11 @@ def test_apagar_names_another_tv(house):
     reply = house.build().screen(OWNER, "apagar en recamara")
 
     assert house.tvs["recamara"].page is None
-    assert reply == "Apagué la pantalla de la recamara."
+    assert reply == "Apagué la pantalla de la Recámara."
 
 
 def test_apagar_when_it_was_not_on_says_so(house):
-    assert house.build().screen(OWNER, "apagar") == "La pantalla del comedor no estaba prendida."
+    assert house.build().screen(OWNER, "apagar") == "La pantalla del Comedor no estaba prendida."
 
 
 def test_the_button_turns_it_off(house):
@@ -135,7 +135,7 @@ def test_the_button_turns_it_off(house):
 
     reply = commands.press(OWNER, "pantalla apagar en comedor")
 
-    assert reply == "Apagué la pantalla del comedor."
+    assert reply == "Apagué la pantalla del Comedor."
     assert house.tvs["comedor"].page is None
 
 
@@ -144,7 +144,7 @@ def test_a_tv_that_is_off_is_asked_to_be_turned_on(house):
 
     reply = house.build().screen(OWNER, "")
 
-    assert reply == "No veo la tele del comedor: prendela y probá de nuevo."
+    assert reply == "No veo la tele del Comedor: prendela y probá de nuevo."
 
 
 def test_on_vacation_the_tv_is_not_turned_on(house):
@@ -160,7 +160,7 @@ def test_on_vacation_the_screen_can_still_be_turned_off(house):
     house.tvs["comedor"].page = KIOSK
     house.hush.start_away(NOON + timedelta(days=3))
 
-    assert house.build().screen(OWNER, "apagar") == "Apagué la pantalla del comedor."
+    assert house.build().screen(OWNER, "apagar") == "Apagué la pantalla del Comedor."
 
 
 def test_the_quiet_hours_do_not_stop_it(house):
@@ -174,7 +174,7 @@ def test_the_quiet_hours_do_not_stop_it(house):
 def test_the_speaker_has_no_screen(house):
     reply = house.build().screen(OWNER, "en parlante")
 
-    assert reply == "El parlante no tiene pantalla."
+    assert reply == "El Parlante no tiene pantalla."
     assert house.tvs["parlante"].page is None
 
 
@@ -203,3 +203,15 @@ def test_it_is_registered_but_not_in_the_menu():
     assert "pantalla" in ALL_COMMANDS
     assert "pantalla" not in {name for name, _ in COMMAND_MENU}
     assert len(COMMAND_MENU) == 10
+
+
+def test_the_replies_and_buttons_use_the_device_name(house):
+    reply = with_actions(house.build().screen, OWNER, "en comedor,Recámara")
+
+    assert "📺 Puse la pantalla en la tele de la Recámara." in reply.text
+    assert "📺 Puse la pantalla en la tele del Comedor." in reply.text
+    assert ("Apagar pantalla (Recámara)", "pantalla apagar en recamara") in reply.actions
+
+
+def test_a_device_without_screen_is_named_with_its_capital(house):
+    assert house.build().screen(OWNER, "en parlante") == "El Parlante no tiene pantalla."

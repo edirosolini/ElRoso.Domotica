@@ -116,7 +116,7 @@ def test_stop_stops():
 def test_where_lists_the_devices():
     cmd, _ = build()
 
-    assert "parlante" in cmd.where(OWNER)
+    assert "Parlante" in cmd.where(OWNER)
 
 
 def test_start_greets_and_lists_the_commands():

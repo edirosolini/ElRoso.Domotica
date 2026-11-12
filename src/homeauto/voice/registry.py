@@ -9,6 +9,8 @@ from __future__ import annotations
 import uuid
 from typing import Callable
 
+from homeauto.voice.names import device_label
+
 
 class UnknownDevice(Exception):
     """El alias no corresponde a ningún equipo configurado."""
@@ -30,7 +32,7 @@ class SpeakerRegistry:
     def get(self, alias: str):
         alias = alias.strip().lower()
         if alias not in self._devices:
-            known = ", ".join(self._devices) or "ninguno"
+            known = ", ".join(device_label(name) for name in self._devices) or "ninguno"
             raise UnknownDevice(f"No conozco '{alias}'. Tengo: {known}")
 
         if alias not in self._cache:

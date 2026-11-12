@@ -161,6 +161,11 @@
     return /(^\?|&)nuevo=1(&|$)/.test(search || "");
   }
 
+  // El nombre del equipo según el CT, o el alias si no lo trae.
+  function deviceLabel(names, alias) {
+    return (names && names[alias]) || alias;
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       startView: startView,
@@ -178,6 +183,7 @@
       authorOptions: authorOptions,
       authorBody: authorBody,
       savedPerson: savedPerson,
+      deviceLabel: deviceLabel,
     };
   }
   if (typeof document === "undefined") {
@@ -624,7 +630,7 @@
       byId("filter-label").hidden = persons.length === 0;
       var device = byId("editor-device");
       (data.devices || []).forEach(function (alias) {
-        device.appendChild(option(alias, alias));
+        device.appendChild(option(alias, deviceLabel(data.names, alias)));
       });
       byId("new-job").hidden = !state.writable;
       if (state.writable && opensNew(window.location.search)) {

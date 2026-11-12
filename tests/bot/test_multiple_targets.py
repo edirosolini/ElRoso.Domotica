@@ -54,7 +54,7 @@ def test_two_devices_separated_by_comma(tmp_path):
     assert spk["comedor"].said == ["que bajen"]
     assert spk["recamara"].said == ["que bajen"]
     assert spk["parlante"].said == []
-    assert "comedor" in reply and "recamara" in reply
+    assert "Comedor" in reply and "Recámara" in reply
 
 
 def test_spaces_after_the_comma_are_fine(tmp_path):
@@ -107,7 +107,7 @@ def test_one_broken_device_does_not_silence_the_others(tmp_path):
 
     assert spk["parlante"].said == ["atención"]
     assert spk["comedor"].said == ["atención"]
-    assert "recamara" in reply and "apagado" in reply
+    assert "Recámara" in reply and "apagado" in reply
 
 
 def test_when_every_device_fails_it_says_so(tmp_path):
@@ -129,7 +129,7 @@ def test_the_family_reads_which_device_did_not_answer_not_why(tmp_path, caplog):
     reply = cmd.say(FAMILY, "en todos atención")
 
     assert spk["parlante"].said == ["atención"]
-    assert "No pude en:\nrecamara: no responde" in reply
+    assert "No pude en:\nRecámara: no responde" in reply
     assert "Address already in use" not in reply
     assert "Address already in use" in caplog.text
 
@@ -146,7 +146,7 @@ def test_the_family_reads_that_none_answered_not_why(tmp_path, caplog):
 
     assert reply == (
         "No pude decirlo en ninguno:\n"
-        "parlante: no responde\ncomedor: no responde\nrecamara: no responde"
+        "Parlante: no responde\nComedor: no responde\nRecámara: no responde"
     )
     assert "apagado" in caplog.text
 
@@ -192,7 +192,7 @@ def test_the_list_shows_every_device_of_a_job(tmp_path):
     cmd.timer(OWNER, "en comedor,recamara 10m que bajen")
     reply = cmd.list(OWNER)
 
-    assert "comedor" in reply and "recamara" in reply
+    assert "Comedor" in reply and "Recámara" in reply
 
 
 def test_usar_accepts_several_as_the_default(tmp_path):

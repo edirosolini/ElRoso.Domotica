@@ -8,6 +8,7 @@ from typing import Iterable
 from homeauto.people import display_name
 from homeauto.schedule.reminders import SNOOZE_WINDOW
 from homeauto.tele import ACK_STATES, CAPS, TeleLink, normalize
+from homeauto.voice.names import device_label
 from homeauto.web.board import for_name, person_names
 from homeauto.web.jobs import NotFound, WebError
 
@@ -61,6 +62,7 @@ class TeleService:
             ]
         return {
             "devices": list(self.devices),
+            "names": {alias: device_label(alias) for alias in self.devices},
             "people": people,
             "persons": [
                 {"id": person.id, "name": person.name, "chat_id": person.chat_id}

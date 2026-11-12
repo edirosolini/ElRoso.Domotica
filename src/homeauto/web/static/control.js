@@ -241,6 +241,11 @@
     return parts.join(" · ");
   }
 
+  // El nombre del equipo según el CT, o el alias si no lo trae.
+  function deviceLabel(names, alias) {
+    return (names && names[alias]) || alias;
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       targeted: targeted, whoOptions: whoOptions, pickWho: pickWho, commandBody: commandBody,
@@ -248,7 +253,7 @@
       sinceText: sinceText, quietTitle: quietTitle, urgentItems: urgentItems,
       statusText: statusText, formCommand: formCommand, isCalm: isCalm,
       whoFromQuery: whoFromQuery, timerCommand: timerCommand, calmTitle: calmTitle,
-      mineFirst: mineFirst,
+      mineFirst: mineFirst, deviceLabel: deviceLabel,
     };
   }
   if (typeof document === "undefined") {
@@ -524,7 +529,7 @@
     };
   }
 
-  function fillDevices(devices) {
+  function fillDevices(devices, names) {
     var box = byId("devices");
     clear(box);
     for (var i = 0; i < (devices || []).length; i++) {
@@ -534,7 +539,7 @@
       check.value = devices[i];
       check.addEventListener("change", markDevice(label, check));
       label.appendChild(check);
-      label.appendChild(element("span", "", devices[i]));
+      label.appendChild(element("span", "", deviceLabel(names, devices[i])));
       box.appendChild(label);
     }
   }
@@ -684,7 +689,7 @@
         return response.ok ? response.json() : { writable: false, people: [], devices: [] };
       })
       .then(function (data) {
-        fillDevices(data.devices);
+        fillDevices(data.devices, data.names);
         renderPersons(data);
         var options = whoOptions(data);
         if (!data.writable || !options.length) {
