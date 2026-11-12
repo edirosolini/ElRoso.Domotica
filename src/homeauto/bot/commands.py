@@ -579,6 +579,25 @@ class Commands:
         person = self.household.by_chat(chat_id)
         return person.id if person is not None else None
 
+    def _unconfigured(self, chat_id: int, detail: str) -> str:
+        """El detalle técnico para un chat de alertas; para los demás, a quién avisarle."""
+        if chat_id in self.config.alert_recipients:
+            return detail
+        return f"Esto todavía no está configurado. Avisale a {self._alert_names()}."
+
+    def _alert_names(self) -> str:
+        """Los nombres del padrón de los chats de alertas, o «quien maneja la casa»."""
+        fallback = "quien maneja la casa"
+        if self.household is None:
+            return fallback
+        try:
+            people = [self.household.by_chat(chat) for chat in sorted(self.config.alert_recipients)]
+        except Exception:  # noqa: BLE001 - leer el padrón no puede costar la respuesta
+            log.exception("no pude leer el padrón")
+            return fallback
+        names = [person.name for person in people if person is not None]
+        return " o a ".join(names) if names else fallback
+
     def _broadcast(self, aliases: list[str], action) -> dict[str, str | None]:
         """Corre la acción en todos los equipos a la vez.
 
@@ -743,9 +762,10 @@ class Commands:
             return denial
 
         if self.asker is None:
-            return (
+            return self._unconfigured(
+                chat_id,
                 "No tengo modelo para contestar preguntas. "
-                "Cargá LLM_API_KEY en el archivo de entorno."
+                "Cargá LLM_API_KEY en el archivo de entorno.",
             )
 
         aloud, text = self._wanted_aloud(text)
@@ -815,9 +835,10 @@ class Commands:
             return denial
 
         if self.translator is None:
-            return (
+            return self._unconfigured(
+                chat_id,
                 "No tengo modelo para traducir. "
-                "Cargá LLM_API_KEY en el archivo de entorno."
+                "Cargá LLM_API_KEY en el archivo de entorno.",
             )
 
         aloud, text = self._wanted_aloud(text)
@@ -841,13 +862,16 @@ class Commands:
         if denial:
             return denial
         if self.meal_planner is None or self.meal_store is None:
-            return (
+            return self._unconfigured(
+                chat_id,
                 "No tengo modelo para armar el menú. "
-                "Cargá LLM_API_KEY en el archivo de entorno."
+                "Cargá LLM_API_KEY en el archivo de entorno.",
             )
         meals = served(self.config.menu_lunch_at, self.config.menu_dinner_at)
         if not meals:
-            return "El menú está apagado: MENU_LUNCH_AT y MENU_DINNER_AT están en off."
+            return self._unconfigured(
+                chat_id, "El menú está apagado: MENU_LUNCH_AT y MENU_DINNER_AT están en off."
+            )
 
         aloud, text = self._wanted_aloud(text)
         head, _, rest = text.strip().partition(" ")
@@ -1619,9 +1643,10 @@ class Commands:
             return denial
 
         if self.agenda is None:
-            return (
+            return self._unconfigured(
+                chat_id,
                 "No tengo ningún calendario configurado. "
-                "Cargá la dirección privada en formato iCal en CALENDAR_URL_<nombre>."
+                "Cargá la dirección privada en formato iCal en CALENDAR_URL_<nombre>.",
             )
 
         aloud, text = self._wanted_aloud(text)
@@ -1654,7 +1679,9 @@ class Commands:
             return denial
 
         if self.monitor is None:
-            return "No tengo servicios configurados para vigilar. Se cargan en checks.json."
+            return self._unconfigured(
+                chat_id, "No tengo servicios configurados para vigilar. Se cargan en checks.json."
+            )
 
         picture = self.monitor.snapshot()
         if not picture:
@@ -1688,7 +1715,9 @@ class Commands:
         if denial:
             return denial
         if self.screens is None:
-            return "La pantalla no está prendida."
+            return self._unconfigured(
+                chat_id, "La pantalla necesita API_TOKEN en el archivo de entorno."
+            )
 
         head, _, tail = text.strip().partition(" ")
         off = head.lower() in SCREEN_OFF_WORDS
