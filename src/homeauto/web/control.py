@@ -96,7 +96,15 @@ class ControlService:
             "outages": self._outages(chat_id),
             "quiet": self._quiet(now, chat_id is not None),
             "status": self._status(),
+            "topics": self._topics(chat_id) if chat_id is not None else [],
+            "ask": self.commands.alert_names() if chat_id is None else None,
         }
+
+    def _topics(self, chat_id: int) -> list[dict]:
+        return [
+            {"key": key, "label": label, "buttons": _actions(buttons)}
+            for key, (label, buttons) in self.commands.topics_for(chat_id).items()
+        ]
 
     def _ringing(self) -> list[dict]:
         names = person_names(self.household)

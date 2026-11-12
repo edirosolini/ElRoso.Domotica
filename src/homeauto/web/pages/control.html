@@ -45,7 +45,7 @@
     </details>
   </section>
 
-  <p id="chatless" class="card chatless" hidden>Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a Papá o Mamá.</p>
+  <p id="chatless" class="card chatless" hidden></p>
 
   <section id="answer" class="card answer-card" role="status" aria-live="polite" hidden></section>
 
@@ -66,175 +66,118 @@
     </div>
   </section>
 
-  <section id="quick" class="card panel quick">
-    <div class="card-head"><h2>A mano</h2></div>
-    <div class="buttons">
-      <button type="button" class="cmd" data-verb="compras">🛒 Compras</button>
-      <a class="btn secondary" href="/agenda?nuevo=1">➕ Nuevo aviso</a>
-    </div>
-    <form id="timer" class="timer" data-verb="timer">
-      <input id="timer-minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="Minutos" aria-label="Minutos del timer">
-      <input id="timer-what" type="text" maxlength="200" autocomplete="off" placeholder="¿Para qué?" aria-label="Para qué es el timer">
-      <button type="submit">⏱ Timer</button>
-    </form>
-    <p class="hint">Por ejemplo: 10 minutos, sacar la pizza.</p>
-    <form class="cmd row" data-verb="agregar" data-need="1">
-      <input type="text" maxlength="480" placeholder="Leche, pan…" aria-label="Qué agregar a compras">
-      <button type="submit">Agregar a compras</button>
-    </form>
-    <form class="cmd row" data-verb="silencio">
-      <input type="text" maxlength="40" placeholder="1h" aria-label="Cuánto silencio">
-      <button type="submit">🤫 Silencio</button>
-    </form>
-    <p class="hint">Cuánto: 1h, 30m. Vacío dice si la casa está callada.</p>
-    <div id="devices" class="devices" role="group" aria-label="Equipos"></div>
-    <form class="cmd row" data-verb="decir" data-target="1" data-need="1">
-      <input type="text" maxlength="480" placeholder="Decir en…" aria-label="Qué decir">
-      <button type="submit">Decir</button>
-    </form>
-    <p class="hint">Tildá los equipos; sin tildar, dice en el equipo de siempre.</p>
-  </section>
+  <div id="topics" class="topics" role="group" aria-label="Temas"></div>
 
-  <div class="panels">
-    <div class="panel-col">
-    <section class="card panel">
-      <div class="card-head"><h2>🏠 Casa</h2></div>
+  <section id="topic-panel" class="card panel topic-panel" aria-labelledby="topic-title" hidden>
+    <div class="card-head"><h2 id="topic-title" tabindex="-1"></h2></div>
+    <div id="topic-buttons" class="buttons"></div>
+
+    <div class="part" data-arm="alarma recordar" hidden>
+      <a class="btn secondary" href="/agenda?nuevo=1">➕ Nuevo aviso</a>
+      <p class="hint">Alarma o recordatorio: elegís el día, la hora, si se repite y para quién.</p>
+    </div>
+    <div class="part" data-arm="timer" hidden>
+      <form id="timer" class="timer" data-verb="timer">
+        <input id="timer-minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="Minutos" aria-label="Avisame en cuántos minutos">
+        <input id="timer-what" type="text" maxlength="200" autocomplete="off" placeholder="¿Para qué?" aria-label="Para qué es el aviso">
+        <button type="submit">⏱ Avisame</button>
+      </form>
+      <p class="hint">Avisame en… Por ejemplo: 10 minutos, sacar la pizza.</p>
+    </div>
+    <div class="part" data-extra="avisos" hidden>
+      <form class="cmd row" data-verb="pastillas" data-need="1">
+        <input type="text" maxlength="200" placeholder="7 enalapril 30" aria-label="Pastillas a cargar">
+        <button type="submit">Cargar pastillas</button>
+      </form>
+      <p class="hint">El número del recordatorio, el remedio y cuántas hay.</p>
+    </div>
+    <div class="part" data-extra="avisos" hidden>
+      <form class="cmd row" data-verb="turnos" data-need="1">
+        <input type="text" maxlength="200" placeholder="7 Cin, Die" aria-label="Turnos a cargar">
+        <button type="submit">Cargar turnos</button>
+      </form>
+      <p class="hint">El número del aviso y quiénes se turnan.</p>
+    </div>
+
+    <div class="part" data-chips hidden>
+      <div id="devices" class="devices" role="group" aria-label="Dónde"></div>
+      <p class="hint">Tildá dónde; sin tildar, en el de siempre.</p>
+    </div>
+    <div class="part" data-arm="decir" hidden>
+      <form class="cmd row" data-verb="decir" data-target="1" data-need="1">
+        <input type="text" maxlength="480" placeholder="Qué decir…" aria-label="Qué decir">
+        <button type="submit">Decir</button>
+      </form>
+    </div>
+    <div class="part" data-extra="parlante" hidden>
       <form class="cmd row" data-verb="llamar" data-target="1" data-need="1">
         <input type="text" maxlength="480" placeholder="Llamar a…" aria-label="A qué llamar">
         <button type="submit">Llamar</button>
       </form>
       <p class="hint">Por ejemplo: cenar, bajar.</p>
-      <div class="buttons">
-        <button type="button" class="cmd" data-verb="parar" data-target="1">Cortar lo que suena</button>
-        <button type="button" class="cmd" data-verb="apagar" data-target="1">Apagar el equipo</button>
-      </div>
-    </section>
-
-    <section class="card panel">
-      <div class="card-head"><h2>⏰ Programado</h2></div>
-      <div class="buttons">
-        <button type="button" class="cmd" data-verb="lista">Lista</button>
-        <a class="btn secondary" href="/agenda">Crear en la agenda</a>
-      </div>
-      <form class="cmd row" data-verb="cancelar" data-need="1">
-        <input type="text" maxlength="20" placeholder="Número…" aria-label="Número a cancelar">
-        <button type="submit">Cancelar</button>
+    </div>
+    <div class="part" data-arm="volumen" hidden>
+      <form class="cmd row" data-verb="volumen" data-target="1" data-need="1" data-keep="1">
+        <input type="number" min="0" max="100" step="5" placeholder="0 a 100" aria-label="Volumen">
+        <button type="submit">Volumen</button>
       </form>
-      <p class="hint">El número del aviso a cancelar.</p>
-    </section>
+      <p class="hint">De 0 a 100.</p>
+    </div>
+    <div class="part" data-extra="ajustes" hidden>
+      <div class="buttons">
+        <button type="button" class="cmd" data-verb="pantalla apagar" data-target="1">Sacar la pantalla</button>
+      </div>
     </div>
 
-    <div class="panel-col">
-    <section class="card panel">
-      <div class="card-head"><h2>🔎 Consultas</h2></div>
-      <div class="buttons">
-        <button type="button" class="cmd" data-verb="clima">Clima</button>
-        <button type="button" class="cmd" data-verb="agenda">Agenda de hoy</button>
-        <button type="button" class="cmd" data-verb="agenda mañana">Agenda de mañana</button>
-        <button type="button" class="cmd" data-verb="estado">Estado</button>
-      </div>
+    <div class="part" data-arm="agregar" hidden>
+      <form class="cmd row" data-verb="agregar" data-need="1">
+        <input type="text" maxlength="480" placeholder="Leche, pan…" aria-label="Qué agregar a compras">
+        <button type="submit">Agregar a compras</button>
+      </form>
+    </div>
+
+    <div class="part" data-arm="preguntar" hidden>
       <form class="cmd row" data-verb="preguntar" data-need="1">
         <input type="text" maxlength="480" placeholder="Preguntar…" aria-label="Pregunta">
         <button type="submit">Preguntar</button>
       </form>
-    </section>
     </div>
-
-    <div class="panel-col">
-    <section class="card panel">
-      <div class="card-head"><h2>🛒 Listas</h2></div>
-      <div class="buttons">
-        <button type="button" class="cmd" data-verb="compras">Compras</button>
-        <button type="button" class="cmd" data-verb="pendientes">Pendientes</button>
-        <button type="button" class="cmd" data-verb="menu">Menú</button>
-      </div>
-      <form class="cmd row" data-verb="agregar" data-need="1">
-        <input type="text" maxlength="480" placeholder="Agregar…" aria-label="Qué agregar">
-        <button type="submit">Agregar</button>
+    <div class="part" data-arm="calcular" hidden>
+      <form class="cmd row" data-verb="calcular" data-need="1">
+        <input type="text" maxlength="480" placeholder="Calcular…" aria-label="Cuenta">
+        <button type="submit">Calcular</button>
       </form>
-      <p class="hint">Por ejemplo: leche y pan.</p>
-      <form class="cmd row" data-verb="sacar" data-need="1">
-        <input type="text" maxlength="200" placeholder="Sacar…" aria-label="Qué sacar">
-        <button type="submit">Sacar</button>
+      <p class="hint">Por ejemplo: 15 x 4, 3 km en millas.</p>
+    </div>
+    <div class="part" data-arm="traducir" hidden>
+      <form class="cmd row" data-verb="traducir" data-need="1">
+        <input type="text" maxlength="480" placeholder="Traducir…" aria-label="Qué traducir">
+        <button type="submit">Traducir</button>
       </form>
-      <p class="hint">Por ejemplo: 2, todo.</p>
-    </section>
+      <p class="hint">Por ejemplo: al francés hola.</p>
     </div>
-  </div>
 
-  <details class="card fold more">
-    <summary>Más</summary>
-    <div class="panels">
-      <div class="panel-col">
-      <section class="panel">
-        <div class="card-head"><h2>🔈 Equipos</h2></div>
-        <form class="cmd row" data-verb="usar" data-need="1">
-          <input type="text" maxlength="200" placeholder="Equipo…" aria-label="Equipo de siempre">
-          <button type="submit">Equipo de siempre</button>
-        </form>
-        <p class="hint">Dónde habla la casa si no decís dónde. Por ejemplo: comedor, todos.</p>
-        <form class="cmd row" data-verb="volumen" data-target="1" data-need="1" data-keep="1">
-          <input type="number" min="0" max="100" step="5" placeholder="0 a 100" aria-label="Volumen">
-          <button type="submit">Volumen</button>
-        </form>
-        <p class="hint">De 0 a 100, en los equipos tildados arriba.</p>
-        <div class="buttons">
-          <button type="button" class="cmd" data-verb="equipos">Equipos</button>
-          <button type="button" class="cmd" data-verb="pantalla" data-target="1">Pantalla en la tele</button>
-          <button type="button" class="cmd" data-verb="pantalla apagar" data-target="1">Apagar pantalla</button>
-        </div>
-      </section>
-      </div>
-
-      <div class="panel-col">
-      <section class="panel">
-        <div class="card-head"><h2>💊 Remedios y turnos</h2></div>
-        <form class="cmd row" data-verb="pastillas">
-          <input type="text" maxlength="200" placeholder="Vacío: ver todas" aria-label="Pastillas">
-          <button type="submit">Pastillas</button>
-        </form>
-        <p class="hint">Vacío muestra las pastillas; para cargar, por ejemplo: 7 enalapril 30.</p>
-        <form class="cmd row" data-verb="turnos">
-          <input type="text" maxlength="200" placeholder="Vacío: ver todos" aria-label="Turnos">
-          <button type="submit">Turnos</button>
-        </form>
-        <p class="hint">Vacío muestra los turnos; para cargar, por ejemplo: 7 Cin, Die.</p>
-      </section>
-      </div>
-
-      <div class="panel-col">
-      <section class="panel">
-        <div class="card-head"><h2>🧮 Cuentas</h2></div>
-        <form class="cmd row" data-verb="calcular" data-need="1">
-          <input type="text" maxlength="480" placeholder="Calcular…" aria-label="Cuenta">
-          <button type="submit">Calcular</button>
-        </form>
-        <p class="hint">Por ejemplo: 15 x 4, 3 km en millas.</p>
-        <form class="cmd row" data-verb="traducir" data-need="1">
-          <input type="text" maxlength="480" placeholder="Traducir…" aria-label="Qué traducir">
-          <button type="submit">Traducir</button>
-        </form>
-        <p class="hint">Por ejemplo: al francés hola.</p>
-      </section>
-      </div>
-    </div>
-  </details>
-
-  <details class="card fold settings">
-    <summary>⚙️ Ajustes de la casa</summary>
-    <div class="buttons">
-      <button type="button" class="cmd" data-verb="depurar">🧹 Depurar</button>
-    </div>
-    <section id="persons-card" class="card panel" hidden>
-      <div class="card-head"><h2>👪 Personas</h2></div>
-      <ul id="persons" class="persons"></ul>
-      <form id="person-add" class="person-add">
-        <input id="person-name" type="text" maxlength="40" autocomplete="off" placeholder="Nombre…" aria-label="Nombre de la persona">
-        <select id="person-chat" aria-label="Telegram de la persona"></select>
-        <button type="submit">Agregar</button>
+    <div class="part" data-arm="usar" hidden>
+      <form class="cmd row" data-verb="usar" data-need="1">
+        <input type="text" maxlength="200" placeholder="Comedor…" aria-label="Equipo de siempre">
+        <button type="submit">Equipo de siempre</button>
       </form>
-    </section>
-  </details>
+      <p class="hint">Dónde habla la casa si no decís dónde.</p>
+    </div>
+    <div class="part" data-extra="ajustes" hidden>
+      <section id="persons-card" class="persons-box" hidden>
+        <h3>👪 Personas</h3>
+        <ul id="persons" class="persons"></ul>
+        <form id="person-add" class="person-add">
+          <input id="person-name" type="text" maxlength="40" autocomplete="off" placeholder="Nombre…" aria-label="Nombre de la persona">
+          <select id="person-chat" aria-label="Telegram de la persona"></select>
+          <button type="submit">Agregar</button>
+        </form>
+      </section>
+    </div>
+
+    <button type="button" id="topic-back" class="btn secondary topic-back">Volver a los temas</button>
+  </section>
   </div>
 
   <p class="hint install">Agregalo a la pantalla de inicio: ⋮ → Agregar a pantalla principal</p>

@@ -1,4 +1,4 @@
-// Pantalla de control: lo urgente arriba, los comandos de Telegram en paneles y texto libre.
+// Pantalla de control: lo urgente arriba, texto libre y los temas de Telegram con su panel.
 (function () {
   "use strict";
 
@@ -6,6 +6,9 @@
   var SAVED = "casa.chat";
   var WORKING = "⏳ Procesando…";
   var LOST = "Sin conexión con la casa.";
+  var ARRANGED = /^armar (\S+)$/;
+  var CHATLESS = "Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a ";
+  var NOBODY = "quien maneja la casa";
 
   // El comando con los equipos tildados adelante: «decir en comedor,recamara hola».
   function targeted(verb, devices, text) {
@@ -246,6 +249,42 @@
     return (names && names[alias]) || alias;
   }
 
+  // Los comandos que un tema deja armados: «armar timer» es timer.
+  function armedIn(topic) {
+    var armed = [];
+    var buttons = (topic && topic.buttons) || [];
+    for (var i = 0; i < buttons.length; i++) {
+      var match = ARRANGED.exec(buttons[i].data);
+      if (match) {
+        armed.push(match[1]);
+      }
+    }
+    return armed;
+  }
+
+  // Los botones del tema que no reemplaza un formulario propio de la página.
+  function panelButtons(topic, arms) {
+    var kept = [];
+    var buttons = (topic && topic.buttons) || [];
+    for (var i = 0; i < buttons.length; i++) {
+      var match = ARRANGED.exec(buttons[i].data);
+      if (!match || arms.indexOf(match[1]) === -1) {
+        kept.push(buttons[i]);
+      }
+    }
+    return kept;
+  }
+
+  // Lo que lee quien no tiene Telegram, con a quién pedirle lo demás.
+  function chatlessText(ask) {
+    return CHATLESS + (ask || NOBODY) + ".";
+  }
+
+  // El tema abierto después de tocar uno: el mismo se cierra, otro se abre.
+  function openTopic(current, key) {
+    return current === key ? null : key;
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       targeted: targeted, whoOptions: whoOptions, pickWho: pickWho, commandBody: commandBody,
@@ -253,7 +292,8 @@
       sinceText: sinceText, quietTitle: quietTitle, urgentItems: urgentItems,
       statusText: statusText, formCommand: formCommand, isCalm: isCalm,
       whoFromQuery: whoFromQuery, timerCommand: timerCommand, calmTitle: calmTitle,
-      mineFirst: mineFirst, deviceLabel: deviceLabel,
+      mineFirst: mineFirst, deviceLabel: deviceLabel, panelButtons: panelButtons,
+      chatlessText: chatlessText, openTopic: openTopic, armedIn: armedIn,
     };
   }
   if (typeof document === "undefined") {
@@ -265,6 +305,11 @@
   var whoName = null;
   var choices = [];
   var busy = false;
+  // Los temas del último /api/live, cuál está abierto y los equipos tildados.
+  var topics = [];
+  var topicsSeen = "";
+  var openKey = null;
+  var picked = {};
 
   function byId(id) {
     return document.getElementById(id);
@@ -332,7 +377,7 @@
     var items = mineFirst(urgentItems(live), whoName);
     byId("urgent-card").classList.toggle("calm", isCalm(items));
     byId("urgent-title").textContent = calmTitle(items);
-    showCommands(live.can_command !== false);
+    showCommands(live.can_command !== false, live.ask);
     for (var i = 0; i < items.length; i++) {
       var row = element("li", "urgent-item " + items[i].kind);
       var text = element("div", "urgent-text");
@@ -344,18 +389,132 @@
       row.appendChild(buttonsFor(items[i].actions));
       list.appendChild(row);
     }
+    renderTopics(live.topics || []);
     byId("status").textContent = statusText(live.status);
     byId("status-box").hidden = !(live.status || []).length;
     showProblem("");
   }
 
-  // Con chat, el texto libre y los paneles; sin chat, solo «Ahora» y lo que puede hacer.
-  function showCommands(can) {
+  // Con chat, el texto libre y los temas; sin chat, solo «Ahora» y a quién pedirle lo demás.
+  function showCommands(can, ask) {
     var blocks = document.querySelectorAll(".needs-chat");
     for (var i = 0; i < blocks.length; i++) {
       blocks[i].hidden = !can;
     }
+    byId("chatless").textContent = can ? "" : chatlessText(ask);
     byId("chatless").hidden = can;
+  }
+
+  // Los comandos que reemplazan los formularios propios de la página.
+  function pageArms() {
+    var arms = [];
+    var nodes = document.querySelectorAll("[data-arm]");
+    for (var i = 0; i < nodes.length; i++) {
+      arms = arms.concat(nodes[i].getAttribute("data-arm").split(" "));
+    }
+    return arms;
+  }
+
+  function findTopic(key) {
+    for (var i = 0; i < topics.length; i++) {
+      if (topics[i].key === key) {
+        return topics[i];
+      }
+    }
+    return null;
+  }
+
+  // Rearma las tarjetas solo si los temas cambiaron, sin perder el abierto.
+  function renderTopics(list) {
+    var seen = JSON.stringify(list);
+    if (seen === topicsSeen) {
+      return;
+    }
+    topicsSeen = seen;
+    topics = list;
+    var box = byId("topics");
+    clear(box);
+    for (var i = 0; i < topics.length; i++) {
+      var card = element("button", "topic", topics[i].label);
+      card.type = "button";
+      card.setAttribute("data-topic", topics[i].key);
+      card.setAttribute("aria-controls", "topic-panel");
+      card.addEventListener("click", toggleTopic(topics[i].key));
+      box.appendChild(card);
+    }
+    showTopic(findTopic(openKey) ? openKey : null, false);
+  }
+
+  function toggleTopic(key) {
+    return function () {
+      showTopic(openTopic(openKey, key), true);
+    };
+  }
+
+  // Abre el panel del tema con sus botones y sus partes; null lo cierra.
+  function showTopic(key, moveFocus) {
+    var previous = openKey;
+    var topic = findTopic(key);
+    openKey = topic ? key : null;
+    var cards = byId("topics").querySelectorAll(".topic");
+    for (var i = 0; i < cards.length; i++) {
+      cards[i].setAttribute("aria-expanded", String(cards[i].getAttribute("data-topic") === openKey));
+    }
+    var panel = byId("topic-panel");
+    panel.hidden = !topic;
+    if (!topic) {
+      if (moveFocus && previous) {
+        focusCard(previous);
+      }
+      return;
+    }
+    byId("topic-title").textContent = topic.label;
+    var row = byId("topic-buttons");
+    clear(row);
+    var buttons = panelButtons(topic, pageArms());
+    for (i = 0; i < buttons.length; i++) {
+      var button = actionButton(buttons[i]);
+      button.disabled = busy;
+      row.appendChild(button);
+    }
+    row.hidden = !buttons.length;
+    showParts(topic);
+    if (moveFocus) {
+      byId("topic-title").focus();
+    }
+  }
+
+  // Muestra las partes del tema: las que reemplazan un armar suyo y las que la web le suma.
+  function showParts(topic) {
+    var armed = armedIn(topic);
+    var parts = byId("topic-panel").querySelectorAll(".part");
+    var targeted = false;
+    var chips = null;
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].hasAttribute("data-chips")) {
+        chips = parts[i];
+        continue;
+      }
+      var arms = (parts[i].getAttribute("data-arm") || "").split(" ");
+      var shown = parts[i].getAttribute("data-extra") === topic.key;
+      for (var j = 0; j < arms.length; j++) {
+        shown = shown || (arms[j] !== "" && armed.indexOf(arms[j]) !== -1);
+      }
+      parts[i].hidden = !shown;
+      targeted = targeted || (shown && parts[i].querySelector("[data-target]") !== null);
+    }
+    if (chips) {
+      chips.hidden = !targeted;
+    }
+  }
+
+  function focusCard(key) {
+    var cards = byId("topics").querySelectorAll(".topic");
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].getAttribute("data-topic") === key) {
+        cards[i].focus();
+      }
+    }
   }
 
   function poll() {
@@ -522,9 +681,10 @@
     });
   }
 
-  // Marca el chip del equipo según su casilla.
+  // Marca el chip del equipo según su casilla y recuerda la elección.
   function markDevice(label, check) {
     return function () {
+      picked[check.value] = check.checked;
       label.classList.toggle("on", check.checked);
     };
   }
@@ -537,6 +697,8 @@
       var check = document.createElement("input");
       check.type = "checkbox";
       check.value = devices[i];
+      check.checked = picked[devices[i]] === true;
+      label.classList.toggle("on", check.checked);
       check.addEventListener("change", markDevice(label, check));
       label.appendChild(check);
       label.appendChild(element("span", "", deviceLabel(names, devices[i])));
@@ -709,6 +871,9 @@
   document.addEventListener("DOMContentLoaded", function () {
     byId("who-change").addEventListener("click", function () {
       choose(null);
+    });
+    byId("topic-back").addEventListener("click", function () {
+      showTopic(null, true);
     });
     wireCommands();
     wireFree();

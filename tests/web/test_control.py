@@ -47,6 +47,15 @@ class StubCommands:
     def typed(self, name):
         return name in ("ayuda", "cancelar", "clima")
 
+    def topics_for(self, chat_id):
+        topics = {"hoy": ("📅 Hoy", (("Clima", "clima"),))}
+        if chat_id == 42:
+            topics["ajustes"] = ("⚙️ Ajustes", (("Estado", "estado"), ("Equipo de siempre", "armar usar")))
+        return topics
+
+    def alert_names(self):
+        return "Papá o a Mamá"
+
 
 class StubMonitor:
     def __init__(self, states):
@@ -501,3 +510,29 @@ def test_live_says_a_person_without_a_chat_cannot_command(db, house):
     abuela = house.add("Abuela")
 
     assert make(db, household=house).live(person_id=abuela.id)["can_command"] is False
+
+
+def test_live_brings_the_topics_of_that_chat_in_order(db):
+    control = make(db)
+
+    assert control.live(42)["topics"] == [
+        {"key": "hoy", "label": "📅 Hoy", "buttons": [{"label": "Clima", "data": "clima"}]},
+        {"key": "ajustes", "label": "⚙️ Ajustes", "buttons": [
+            {"label": "Estado", "data": "estado"},
+            {"label": "Equipo de siempre", "data": "armar usar"},
+        ]},
+    ]
+    assert [topic["key"] for topic in control.live(77)["topics"]] == ["hoy"]
+
+
+def test_live_without_a_chat_brings_no_topics_and_who_to_ask(db, house):
+    abuela = house.add("Abuela")
+
+    live = make(db, household=house).live(person_id=abuela.id)
+
+    assert live["topics"] == []
+    assert live["ask"] == "Papá o a Mamá"
+
+
+def test_live_with_a_chat_does_not_say_who_to_ask(db):
+    assert make(db).live(42)["ask"] is None

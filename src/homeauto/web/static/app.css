@@ -317,8 +317,17 @@ button.ghost { color: var(--text); }
 .control .answer-text { white-space: pre-line; overflow-wrap: anywhere; }
 .control .free { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
 .control .free .btn { padding: 0 20px; }
-.control .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); align-items: start; }
-.control .panel-col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.control .topics { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+.control .topic { min-height: 88px; padding: var(--space-3) var(--space-4); border: 2px solid transparent; border-radius: 16px; background: var(--card); color: var(--text); box-shadow: var(--shadow); font: inherit; font-size: 20px; font-weight: 600; text-align: left; cursor: pointer; }
+.control .topic[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.control .topic-panel .part { display: flex; flex-direction: column; gap: var(--space-3); }
+.control .topic-panel .part[hidden], .control .topic-panel .buttons[hidden] { display: none; }
+.control .topic-panel .part .hint { margin: calc(var(--space-2) * -1) 0 0; }
+.control .topic-panel .part > .btn { align-self: flex-start; }
+.control .topic-back { align-self: flex-start; margin-top: var(--space-2); }
+.control .persons-box { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.control .persons-box[hidden] { display: none; }
+.control .persons-box h3 { margin: 0; font-size: 18px; }
 .control .panel { display: flex; flex-direction: column; gap: var(--space-3); }
 .control .panel .card-head { margin-bottom: 0; }
 .control .cmd.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
@@ -352,16 +361,10 @@ button.ghost { color: var(--text); }
 .control .timer button { min-height: var(--tap); min-width: 7.5rem; padding: 0 var(--space-4); border-radius: 12px; border: 0; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; cursor: pointer; }
 .control .timer button:disabled { opacity: .5; cursor: default; }
 .control .chatless { margin: 0; font-size: 17px; }
-.control .status-box summary, .control .fold > summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; }
-.control .status-box summary { color: var(--muted); font-size: 14px; min-height: 32px; }
-.control .fold > summary { font-size: 20px; font-weight: 600; }
-.control .status-box summary, .control .fold > summary { list-style: none; }
-.control .status-box summary::-webkit-details-marker, .control .fold > summary::-webkit-details-marker { display: none; }
-.control .status-box summary::before, .control .fold > summary::before { content: "▸"; margin-right: var(--space-2); }
-.control .status-box[open] summary::before, .control .fold[open] > summary::before { content: "▾"; }
-.control .fold[open] > summary { margin-bottom: var(--space-3); }
-.control .fold .panel .card-head h2 { font-size: 17px; }
-.control .settings .card { box-shadow: none; padding: var(--space-3) 0 0; }
+.control .status-box summary { display: flex; align-items: center; cursor: pointer; list-style: none; color: var(--muted); font-size: 14px; min-height: 32px; }
+.control .status-box summary::-webkit-details-marker { display: none; }
+.control .status-box summary::before { content: "▸"; margin-right: var(--space-2); }
+.control .status-box[open] summary::before { content: "▾"; }
 /* Celular: el título con quién sos arriba y el menú abajo. */
 @media (max-width: 640px) {
   .control .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2) var(--space-3);
@@ -370,11 +373,18 @@ button.ghost { color: var(--text); }
   .control .who { grid-area: who; justify-self: end; }
   .control .site-nav { grid-area: links; }
 }
+/* Ancho: los temas en cuatro columnas, para que ninguno parta el nombre. */
+@media (min-width: 900px) {
+  .control .topics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+/* Celular: el botón del aviso en minutos abajo de sus dos campos. */
+@media (max-width: 480px) {
+  .control .timer { grid-template-columns: 6.5em minmax(0, 1fr); }
+  .control .timer button { grid-column: 1 / -1; }
+}
 /* Muy angosto: el botón de cada fila abajo del campo, a lo ancho. */
 @media (max-width: 400px) {
   .control .cmd.row { grid-template-columns: minmax(0, 1fr); }
-  .control .timer { grid-template-columns: 6.5em minmax(0, 1fr); }
-  .control .timer button { grid-column: 1 / -1; }
 }
 
 /* Celular angosto: el kiosco en una sola columna que se desplaza. */

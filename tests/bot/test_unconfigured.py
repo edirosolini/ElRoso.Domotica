@@ -71,6 +71,13 @@ def test_without_a_name_it_points_to_whoever_runs_the_house(household):
     )
 
 
+def test_alert_names_says_who_runs_the_house():
+    household = FakeHousehold(Person(1, "Papá", ALERTS), Person(2, "Mamá", SECOND_ALERTS))
+
+    assert build(household, alerts=(SECOND_ALERTS, ALERTS)).alert_names() == "Papá o a Mamá"
+    assert build(None).alert_names() == "quien maneja la casa"
+
+
 PLAIN = "Esto todavía no está configurado. Avisale a Papá."
 MENU_PARTS = {"meal_store": object(), "meal_planner": object()}
 MEALS_OFF = {"menu_lunch_at": None, "menu_dinner_at": None}

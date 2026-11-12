@@ -11,6 +11,7 @@ from homeauto.meals import LUNCH, Meal, MealStore
 from homeauto.schedule.history import HistoryStore
 from homeauto.schedule.month import ALARM_ITEM, REMINDER_ITEM, TIMER_ITEM
 from homeauto.schedule.store import Store
+from homeauto.bot.commands import ARRANGE_BUTTON, ARRANGEABLE, SETTINGS_TOPIC, TOPICS
 from homeauto.web.apk import FILES
 from homeauto.web.app import APP_FILES, FULLCALENDAR, STATIC_DIR, Request, WebApp
 from homeauto.web.board import GOOGLE, HOLIDAY, Board, RangeError
@@ -959,51 +960,83 @@ def test_the_control_page_loads_its_script_and_its_manifest(app):
     assert 'href="/agenda"' in page
 
 
-def test_the_control_offers_the_meal_menu_next_to_the_lists(app):
+def control_parts(page, attribute):
+    """Los valores de un atributo de las partes del panel, en orden."""
+    return re.findall(rf'{attribute}="([^"]*)"', page)
+
+
+def test_the_control_builds_the_topics_from_the_feed(app):
     page = get(app, "/control").body.decode("utf-8")
 
-    lists = page[page.index("<h2>🛒 Listas</h2>"):]
-    lists = lists[:lists.index("</section>")]
-    assert '<button type="button" class="cmd" data-verb="menu">Menú</button>' in lists
+    assert '<div id="topics" class="topics" role="group" aria-label="Temas"></div>' in page
+    panel = page[page.index('id="topic-panel"'):]
+    assert '<h2 id="topic-title" tabindex="-1"></h2>' in panel
+    assert 'id="topic-buttons"' in panel
+    assert ">Volver a los temas</button>" in panel
+    assert page.index('id="free"') < page.index('id="topics"') < page.index('id="topic-panel"')
+    assert page.index('id="urgent-card"') < page.index('id="free"')
 
 
-def folded(page, summary):
-    """Lo de adentro del <details> cuyo <summary> dice eso."""
-    start = page.index(f"<summary>{summary}</summary>")
-    assert page.rfind("<details", 0, start) > page.rfind("</details>", 0, start), summary
-    return page[start:page.index("</details>", start)]
+def test_each_form_of_a_topic_replaces_an_arrange_button_of_that_topic(app):
+    page = get(app, "/control").body.decode("utf-8")
+    offered = {data for _, buttons in TOPICS.values() for _, data in buttons}
+
+    arms = [arm for value in control_parts(page, "data-arm") for arm in value.split()]
+    assert sorted(arms) == sorted(set(arms))
+    assert {"timer", "decir", "volumen", "agregar", "preguntar", "calcular", "traducir",
+            "usar", "alarma", "recordar"} == set(arms)
+    for arm in arms:
+        assert arm in ARRANGEABLE, arm
+        assert f"{ARRANGE_BUTTON} {arm}" in offered, arm
 
 
-def test_the_control_folds_the_house_settings_with_people_and_purge_at_the_end(app):
+def test_what_only_the_web_adds_goes_to_a_topic_that_exists(app):
     page = get(app, "/control").body.decode("utf-8")
 
-    settings = folded(page, "⚙️ Ajustes de la casa")
-    assert '<button type="button" class="cmd" data-verb="depurar">🧹 Depurar</button>' in settings
-    assert 'id="persons-card"' in settings
-    assert page.index("⚙️ Ajustes de la casa") > page.index("<summary>Más</summary>")
+    extras = control_parts(page, "data-extra")
+    assert extras
+    for key in extras:
+        assert key in TOPICS, key
+    assert {"avisos", "parlante", SETTINGS_TOPIC} <= set(extras)
 
 
-def test_the_control_folds_the_rare_commands_under_more(app):
+def test_the_control_has_one_way_to_create_a_job(app):
     page = get(app, "/control").body.decode("utf-8")
 
-    more = folded(page, "Más")
-    for verb in ("usar", "equipos", "volumen", "pantalla", "turnos", "pastillas", "calcular",
-                 "traducir"):
-        assert f'data-verb="{verb}"' in more, verb
-        assert page.count(f'data-verb="{verb}"') == 1, verb
+    assert re.findall(r'href="(/agenda[^"]*)"', page) == ["/agenda", "/agenda?nuevo=1"]
+    assert ">➕ Nuevo aviso</a>" in page
 
 
-def test_the_control_has_one_pills_and_one_turns_field_that_also_reads(app):
+def test_the_control_drops_the_old_layout_and_its_labels(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    for old in ('id="quick"', "A mano", "<summary>Más</summary>", "panel-col", 'class="panels"',
+                "Cortar lo que suena", "Apagar el equipo", "Apagar pantalla", ">Lista<",
+                "Ajustes de la casa", 'data-verb="cancelar"', 'data-verb="sacar"'):
+        assert old not in page, old
+    for verb in ("compras", "agregar", "decir", "timer"):
+        assert page.count(f'data-verb="{verb}"') <= 1, verb
+
+
+def test_the_control_loads_pills_and_turns_in_their_topic(app):
     page = get(app, "/control").body.decode("utf-8")
 
     for verb in ("pastillas", "turnos"):
         assert page.count(f'data-verb="{verb}"') == 1, verb
-        form = page[page.index(f'data-verb="{verb}"'):]
-        form = form[:form.index(">")]
-        assert "data-need" not in form, verb
-    scheduled = page[page.index("<h2>⏰ Programado</h2>"):]
-    scheduled = scheduled[:scheduled.index("</section>")]
-    assert '<a class="btn secondary" href="/agenda">Crear en la agenda</a>' in scheduled
+        part = page[:page.index(f'data-verb="{verb}"')]
+        assert part[part.rindex("data-extra="):].startswith('data-extra="avisos"'), verb
+
+
+def test_the_device_chips_serve_every_form_that_names_where(app):
+    page = get(app, "/control").body.decode("utf-8")
+
+    assert page.count('id="devices"') == 1
+    panel = page[page.index('id="topic-panel"'):]
+    assert 'id="devices"' in panel
+    for verb in ("decir", "volumen", "llamar", "pantalla apagar"):
+        found = page[page.index(f'data-verb="{verb}"'):]
+        assert 'data-target="1"' in found[:found.index(">")], verb
+    assert ">Sacar la pantalla</button>" in page
 
 
 def test_the_control_placeholders_are_short_and_the_help_is_visible(app):
@@ -1027,11 +1060,13 @@ def test_the_control_asks_who_you_are_before_anything(app):
     assert "<select" not in page[:page.index("</header>")]
 
 
-def test_the_control_tells_who_has_no_telegram_what_they_can_do(app):
+def test_the_control_tells_who_has_no_telegram_what_they_can_do_from_the_feed(app):
     page = get(app, "/control").body.decode("utf-8")
+    script = get(app, "/static/control.js").body.decode("utf-8")
 
-    assert ("Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a"
-            " Papá o Mamá.") in page
+    assert '<p id="chatless" class="card chatless" hidden></p>' in page
+    assert "Papá" not in page and "Mamá" not in page
+    assert "chatlessText(ask)" in script and "live.ask" in script
     assert 'class="needs-chat"' in page
 
 
@@ -1044,27 +1079,6 @@ def test_the_control_offers_examples_that_fill_the_free_text(app):
         "alarma a las 7 de lunes a viernes", "agregá leche a compras",
         "decí en el comedor que bajen a comer", "silencio por 2 horas",
     ]
-
-
-def test_the_control_has_quick_shortcuts_without_the_model(app):
-    page = get(app, "/control").body.decode("utf-8")
-
-    quick = page[page.index('id="quick"'):]
-    quick = quick[:quick.index("</section>")]
-    assert 'data-verb="timer"' in quick
-    assert 'data-verb="silencio"' in quick and 'placeholder="1h"' in quick
-    assert 'href="/agenda?nuevo=1"' in quick
-    assert 'data-verb="compras"' in quick
-    assert 'data-verb="agregar"' in quick
-    assert 'data-verb="decir" data-target="1"' in quick and 'id="devices"' in quick
-
-
-def test_the_control_names_its_buttons_for_anyone(app):
-    page = get(app, "/control").body.decode("utf-8")
-
-    assert 'data-verb="parar" data-target="1">Cortar lo que suena</button>' in page
-    assert 'data-verb="apagar" data-target="1">Apagar el equipo</button>' in page
-    assert "<button type=\"submit\">Equipo de siempre</button>" in page
 
 
 def test_the_control_folds_the_checks_under_now(app):
@@ -1186,7 +1200,8 @@ def test_the_control_manages_the_padron_and_asks_before_removing(app):
 
     persons = page[page.index('id="persons-card"'):]
     persons = persons[:persons.index("</section>")]
-    assert '<section id="persons-card" class="card panel" hidden>' in page
+    assert '<section id="persons-card" class="persons-box" hidden>' in page
+    assert 'data-extra="ajustes"' in page[page.rindex("data-extra=", 0, page.index('id="persons-card"')):]
     assert 'id="person-add"' in persons and 'id="person-chat"' in persons
     assert 'maxlength="40"' in persons
     assert "style=" not in page
@@ -1794,10 +1809,12 @@ def test_the_controls_are_big_enough_to_touch(app, selector):
     assert "min-height: var(--tap)" in rule(stylesheet(app), selector)
 
 
-def test_the_control_panels_do_not_stretch_and_the_rows_are_a_grid(app):
+def test_the_control_topics_are_big_cards_and_the_rows_are_a_grid(app):
     css = stylesheet(app)
 
-    assert "align-items: start" in rule(css, ".control .panels")
+    assert "display: grid" in rule(css, ".control .topics")
+    assert "min-height: 88px" in rule(css, ".control .topic")
+    assert "border-color: var(--accent)" in rule(css, '.control .topic[aria-expanded="true"]')
     assert "display: grid" in rule(css, ".control .cmd.row")
     assert "vh" not in rule(css, ".control .card-head h2")
 
