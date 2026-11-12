@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Callable, Iterable
 
-from homeauto.bot.commands import CHATLESS_BUTTONS, with_actions
+from homeauto.bot.commands import CHATLESS_BUTTONS, broken, with_actions
 from homeauto.people import display_name
 from homeauto.schedule.awaiting import KEEP
 from homeauto.schedule.reminders import SNOOZE_WINDOW
@@ -16,8 +16,6 @@ from homeauto.web.jobs import ReadOnly, WebError
 log = logging.getLogger(__name__)
 
 MAX_TEXT = 500
-
-BROKEN = "🔴 No pude procesar la solicitud: {reason}"
 
 OFF = ("🔕 Apagar", "callar {job}")
 DONE = ("✅ Hecho", "hecho {job}")
@@ -214,7 +212,7 @@ class ControlService:
                 reply = with_actions(self.commands.free_text, chat_id, value.strip(), who=who)
         except Exception as exc:  # noqa: BLE001
             log.exception("el comando de la pantalla se rompió")
-            return {"text": BROKEN.format(reason=exc), "actions": []}
+            return {"text": broken(exc, chat_id in self.alert_recipients), "actions": []}
         return {"text": reply.text, "actions": _actions(reply.actions)}
 
     def _typed(self, text: str) -> str | None:

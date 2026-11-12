@@ -177,16 +177,28 @@ class ExplodingCommands:
 
 
 @pytest.mark.asyncio
-async def test_a_command_that_blows_up_still_answers():
-    """Un error dejaba al mensaje sin respuesta y parecía colgado."""
+async def test_a_command_that_blows_up_still_answers(caplog):
+    """La familia lee una frase llana; el motivo queda en el log."""
     app = Recorder()
-    main.register(app, ExplodingCommands())
+    main.register(app, ExplodingCommands(), alert_recipients={7})
 
     for callback in app.callbacks:
+        caplog.clear()
         update = FakeUpdate("/decir hola")
         await callback(update, None)
         assert update.message.answers, "el mensaje quedó sin contestar"
         answer = update.message.answers[0]
-        assert answer.startswith("🔴"), "un error tiene que verse como un error"
-        assert "no pude procesar" in answer.lower()
-        assert "Address already in use" in answer, "qué se rompió, no solo que se rompió"
+        assert answer == "No me salió. Probá de nuevo en un rato."
+        assert "Address already in use" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_an_alert_chat_reads_what_blew_up():
+    app = Recorder()
+    main.register(app, ExplodingCommands(), alert_recipients={42})
+
+    for callback in app.callbacks:
+        update = FakeUpdate("/decir hola", chat_id=42)
+        await callback(update, None)
+        answer = update.message.answers[0]
+        assert answer == "🔴 No pude procesar la solicitud: Address already in use"

@@ -1,5 +1,5 @@
 from homeauto.bot.commands import Commands
-from homeauto.weather import WeatherError
+from homeauto.weather import UNAVAILABLE, WeatherError
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
 
@@ -75,12 +75,12 @@ def test_the_forecast_is_fetched_once_for_all_devices():
 
 
 def test_a_weather_failure_is_explained_and_nothing_is_said():
-    cmd, spk = build(weather=FakeWeather(boom=WeatherError("No pude consultar el clima: timeout")))
+    cmd, spk = build(weather=FakeWeather(boom=WeatherError(UNAVAILABLE)))
 
     reply = cmd.weather(OWNER, "")
 
     assert spk["parlante"].said == []
-    assert "No pude consultar el clima" in reply
+    assert reply == UNAVAILABLE
 
 
 def test_a_stranger_gets_nothing():

@@ -1190,6 +1190,57 @@ def test_the_alerts_reach_only_the_alert_chats(wired, tmp_path, monkeypatch):
     assert set(seen["alert_chat_ids"]) == {42}
 
 
+class _TapMessage:
+    def __init__(self):
+        self.replies = []
+
+    async def reply_text(self, text, reply_markup=None):
+        self.replies.append(text)
+
+
+class _Tap:
+    def __init__(self, chat_id):
+        message = _TapMessage()
+        self.message = None
+        self.effective_chat = type("Chat", (), {"id": chat_id})()
+        self.callback_query = type("Query", (), {
+            "data": "lista", "message": message,
+            "answer": staticmethod(lambda: _done()),
+            "edit_message_reply_markup": staticmethod(lambda reply_markup=None: _done()),
+        })()
+
+
+async def _done():
+    return None
+
+
+async def test_only_the_alert_chats_read_why_a_tap_broke(wired, tmp_path, monkeypatch, caplog):
+    registered = {}
+    original = main.register
+
+    def spy(app, commands, strangers=None, people=None, household=None, **kwargs):
+        registered["commands"] = commands
+        return original(app, commands, strangers, people, household, **kwargs)
+
+    monkeypatch.setattr(main, "register", spy)
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\nALERT_CHAT_IDS=42\n"))
+
+    def explode(*_args):
+        raise RuntimeError("Address already in use")
+
+    registered["commands"].press = explode
+    [tap] = [h.callback for h in wired.handlers if isinstance(h, main.CallbackQueryHandler)]
+    family, owner = _Tap(77), _Tap(42)
+    await tap(family, None)
+    await tap(owner, None)
+
+    assert family.callback_query.message.replies == ["No me salió. Probá de nuevo en un rato."]
+    assert owner.callback_query.message.replies == [
+        "🔴 No pude procesar la solicitud: Address already in use"
+    ]
+    assert "Address already in use" in caplog.text
+
+
 @pytest.mark.parametrize("schedule", ["schedule_briefing", "schedule_closing"])
 def test_the_summaries_hand_over_the_copy_for_the_others(schedule, wired, tmp_path, monkeypatch):
     handed = {}
@@ -1316,9 +1367,9 @@ def test_the_screen_knows_the_people_of_the_house(wired, tmp_path, monkeypatch):
     registered = {}
     original = main.register
 
-    def spy(app, commands, strangers=None, people=None, household=None):
+    def spy(app, commands, strangers=None, people=None, household=None, **kwargs):
         registered["people"] = people
-        return original(app, commands, strangers, people, household)
+        return original(app, commands, strangers, people, household, **kwargs)
 
     monkeypatch.setattr(main, "register", spy)
     web = _wired_web(monkeypatch, tmp_path, HOUSE)
@@ -1967,10 +2018,10 @@ def test_the_control_runs_real_commands_on_the_one_database(wired, tmp_path, mon
     registered = {}
     original = main.register
 
-    def spy(app, commands, strangers=None, people=None, household=None):
+    def spy(app, commands, strangers=None, people=None, household=None, **kwargs):
         registered["commands"] = commands
         registered["people"] = people
-        return original(app, commands, strangers, people, household)
+        return original(app, commands, strangers, people, household, **kwargs)
 
     monkeypatch.setattr(main, "register", spy)
     web = _wired_web(monkeypatch, tmp_path, HOUSE)
@@ -1999,9 +2050,9 @@ def test_the_padron_is_one_and_reaches_the_screen_the_control_and_telegram(
     registered = {}
     original = main.register
 
-    def spy(app, commands, strangers=None, people=None, household=None):
+    def spy(app, commands, strangers=None, people=None, household=None, **kwargs):
         registered["household"] = household
-        return original(app, commands, strangers, people, household)
+        return original(app, commands, strangers, people, household, **kwargs)
 
     monkeypatch.setattr(main, "register", spy)
     web = _wired_web(monkeypatch, tmp_path, HOUSE)
@@ -2344,9 +2395,9 @@ def test_the_commands_assign_with_the_people_of_the_house(wired, tmp_path, monke
     registered = {}
     original = main.register
 
-    def spy(app, commands, strangers=None, people=None, household=None):
+    def spy(app, commands, strangers=None, people=None, household=None, **kwargs):
         registered.update(commands=commands, household=household)
-        return original(app, commands, strangers, people, household)
+        return original(app, commands, strangers, people, household, **kwargs)
 
     monkeypatch.setattr(main, "register", spy)
     run_main(monkeypatch, config_file(tmp_path, HOUSE))

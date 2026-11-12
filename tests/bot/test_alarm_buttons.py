@@ -110,9 +110,9 @@ class PressSpy:
         return lambda *args, **kwargs: "ok"
 
 
-def register(commands):
+def register(commands, alert_recipients=()):
     app = Recorder()
-    main.register(app, commands)
+    main.register(app, commands, alert_recipients=alert_recipients)
     assert len(app.buttons) == 1, "tiene que haber un handler para los botones"
     return app.buttons[0]
 
@@ -143,13 +143,26 @@ async def test_a_tap_takes_the_button_away():
 
 
 @pytest.mark.asyncio
-async def test_a_tap_that_blows_up_still_answers():
+async def test_a_tap_that_blows_up_still_answers(caplog):
     tap = register(PressSpy(answer=RuntimeError("se rompió")))
     update = FakeUpdate("posponer 10m")
 
     await tap(update, None)
 
-    assert update.callback_query.message.replies[0].startswith("🔴")
+    assert update.callback_query.message.replies == ["No me salió. Probá de nuevo en un rato."]
+    assert "se rompió" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_tap_that_blows_up_tells_an_alert_chat_why():
+    tap = register(PressSpy(answer=RuntimeError("se rompió")), alert_recipients={42})
+    update = FakeUpdate("posponer 10m")
+
+    await tap(update, None)
+
+    assert update.callback_query.message.replies == [
+        "🔴 No pude procesar la solicitud: se rompió"
+    ]
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ from tests.conftest import FakeSpeaker, StubRegistry, make_config
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 OWNER = 42
+FAMILY = 77
 BY_DAY = datetime(2026, 8, 30, 15, 0, tzinfo=TZ)
 AT_NIGHT = datetime(2026, 8, 30, 3, 0, tzinfo=TZ)
 NIGHT = QuietHours(start=time(23, 0), end=time(7, 0))
@@ -30,7 +31,10 @@ class FakeAgenda:
 def build(agenda=None, now=BY_DAY, quiet=None, **speakers):
     speakers = speakers or {"parlante": FakeSpeaker("parlante")}
     commands = Commands(
-        config=make_config(allowed={OWNER}, devices=dict.fromkeys(speakers)),
+        config=make_config(
+            allowed={OWNER, FAMILY}, alert_chat_ids=frozenset({OWNER}),
+            devices=dict.fromkeys(speakers),
+        ),
         speakers=StubRegistry(**speakers),
         agenda=agenda or FakeAgenda(),
         quiet=quiet,
@@ -95,12 +99,22 @@ def test_a_word_it_does_not_understand_is_explained():
     assert spk["parlante"].said == []
 
 
-def test_a_calendar_failure_is_explained_and_nothing_is_said():
-    cmd, spk = build(agenda=FakeAgenda(boom=CalendarError("no pude bajar el calendario")))
+def test_a_calendar_failure_tells_an_alert_chat_why_and_nothing_is_said():
+    cmd, spk = build(agenda=FakeAgenda(boom=CalendarError("familia: HTTP 404")))
 
     reply = cmd.agenda_command(OWNER, "")
 
-    assert "no pude bajar el calendario" in reply
+    assert reply == "No pude leer el calendario: familia: HTTP 404"
+    assert spk["parlante"].said == []
+
+
+def test_a_calendar_failure_is_plain_for_the_family(caplog):
+    cmd, spk = build(agenda=FakeAgenda(boom=CalendarError("familia: HTTP 404")))
+
+    reply = cmd.agenda_command(FAMILY, "")
+
+    assert reply == "No pude leer el calendario. Probá en un rato."
+    assert "familia: HTTP 404" in caplog.text
     assert spk["parlante"].said == []
 
 

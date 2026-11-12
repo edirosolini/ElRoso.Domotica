@@ -70,10 +70,19 @@ def test_volume_needs_a_number():
     assert "número" in reply.lower()
 
 
-def test_volume_out_of_range_surfaces_the_reason():
-    cmd, _ = build(speaker=FakeSpeaker(fail=CastError("El volumen tiene que estar entre 0 y 100")))
+def test_volume_out_of_range_is_refused_before_the_speaker():
+    cmd, speaker = build()
 
     reply = cmd.volume(OWNER, "500")
+
+    assert speaker.volumes == []
+    assert "0 a 100" in reply
+
+
+def test_a_volume_the_speaker_refuses_surfaces_the_reason_to_an_alert_chat():
+    cmd, _ = build(speaker=FakeSpeaker(fail=CastError("El volumen tiene que estar entre 0 y 100")))
+
+    reply = cmd.volume(OWNER, "40")
 
     assert "entre 0 y 100" in reply
 
