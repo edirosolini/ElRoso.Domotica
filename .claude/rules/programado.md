@@ -115,9 +115,8 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   vuelve a sonar como recordatorio.
 - **En vacaciones una alarma no suena: se escribe una sola vez**, no repite y sale sin
   «🔕 Apagar alarma». Activarlas corta las que estaban sonando. Ver **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`.
-- **Una alarma en un equipo con pantalla prende su vista en la tele** durante un minuto
-  después de cada sonido, pasa al kiosco hasta la próxima repetición y cierra la tele a los
-  quince minutos de que deja de sonar. Solo `kind=alarm`; un recordatorio o un timer no. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
+- **Una alarma en un equipo con pantalla prende su vista en la tele** mientras suena, con
+  tope de treinta y cinco minutos, y cierra la tele a los quince minutos de que deja de sonar. Solo `kind=alarm`; un recordatorio o un timer no. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
 - ⚠️ **Se tocó el prompt del router** para sumar `recordar` y el ejemplo "recordame mañana a
   las diez" → `timer`. Medido el 2026-09-28: treinta y cuatro de treinta y cuatro, después
   de acotar la regla de las duraciones (ver **Texto libre**, en `.claude/rules/router-y-conversacion.md`).

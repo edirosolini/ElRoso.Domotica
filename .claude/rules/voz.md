@@ -374,7 +374,7 @@ El alias de `CAST_DEVICES` es la clave; a una persona se le muestra su nombre en
   Google TV** se anuncia como `Chromecast`, igual que uno viejo sin sistema operativo. No
   deducir capacidades de ese string: preguntarle al equipo o al dueño.
 - **Castear a un equipo con pantalla prende el televisor.** Con la vista de alarma es lo
-  buscado: una alarma en el comedor prende la tele y muestra la hora un minuto por sonido. Ver
+  buscado: una alarma en el comedor prende la tele y muestra la hora mientras suena. Ver
   **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
 - **Un Speaker por equipo, pero síntesis y servidor HTTP compartidos.** Lo único distinto
   entre equipos es el Caster; duplicar lo demás sería sintetizar dos veces la misma frase.

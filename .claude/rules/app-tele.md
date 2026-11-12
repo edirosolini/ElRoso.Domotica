@@ -32,7 +32,7 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`; `names`, el nombre visible de cada una (`{alias: nombre}`, ver **Nombre de los equipos** en `.claude/rules/voz.md`), que la app todavía no lee; `persons`, el padrón como `{id, name, chat_id}`, y `people`, los chats como `{chat_id, name}` |
+| `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`; `names`, el nombre visible de cada una (`{alias: nombre}`, ver **Nombre de los equipos** en `.claude/rules/voz.md`); `persons`, el padrón como `{id, name, chat_id}`, y `people`, los chats como `{chat_id, name}` |
 | `POST /api/tele/hello` | registra la tele, o la actualiza, y cuenta como latido. Devuelve `{alias, caps}` |
 | `GET /api/tele/<alias>/poll` | cuenta como latido y devuelve `{"alarm": id o null, "reminders": [...], "orders": [...], "quiet": bool}` |
 | `POST /api/tele/<alias>/ack` | lo que la app dice de una orden, `{seq, state}`. Devuelve `{"accepted": bool}` |
@@ -153,13 +153,22 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
 **Primer uso y cambio.**
 
 - Sin tele elegida, `MainActivity` manda a `SetupActivity`: pide `setup` al CT y se elige con
-  el control el alias, de `devices`, y de quién es (`Owners`): las personas de `persons`, una
+  el control la tele, de `devices`, y de quién es (`Owners`): las personas de `persons`, una
   sin chat como «<nombre> (sin Telegram)»; con el padrón vacío, los chats de `people`. Sin
   ninguna de las dos se guarda sin nadie. Queda en `SharedPreferences`.
+- **La tele se muestra con su nombre visible y se guarda por alias**: `Setup.label()` lee
+  `names` («Recámara»); sin `names` o con el nombre vacío, el alias.
+- **Un error no muestra el motivo técnico, que va solo al log**: `Trouble` dice
+  «No encuentro la casa. Revisá que la tele tenga WiFi.» (`NO_HOUSE`, no hubo respuesta) o
+  «La casa no pudo hacerlo. Probá de nuevo en un rato.» (`HOUSE_FAILED`, el CT contestó con
+  error o algo ilegible). Lo usan `setup`, el OK de la alarma y el del cartel de recordatorio.
 - **Una persona se guarda como `person_id`, aunque tenga chat; un chat, como `chat_id`.** Una
   elección de la `0.3.0`, solo con `chat_id`, sigue como chat sin migrar nada (`TeleChoice`).
-- **«Cambiar tele o persona»**, abajo a la derecha del kiosco, abre `SetupActivity` de nuevo.
-  BACK vuelve al kiosco sin cambiar nada. 🔴 **Si cambia la tele, se para y se vuelve a
+- **OK mantenido tres segundos en el kiosco, sin alarma, abre `SetupActivity` de nuevo**
+  (`OkKey`): con las repeticiones de la tecla se abre a los tres segundos y, si el control no
+  repite, al soltar. No hay botón en pantalla. BACK vuelve al kiosco sin cambiar nada.
+- ⚠️ **Falta probar en la tele si el control del Chromecast repite `DPAD_CENTER` al mantener
+  OK.** Si no repite, el cambio se abre recién al soltar. 🔴 **Si cambia la tele, se para y se vuelve a
   arrancar `TeleService`**, para que haga `hello` con el alias nuevo; si solo cambia la
   persona, el servicio sigue.
 - **La persona no viaja en `hello`**, que manda alias, versión y capacidades: solo la usan el OK
@@ -190,9 +199,9 @@ la máquina. Paquete `ar.elroso.domotica.tele`.
 sobre la URL que le pase un `show`. `Kiosk` es el puente entre el servicio y el kiosco abierto:
 si no hay kiosco abierto, lo que el servicio le pide se pierde sin error.
 
-- **El foco arranca en el WebView** cada vez que la app vuelve adelante. **Abajo en el D-pad,
-  con el foco en el WebView, lo lleva al botón** «Cambiar tele o persona», que sin foco queda
-  casi transparente.
+- **El foco arranca en el WebView** cada vez que la app vuelve adelante.
+- 🔴 **El OK nunca llega al WebView**: `MainActivity` consume toda tecla OK, con alarma o sin
+  ella. Las otras teclas siguen a la página.
 
 **Órdenes en la app.** `OrderRunner`, en `:core`, ejecuta cada orden sobre `TeleDevice`, que en
 Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
@@ -236,11 +245,14 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
   `show` que manda `Screens`. La vista de alarma vuelve sola al kiosco, igual que en DashCast.
 - 🔴 **El OK del control apaga la alarma a nombre de quien se eligió**: manda a
   `/api/command` `{person_id, data: "callar <id>"}`, o `{chat_id, ...}` con una elección de
-  chat, el mismo botón que «🔕 Apagar alarma» (`AlarmKey`). Mientras hay alarma y alguien elegido,
-  abajo dice «OK para apagar». **Sin nadie elegido, el OK no hace nada** con la alarma y queda
-  en el log.
-- **Con alarma, el OK apaga aunque el foco esté en «Cambiar tele o persona»**: no abre el
-  cambio. Sin alarma, el OK sobre el botón lo abre.
+  chat, el mismo botón que «🔕 Apagar alarma» (`AlarmKey`), al soltar la tecla. Mientras hay
+  alarma y alguien elegido, abajo dice «OK = 🔕 Apagar alarma». **Sin nadie elegido, el OK no
+  hace nada** con la alarma y queda en el log.
+- **Si el CT contesta, abajo dice «🔕 Alarma apagada» dos segundos** (`SILENCED_MS`) y esa
+  alarma ya no muestra la línea del OK. Un segundo OK, esperando la respuesta o ya apagada,
+  se ignora. **Si falla, el texto de `Trouble` queda abajo hasta el próximo OK**, que reintenta,
+  o hasta que cambie la alarma.
+- **Con alarma, mantener el OK no abre el cambio de tele**: al soltar, apaga.
 - **Una persona sin Telegram también apaga**: `/api/command` lo corre por
   `Commands.press_without_chat()`, y el aviso de que la apagó llega a todos los chats. Ver
   **Control desde la web**, en `.claude/rules/web.md`.
@@ -255,25 +267,27 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
 - 🔴 **Es una ventana `TYPE_APPLICATION_OVERLAY` del servicio, no `MainActivity`**: sale encima
   de cualquier app —Movistar, el inicio— sin traer la app adelante. A pantalla completa, con el
   fondo negro al sesenta por ciento y una tarjeta centrada al sesenta por ciento del ancho: el
-  mensaje en dos líneas como mucho, «Para <nombre>» si el `for` no es null, y «OK para marcar
-  hecho» si hay alguien elegido. Es enfocable, así que las teclas del control van a ella.
+  mensaje en dos líneas como mucho, «Para <nombre>» si el `for` no es null, y la leyenda de las
+  teclas: «OK = Hecho · Atrás = más tarde» con alguien elegido, «OK o Atrás = cerrar» sin nadie. Es enfocable, así que las teclas del control van a ella.
 - **Uno por vez: el de `id` más bajo** que no se cerró ni se marcó en la tele.
 - **Con alarma no se muestra**: `TeleService` le pasa la misma alarma del `poll` que a `Kiosk`,
   y el cartel vuelve cuando la alarma se va.
 - 🔴 **El OK marca hecho a nombre de quien se eligió**: manda a `/api/command` `hecho <id>`
   (`ReminderKey`), con `person_id` o `chat_id` como el OK de la alarma. Mientras espera dice ⏳;
-  si el CT contesta, «✅ Hecho» un segundo y se va; si falla, muestra el motivo y queda, y el OK
-  se puede volver a apretar.
-- **Sin nadie elegido no hay línea del OK, y el OK solo cierra**, igual que otra tecla.
-- **Cualquier otra tecla que llegue lo cierra hasta el próximo re-aviso**: `ReminderBoard`
+  si el CT contesta, «✅ Hecho» un segundo y se va; si falla, muestra el texto de `Trouble` y
+  queda, y el OK se puede volver a apretar.
+- **Atrás lo deja para más tarde: lo cierra hasta el próximo re-aviso**: `ReminderBoard`
   guarda los `nags` con que se cerró y lo vuelve a mostrar cuando el `poll` trae más. Lo cerrado
   o marcado se olvida cuando el `poll` deja de traerlo.
+- **Sin nadie elegido, OK y Atrás lo cierran igual**, hasta el próximo re-aviso.
+- 🔴 **Cualquier otra tecla se consume sin hacer nada** (`ReminderKey.action()`): una flecha
+  apretada sin querer no lo cierra ni pasa a la app de abajo.
 - **Sin el permiso de superposición no se muestra**, y queda una vez en el log por recordatorio.
 - Un recordatorio ilegible se descarta al leer el `poll`, igual que una orden.
 - ⚠️ **Medido en la tele `habitacion`** (Chromecast con Google TV HD, Android 14, 2026-10-22),
   con una prueba: el OK, las flechas y BACK llegan al cartel encima de Movistar y del inicio; el
   volumen no llega, lo maneja la tele; HOME no llega y el cartel queda arriba del inicio hasta
-  otra tecla. Movistar no se pausa debajo.
+  OK o Atrás. Movistar no se pausa debajo.
 
 **Protector de pantalla.** `KioskDream` es un `DreamService` que muestra el kiosco,
 `Tele.urls.kiosk`, cuando la tele queda inactiva. `Dream`, en `:app`, es el puente entre el
@@ -356,7 +370,7 @@ de nuevo.
   en un volumen de Docker.
 - **`versionCode` y `versionName` van a mano en `version.properties`.** Una versión nueva
   para instalar encima sube el `versionCode`, y es lo único que mira `UpdatePolicy`. Hoy es la
-  `0.6.0`, `versionCode` 9.
+  `0.7.0`, `versionCode` 10.
 - **Ícono y banner.** El ícono es `@mipmap/ic_launcher`, la R de El Roso como ícono adaptativo
   (la R en `ic_launcher_foreground` sobre el naranja de `ic_launcher_background`). El banner
   del launcher de la tele es `drawable/banner`, vectorial: la R blanca sobre un gradiente

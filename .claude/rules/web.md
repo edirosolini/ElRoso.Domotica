@@ -58,7 +58,7 @@ separada del transporte HTTP y se prueba sin red.
 | `/` | un 302 a `/control`; otro método es 405 |
 | `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre, «A mano» y los comandos en paneles. `?soy=<id>` elige a esa persona del padrón y la guarda. Ver **Control desde la web** |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
-| `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje, para quién (`for`) y la hora del servidor |
+| `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje, para quién (`for`), a qué hora sonó (`at`, «H:MM» de `fired_at`, o null) y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima, `meal` y listas como `[{id, text}]` |
 | `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre, los equipos (`devices`, y `names` con el nombre visible de cada alias), el padrón (`persons`) y los chats con el nombre visto en Telegram (`chats`, `seen`) |
 | `POST /api/persons` | suma una persona al padrón. Ver **Padrón de la casa** |
