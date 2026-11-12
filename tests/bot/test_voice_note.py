@@ -97,7 +97,11 @@ def test_without_a_transcriber_it_says_it_does_not_listen():
     cmd, _ = build()
     cmd.transcribe = None
 
-    assert "audio" in cmd.heard(OWNER, AUDIO).text.lower()
+    reply = cmd.heard(OWNER, AUDIO)
+
+    assert "audio" in reply.text.lower()
+    assert "/ayuda" not in reply.text
+    assert any(data.startswith("tema ") for _, data in reply.actions)
 
 
 def test_a_stranger_is_turned_away_before_paying_the_model():

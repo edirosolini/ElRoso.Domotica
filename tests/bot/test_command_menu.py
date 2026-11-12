@@ -1,16 +1,21 @@
-"""The '/' menu in Telegram only exists if the bot registers its commands.
-
-Without setMyCommands everything works but is invisible: you have to know the
-commands by heart. The menu is the short list; `HELP` is the whole catalogue.
+"""El menú «/» de Telegram: un comando por tema, «ajustes» solo en los chats de alertas
+y lo que no está en el menú, en `HELP`.
 """
 
 import re
 
-from homeauto.bot.commands import HELP
-from homeauto.main import ALL_COMMANDS, COMMAND_MENU
+from homeauto.bot.commands import HELP, SETTINGS_TOPIC, TOPICS
+from homeauto.main import ALL_COMMANDS, COMMAND_MENU, MENU_ALERTS
 
-# Out of the menu on purpose: they still work typed and stay listed in HELP.
+# Comandos fuera del menú, que siguen andando escritos y están en `HELP`.
 OUT_OF_MENU = (
+    "decir",
+    "llamar",
+    "alarma",
+    "recordar",
+    "lista",
+    "compras",
+    "equipos",
     "timer",
     "cancelar",
     "volumen",
@@ -24,10 +29,12 @@ OUT_OF_MENU = (
     "agregar",
     "pendientes",
     "sacar",
+    "traducir",
     "posponer",
     "pastillas",
     "vacaciones",
     "turnos",
+    "pantalla",
     "menu",
     "depurar",
 )
@@ -35,68 +42,57 @@ OUT_OF_MENU = (
 VALID = re.compile(r"^[a-z0-9_]{1,32}$")
 
 
-def test_menu_is_not_empty():
-    assert COMMAND_MENU
+def names(menu):
+    return [name for name, _ in menu]
+
+
+def test_the_general_menu_is_one_command_per_topic():
+    assert names(COMMAND_MENU) == [
+        "inicio", "avisos", "parlante", "comida", "hoy", "preguntar", "silencio", "ayuda",
+    ]
+
+
+def test_every_topic_but_the_settings_is_in_the_general_menu():
+    assert set(TOPICS) - {SETTINGS_TOPIC} <= set(names(COMMAND_MENU))
+
+
+def test_the_alert_menu_is_the_general_one_plus_the_settings():
+    assert names(MENU_ALERTS) == names(COMMAND_MENU) + [SETTINGS_TOPIC]
+    assert MENU_ALERTS[: len(COMMAND_MENU)] == COMMAND_MENU
+
+
+def test_the_settings_are_not_in_the_general_menu():
+    assert SETTINGS_TOPIC not in names(COMMAND_MENU)
 
 
 def test_every_menu_entry_is_a_registered_command():
-    unknown = [name for name, _ in COMMAND_MENU if name not in ALL_COMMANDS]
+    unknown = [name for name in names(MENU_ALERTS) if name not in ALL_COMMANDS]
     assert unknown == [], f"El menú ofrece comandos que no existen: {unknown}"
 
 
 def test_menu_names_are_valid_for_telegram():
-    invalid = [name for name, _ in COMMAND_MENU if not VALID.fullmatch(name)]
+    invalid = [name for name in names(MENU_ALERTS) if not VALID.fullmatch(name)]
     assert invalid == []
 
 
 def test_menu_has_no_duplicates():
-    names = [name for name, _ in COMMAND_MENU]
-    assert len(names) == len(set(names))
+    assert len(names(MENU_ALERTS)) == len(set(names(MENU_ALERTS)))
 
 
 def test_every_entry_has_a_usable_description():
-    for name, description in COMMAND_MENU:
+    for name, description in MENU_ALERTS:
         assert description.strip(), f"/{name} sin descripción"
         assert len(description) <= 256, f"/{name}: Telegram corta en 256 caracteres"
 
 
-def test_the_shopping_entry_does_not_send_to_another_command():
-    description = dict(COMMAND_MENU)["compras"]
-
-    assert description == "Qué falta comprar, y tacharlo"
-
-
-def test_the_commands_people_use_are_in_the_menu():
-    names = {name for name, _ in COMMAND_MENU}
-    for essential in ("decir", "alarma", "lista", "silencio", "ayuda"):
-        assert essential in names, f"/{essential} no aparecería en el menú"
-
-
-def test_the_menu_stays_short():
-    assert len(COMMAND_MENU) <= 10, "el menú vuelve a ser una lista que nadie lee"
-
-
-def test_the_vacations_stay_out_of_the_menu():
-    assert "vacaciones" not in {name for name, _ in COMMAND_MENU}
-    assert len(COMMAND_MENU) == 10
+def test_the_descriptions_have_no_command_syntax():
+    for name, description in MENU_ALERTS:
+        assert "/" not in description, f"/{name}: la descripción nombra un comando"
 
 
 def test_what_left_the_menu_is_still_offered_somewhere():
+    menu = set(names(MENU_ALERTS))
     for name in OUT_OF_MENU:
+        assert name not in menu, f"/{name} volvió al menú"
         assert name in ALL_COMMANDS, f"/{name} dejó de existir"
         assert f"/{name}" in HELP, f"/{name} no está en el menú ni en la ayuda"
-
-
-def test_the_turns_stay_out_of_the_menu():
-    assert "turnos" not in {name for name, _ in COMMAND_MENU}
-    assert len(COMMAND_MENU) == 10
-
-
-def test_the_meal_menu_stays_out_of_the_menu():
-    assert "menu" not in {name for name, _ in COMMAND_MENU}
-    assert len(COMMAND_MENU) == 10
-
-
-def test_purge_stays_out_of_the_menu():
-    assert "depurar" not in {name for name, _ in COMMAND_MENU}
-    assert len(COMMAND_MENU) == 10

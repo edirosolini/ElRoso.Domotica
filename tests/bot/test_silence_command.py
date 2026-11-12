@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from homeauto.bot.commands import Commands, with_actions
-from homeauto.quiet import Hush, HushStore, QuietHours
+from homeauto.quiet import AwayStore, Hush, HushStore, QuietHours
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
 
@@ -20,6 +20,7 @@ def cmd(tmp_path):
         hours=QuietHours.parse("23:00", "07:00"),
         store=HushStore(tmp_path / "jobs.db"),
         clock=lambda: NOON,
+        away=AwayStore(tmp_path / "jobs.db"),
     )
     return Commands(
         config=make_config(allowed={OWNER}),
@@ -49,7 +50,60 @@ def test_the_silence_status_offers_to_talk_again(cmd):
     reply = with_actions(cmd.silence, OWNER, "")
 
     assert reply.text == "En silencio hasta las 14:00."
-    assert reply.actions == (("Volver a hablar", "hablar"),)
+    assert reply.actions[0] == ("Volver a hablar", "hablar")
+
+
+SILENCE_TOPIC = [
+    ("Silencio una hora", "silencio 1h"),
+    ("Volver a hablar", "hablar"),
+    ("Vacaciones", "vacaciones"),
+    ("⬅ Temas", "inicio"),
+]
+
+
+def test_an_empty_silence_adds_the_buttons_of_its_topic(cmd):
+    reply = with_actions(cmd.silence, OWNER, "")
+
+    assert reply.text.startswith("Estoy hablando.")
+    assert list(reply.actions) == SILENCE_TOPIC
+
+
+def test_an_empty_silence_does_not_repeat_a_button(cmd):
+    cmd.silence(OWNER, "2h")
+
+    reply = with_actions(cmd.silence, OWNER, "")
+
+    assert reply.actions == (
+        ("Volver a hablar", "hablar"),
+        ("Silencio una hora", "silencio 1h"),
+        ("Vacaciones", "vacaciones"),
+        ("⬅ Temas", "inicio"),
+    )
+
+
+def test_an_empty_silence_on_vacation_keeps_the_way_back(cmd):
+    cmd.quiet.start_away(datetime(2026, 9, 10))
+
+    reply = with_actions(cmd.silence, OWNER, "")
+
+    assert reply.actions[0] == ("Volví de vacaciones", "vacaciones off")
+    assert ("Silencio una hora", "silencio 1h") in reply.actions
+
+
+def test_a_silence_with_a_duration_does_not_add_the_topic(cmd):
+    reply = with_actions(cmd.silence, OWNER, "1h")
+
+    assert ("⬅ Temas", "inicio") not in reply.actions
+
+
+def test_an_empty_silence_from_the_control_screen_adds_the_topic_too(cmd):
+    reply = with_actions(cmd.press, OWNER, "silencio")
+
+    assert list(reply.actions) == SILENCE_TOPIC
+
+
+def test_a_stranger_gets_no_topic_buttons(cmd):
+    assert with_actions(cmd.silence, STRANGER, "").actions == ()
 
 
 def test_the_speaker_stays_quiet_during_the_silence(cmd):

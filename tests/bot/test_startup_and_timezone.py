@@ -54,16 +54,23 @@ class SpyNotifier:
 
 
 class SpyBot:
-    def __init__(self):
+    def __init__(self, failing=()):
         self.menu = None
+        self.published = []
+        self.failing = set(failing)
 
-    async def set_my_commands(self, commands):
-        self.menu = commands
+    async def set_my_commands(self, commands, scope=None):
+        chat_id = getattr(scope, "chat_id", None)
+        if chat_id in self.failing:
+            raise RuntimeError("Chat not found")
+        self.published.append((chat_id, [command.command for command in commands]))
+        if scope is None:
+            self.menu = commands
 
 
 class SpyApp:
-    def __init__(self):
-        self.bot = SpyBot()
+    def __init__(self, failing=()):
+        self.bot = SpyBot(failing)
 
 
 @pytest.mark.asyncio
@@ -89,7 +96,28 @@ async def test_startup_binds_the_loop_and_publishes_the_menu():
 
     assert notifier.loop is asyncio.get_running_loop()
     assert app.bot.menu is not None
-    assert len(app.bot.menu) == len(main.COMMAND_MENU)
+    assert [command.command for command in app.bot.menu] == [n for n, _ in main.COMMAND_MENU]
+
+
+@pytest.mark.asyncio
+async def test_an_alert_chat_gets_the_menu_with_the_settings():
+    reminders, notifier, app = SpyReminders(), SpyNotifier(), SpyApp()
+
+    await main.build_post_init(notifier, reminders, alert_chats=(42,))(app)
+
+    general = [name for name, _ in main.COMMAND_MENU]
+    assert app.bot.published == [(None, general), (42, general + ["ajustes"])]
+
+
+@pytest.mark.asyncio
+async def test_a_chat_that_fails_to_get_its_menu_does_not_stop_the_startup(caplog):
+    reminders, notifier, app = SpyReminders(), SpyNotifier(), SpyApp(failing={13})
+
+    await main.build_post_init(notifier, reminders, alert_chats=(13, 42))(app)
+
+    assert [chat for chat, _ in app.bot.published] == [None, 42]
+    assert reminders.threads, "el arranque siguió"
+    assert "13" in caplog.text
 
 
 class SpyVacation:

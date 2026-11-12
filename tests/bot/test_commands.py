@@ -119,10 +119,9 @@ def test_where_lists_the_devices():
     assert "Parlante" in cmd.where(OWNER)
 
 
-def test_start_greets_and_lists_the_commands():
+def test_start_greets_and_asks_what_to_do():
     cmd, _ = build()
 
     reply = cmd.start(OWNER)
 
-    assert "/decir" in reply
-    assert "/volumen" in reply
+    assert "¿Qué querés hacer?" in reply

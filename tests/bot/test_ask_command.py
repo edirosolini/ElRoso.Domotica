@@ -5,7 +5,7 @@ dicho y lo escrito no son el mismo texto.
 """
 
 from homeauto.ask import Answer, AskError, NOT_SPOKEN
-from homeauto.bot.commands import Commands
+from homeauto.bot.commands import Commands, with_actions
 from homeauto.quiet import QuietHours
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
@@ -117,3 +117,41 @@ def test_it_goes_to_the_device_you_asked_for():
     cmd.ask(OWNER, "en comedor cuántos goles hizo Messi por el parlante")
 
     assert comedor.said and parlante.said == []
+
+
+ASK_TOPIC = [
+    ("Preguntar algo", "armar preguntar"),
+    ("Calcular", "armar calcular"),
+    ("Traducir", "armar traducir"),
+    ("⬅ Temas", "inicio"),
+]
+
+
+def test_an_empty_question_adds_the_buttons_of_its_topic():
+    cmd, _ = build()
+
+    reply = with_actions(cmd.ask, OWNER, "")
+
+    assert reply.text.startswith("Preguntame algo")
+    assert list(reply.actions) == ASK_TOPIC
+    assert cmd.asker.asked == []
+
+
+def test_an_empty_question_without_a_model_still_offers_the_topic():
+    cmd, _ = build(asker=None)
+
+    assert list(with_actions(cmd.ask, OWNER, "").actions) == ASK_TOPIC
+
+
+def test_an_empty_question_from_the_control_screen_adds_the_topic_too():
+    cmd, _ = build()
+
+    assert list(with_actions(cmd.press, OWNER, "preguntar").actions) == ASK_TOPIC
+
+
+def test_a_question_does_not_add_the_topic():
+    cmd, _ = build()
+
+    reply = with_actions(cmd.ask, OWNER, "cuántos goles hizo Messi")
+
+    assert ("⬅ Temas", "inicio") not in reply.actions

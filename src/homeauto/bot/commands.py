@@ -110,6 +110,10 @@ _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
 _LIST_SUFFIX = re.compile(r"\s+(?:de|en)\s+(.+)$", re.IGNORECASE)
 ALL_ITEMS = "todo"
 SNOOZE_DEFAULT = "10m"
+
+# Cómo arranca la confirmación de un aviso agendado, después de «Listo:».
+TIMER_LEAD = "te aviso"
+ALARM_LEAD = "la alarma suena"
 # Un botón que contesta la pregunta pendiente en vez de correr un comando.
 ANSWER_MARK = "»"
 # Un ítem de lista referido por id, como lo manda un botón: «id:17».
@@ -122,6 +126,78 @@ CHATLESS_BUTTONS = ("callar", "hecho")
 CHATLESS_ONLY = "Sin Telegram solo se puede apagar una alarma o marcar «Hecho»."
 # El botón que contesta lo mismo que /ayuda en Telegram.
 HELP_BUTTON = "ayuda"
+# Lo que pide la ayuda entera en vez de la corta.
+HELP_FULL = "completa"
+# Los botones del inicio, de cada tema y de lo que se arma desde un tema.
+HOME_BUTTON = "inicio"
+TOPIC_BUTTON = "tema"
+ARRANGE_BUTTON = "armar"
+SETTINGS_TOPIC = "ajustes"
+BACK_TO_TOPICS = ("⬅ Temas", HOME_BUTTON)
+HOME = "¿Qué querés hacer? Elegí un tema o escribime como a alguien de la casa."
+UNKNOWN_TOPIC = "No conozco ese tema."
+NOT_UNDERSTOOD = "No te entendí. Elegí un tema o escribilo de otra forma."
+NO_ROUTER = "Así escrito no te entiendo. Elegí un tema."
+NO_AUDIO = "No escucho audios. Escribime o elegí un tema."
+
+# Cada tema: su etiqueta y sus botones (etiqueta, comando con su argumento).
+TOPICS = {
+    "avisos": ("⏰ Avisos", (
+        ("Avisame en…", "armar timer"),
+        ("Alarma", "armar alarma"),
+        ("Recordatorio que se repite", "armar recordar"),
+        ("Mis avisos", "lista"),
+        ("Pastillas", "pastillas"),
+        ("Turnos", "turnos"),
+    )),
+    "parlante": ("🗣 Hablar en la casa", (
+        ("Decir algo", "armar decir"),
+        ("Llamar a comer", "llamar"),
+        ("Callar el parlante", "parar"),
+        ("Volumen", "armar volumen"),
+    )),
+    "comida": ("🛒 Compras y comida", (
+        ("Compras", "compras"),
+        ("Pendientes", "pendientes"),
+        ("Agregar a compras", "armar agregar"),
+        ("Menú de la semana", "menu"),
+    )),
+    "hoy": ("📅 Hoy", (
+        ("Agenda", "agenda"),
+        ("Clima", "clima"),
+    )),
+    "preguntar": ("❓ Preguntar", (
+        ("Preguntar algo", "armar preguntar"),
+        ("Calcular", "armar calcular"),
+        ("Traducir", "armar traducir"),
+    )),
+    "silencio": ("🤫 Silencio", (
+        ("Silencio una hora", "silencio 1h"),
+        ("Volver a hablar", "hablar"),
+        ("Vacaciones", "vacaciones"),
+    )),
+    SETTINGS_TOPIC: ("⚙️ Ajustes", (
+        ("Equipos", "equipos"),
+        ("Equipo de siempre", "armar usar"),
+        ("Pantalla", "pantalla"),
+        ("Estado", "estado"),
+        ("Depurar", "depurar"),
+    )),
+}
+
+# Lo que un botón deja armado: la frase con que arranca el hilo, o vacía si la respuesta ya es el argumento.
+ARRANGEABLE = {
+    "timer": "poneme un timer",
+    "alarma": "creá una alarma",
+    "recordar": "creá un recordatorio que se repite",
+    "decir": "",
+    "volumen": "",
+    "agregar": "",
+    "preguntar": "",
+    "calcular": "",
+    "traducir": "",
+    "usar": "",
+}
 
 # Las tres formas de /pastillas con argumento: cambiar el aviso, reponer y atar un recordatorio.
 _PILL_THRESHOLD = re.compile(r"^(.+?)\s+aviso\s+(\d+)$", re.IGNORECASE)
@@ -220,6 +296,9 @@ _ALOUD = contextvars.ContextVar("aloud", default=False)
 # La respuesta sin el «Entendí: /clima», que grabado era el eco del pedido.
 _SPOKEN = contextvars.ContextVar("spoken", default="")
 
+# El comando en curso agendó algo y su «Listo:» reemplaza al «Entendí:».
+_CONFIRMED = contextvars.ContextVar("confirmed", default=False)
+
 # Los botones que ofrece la respuesta en curso.
 _ACTIONS = contextvars.ContextVar("actions", default=())
 
@@ -295,8 +374,8 @@ HELP = """Hola. Manejo los equipos de casa.
 /lista — lo que está programado
 /cancelar <n> — cancela uno
 /posponer — repite en 10 minutos la alarma que acaba de sonar · /posponer 30m
-/silencio 2h — no habla por un rato · /hablar lo cancela
-/vacaciones hasta 25/10 — no habla hasta la vuelta, ni lo urgente · /vacaciones off las corta
+/silencio 2h — no habla por un rato · /hablar vuelve a hablar antes
+/vacaciones hasta 25/10 — no habla hasta la vuelta, ni lo urgente · /vacaciones off cuando vuelven
 /volumen <0-100> — cambia el volumen
 /parar — corta lo que esté sonando
 /apagar — cierra la app y deja el equipo en reposo
@@ -328,6 +407,18 @@ y sale por los equipos. /decir y /llamar suenan siempre, y las alarmas también.
 También me hablás sin barra: «creá una alarma» y te pregunto lo que falte.
 «olvidalo» deja lo que estábamos armando.
 Y me mandás una nota de voz: la escucho, hago lo que pidas y te contesto con otro audio."""
+
+
+HELP_SHORT = """Escribime como le hablarías a alguien de la casa. Por ejemplo:
+«avisame en 10 minutos que saque la pizza»
+«avisame mañana a las 9 que llame al médico»
+«despertame todos los días a las 7»
+«poné en compras leche y pan»
+«¿va a llover hoy?»
+«decí en toda la casa que la comida está lista»
+«silencio una hora»
+También me podés mandar una nota de voz.
+Abajo está todo por tema. Con /ayuda completa, la lista entera."""
 
 
 def _meal_the(meal: str) -> str:
@@ -387,6 +478,24 @@ def format_when(when: datetime, now: datetime) -> str:
     if days == 1:
         return f"mañana {clock}"
     return f"{when.strftime('%d/%m')} {clock}"
+
+
+def _at(when: datetime) -> str:
+    """La hora de un aviso: «a las 7:30», «a la 1:00»."""
+    article = "la" if when.hour == 1 else "las"
+    return f"a {article} {when.hour}:{when.minute:02d}"
+
+
+def _confirm_when(when: datetime, now: datetime, cadence: str = "") -> str:
+    """Cuándo suena un aviso recién agendado: «hoy a las 10:20», «todos los días a las 7:30»."""
+    if cadence:
+        return f"{cadence} {_at(when)}"
+    days = (when.date() - now.date()).days
+    if days == 0:
+        return f"hoy {_at(when)}"
+    if days == 1:
+        return f"mañana {_at(when)}"
+    return f"el {when.strftime('%d/%m')} {_at(when)}"
 
 
 class Commands:
@@ -661,10 +770,65 @@ class Commands:
     # --- comandos ----------------------------------------------------------
 
     def start(self, chat_id: int) -> str:
+        return self.home(chat_id)
+
+    def _topics(self, chat_id: int) -> dict:
+        """Los temas que ve ese chat: «Ajustes» solo los de alertas."""
+        alerts = chat_id in self.config.alert_recipients
+        return {key: topic for key, topic in TOPICS.items() if key != SETTINGS_TOPIC or alerts}
+
+    def _topic_buttons(self, chat_id: int) -> tuple[tuple[str, str], ...]:
+        return tuple(
+            (label, f"{TOPIC_BUTTON} {key}") for key, (label, _) in self._topics(chat_id).items()
+        )
+
+    def home(self, chat_id: int, text: str = "") -> str:
+        """El saludo con un botón por tema."""
         denial = self._denial(chat_id)
         if denial:
             return denial
-        return HELP + self._enrollment_hint(chat_id)
+        offer(*self._topic_buttons(chat_id))
+        return HOME + self._enrollment_hint(chat_id)
+
+    def help(self, chat_id: int, text: str = "") -> str:
+        """La ayuda corta con los temas, o el catálogo entero si se pide «completa»."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        if text.strip().lower() == HELP_FULL:
+            return HELP + self._enrollment_hint(chat_id)
+        offer(*self._topic_buttons(chat_id))
+        return HELP_SHORT + self._enrollment_hint(chat_id)
+
+    def topic(self, chat_id: int, text: str = "") -> str:
+        """Los botones de un tema y el de volver a los temas."""
+        denial = self._denial(chat_id)
+        if denial:
+            return denial
+        found = self._topics(chat_id).get(text.strip().lower())
+        if found is None:
+            return UNKNOWN_TOPIC
+        label, actions = found
+        offer(*actions, BACK_TO_TOPICS)
+        return f"{label}: ¿qué querés hacer?"
+
+    def _offer_topic(self, chat_id: int, key: str) -> None:
+        """Suma los botones del tema `key` que la respuesta todavía no ofrece."""
+        _, actions = self._topics(chat_id)[key]
+        offered = _ACTIONS.get()
+        offer(*(action for action in actions + (BACK_TO_TOPICS,) if action not in offered))
+
+    def arrange(self, chat_id: int, text: str = "") -> str:
+        """Deja armado el comando de un botón y devuelve la pregunta por el dato que le falta."""
+        command = text.strip().lower()
+        if command not in ARRANGEABLE:
+            log.warning("botón de armar desconocido: %r", text)
+            return "No sé qué hacer con ese botón."
+        if self.conversation is None:
+            return self._dispatch()[command](chat_id, "")
+        slot = slots.missing(command, "") or slots.QUESTION
+        self.conversation.remember(chat_id, command, ARRANGEABLE[command], (slot.name,))
+        return slot.question
 
     def say(self, chat_id: int, text: str) -> str:
         denial = self._denial(chat_id)
@@ -794,6 +958,8 @@ class Commands:
         denial = self._denial(chat_id)
         if denial:
             return denial
+        if not text.strip():
+            self._offer_topic(chat_id, "preguntar")
 
         if self.asker is None:
             return self._unconfigured(
@@ -1341,9 +1507,14 @@ class Commands:
             "borrar": self.discard,
             "callar": self.alarm_off,
             "confirmar": self.confirm,
-            HELP_BUTTON: lambda chat_id, _text="": self.start(chat_id),
+            HELP_BUTTON: self.help,
+            HOME_BUTTON: self.home,
+            TOPIC_BUTTON: self.topic,
+            ARRANGE_BUTTON: self.arrange,
         }
         run = {**self._dispatch(), **buttons}.get(command)
+        if run is None and command in TOPICS:
+            run, argument = self.topic, command
         answer, _, token = argument.strip().partition(" ")
         if command == PURGE_COMMAND and answer in (PURGE_OK, PURGE_NO):
             run = self.purge_confirm if answer == PURGE_OK else self.purge_drop
@@ -1358,8 +1529,8 @@ class Commands:
             _WHO.reset(token)
 
     def typed(self, name: str) -> bool:
-        """Si `name` se puede escribir con barra fuera de Telegram: un comando de `_dispatch` o la ayuda."""
-        return name == HELP_BUTTON or name in self._dispatch()
+        """Si `name` se puede escribir con barra fuera de Telegram: un comando de `_dispatch`, la ayuda, el inicio o un tema."""
+        return name in (HELP_BUTTON, HOME_BUTTON) or name in TOPICS or name in self._dispatch()
 
     def press_without_chat(self, data: str, who: str = "") -> str:
         """Un botón de alguien de la casa sin chat: solo apagar una alarma o marcar «Hecho»."""
@@ -1527,7 +1698,7 @@ class Commands:
             return Reply(denial)
 
         if self.transcribe is None:
-            return Reply("No escucho audios. Escribime o usá /ayuda.")
+            return Reply(NO_AUDIO, actions=self._topic_buttons(chat_id))
 
         try:
             said = self.transcribe(audio, mime)
@@ -1568,7 +1739,8 @@ class Commands:
             return denial
 
         if self.router is None:
-            return "No entiendo mensajes sueltos. Los comandos están en /ayuda."
+            offer(*self._topic_buttons(chat_id))
+            return NO_ROUTER
 
         # Antes de rutear: el router se comería la coletilla al armar el argumento.
         aloud, text = strip_aloud(text)
@@ -1587,12 +1759,16 @@ class Commands:
             self.conversation.forget(chat_id)
             return f"Listo, lo dejo. No quedó ningún /{pending.command} armado."
 
+        if pending and not pending.thread:
+            return self._run_arranged(chat_id, pending.command, text)
+
         try:
             decision = self.router.route(text)
-        except RouteError as exc:
+        except RouteError:
             # Un comando que no se pudo interpretar no es una pregunta.
             if not pending:
-                return str(exc)
+                offer(*self._topic_buttons(chat_id))
+                return NOT_UNDERSTOOD
             # En medio de una conversación casi nunca es un comando: "a las
             # siete" tampoco lo es. Decide el hilo.
             decision = Decision(None)
@@ -1606,7 +1782,8 @@ class Commands:
             else:
                 decision = self._continue(pending, text)
                 if decision is None:
-                    return "No te entendí. Probá con /ayuda."
+                    offer(*self._topic_buttons(chat_id))
+                    return NOT_UNDERSTOOD
 
         # Con uno pendiente esto nunca es None: `_continue` solo devuelve el
         # comando que se está armando, y solo se guardan los ejecutables.
@@ -1625,10 +1802,25 @@ class Commands:
         if self.conversation:
             self.conversation.forget(chat_id)
         understood = f"/{decision.command} {decision.argument}".strip()
-        answer = run(chat_id, decision.argument)
+        token = _CONFIRMED.set(False)
+        try:
+            answer = run(chat_id, decision.argument)
+            confirmed = _CONFIRMED.get()
+        finally:
+            _CONFIRMED.reset(token)
         if not _SPOKEN.get():
             _SPOKEN.set(answer)
+        if confirmed:
+            return f"{note}{answer}"
         return f"{note}Entendí: {understood}\n\n{answer}"
+
+    def _run_arranged(self, chat_id: int, command: str, text: str) -> str:
+        """Corre el comando que dejó armado un botón con la respuesta como argumento, sin el modelo."""
+        self.conversation.forget(chat_id)
+        answer = self._dispatch()[command](chat_id, text)
+        if not _SPOKEN.get():
+            _SPOKEN.set(answer)
+        return answer
 
     def _interrupts(self, pending, decision) -> bool:
         """Si este mensaje es una orden nueva y no la respuesta que se pidió.
@@ -1846,7 +2038,9 @@ class Commands:
 
         asked = text.strip()
         if not asked:
-            return self._silence_status()
+            status = self._silence_status()
+            self._offer_topic(chat_id, "silencio")
+            return status
 
         try:
             duration = parse_duration(asked)
@@ -1939,7 +2133,8 @@ class Commands:
         chat_id: int,
         text: str,
         repeat: str,
-        label: str,
+        lead: str,
+        cadence: str = "",
         days: tuple[int, ...] | None = None,
         kind: str = ALARM,
         monthday: int | None = None,
@@ -1979,9 +2174,10 @@ class Commands:
             author_id=self._author(chat_id),
         )
         offer(_undo_button(job.id))
+        _CONFIRMED.set(True)
         reply = (
-            f"{label} en {_labels(aliases)} "
-            f"para {format_when(when, now)}: «{message}»"
+            f"Listo: {lead} {_confirm_when(when, now, cadence)} "
+            f"en {_labels(aliases)}: «{message}»"
         )
         if assignment.label:
             reply += f" · {assignment.label}"
@@ -1989,7 +2185,7 @@ class Commands:
         return f"{reply}\n{note}" if note else reply
 
     def timer(self, chat_id: int, text: str) -> str:
-        return self._schedule(chat_id, text, ONCE, "Programado", kind=REMINDER)
+        return self._schedule(chat_id, text, ONCE, TIMER_LEAD, kind=REMINDER)
 
     def alarm(self, chat_id: int, text: str) -> str:
         return self._repeating(chat_id, text, ALARM)
@@ -2009,10 +2205,10 @@ class Commands:
         except UnknownPerson as exc:
             return str(exc)
 
-        noun, example = (
-            ("Recordatorio", "/recordar lun-vie 7:30 salir al colegio")
+        lead, example = (
+            (TIMER_LEAD, "/recordar lun-vie 7:30 salir al colegio")
             if kind == REMINDER
-            else ("Alarma", "/alarma lun-vie 5:30 arriba")
+            else (ALARM_LEAD, "/alarma lun-vie 5:30 arriba")
         )
         head, _, tail = rest.strip().partition(" ")
         prefix = f"{TARGET_WORD} {','.join(aliases)} "
@@ -2027,13 +2223,13 @@ class Commands:
                 command = "recordar" if kind == REMINDER else "alarma"
                 return f"Con mensual necesito una hora. Ej: /{command} mensual 10 9:00 pagar la luz"
             return self._schedule(
-                chat_id, prefix + after_day, MONTHLY, f"{noun} {monthly_label(monthday)}",
+                chat_id, prefix + after_day, MONTHLY, lead, monthly_label(monthday),
                 kind=kind, monthday=monthday, assignment=assignment,
             )
 
         if head.lower() in slots.DAILY_WORDS:
             return self._schedule(
-                chat_id, prefix + tail, DAILY, f"{noun} todos los días", kind=kind,
+                chat_id, prefix + tail, DAILY, lead, "todos los días", kind=kind,
                 assignment=assignment,
             )
 
@@ -2045,7 +2241,7 @@ class Commands:
                 return f"Con días de la semana necesito una hora. Ej: {example}"
             skip = skips_holidays(head)
             return self._schedule(
-                chat_id, prefix + tail, WEEKLY, f"{noun} {weekdays_label(days, skip)}",
+                chat_id, prefix + tail, WEEKLY, lead, weekdays_label(days, skip),
                 days=days, kind=kind, skip_holidays=skip, assignment=assignment,
             )
 
@@ -2055,7 +2251,7 @@ class Commands:
                 f" o {example}. Para una sola vez, /timer mañana 10:00 llamar al médico"
             )
         return self._schedule(
-            chat_id, prefix + rest, ONCE, noun, kind=kind, assignment=assignment
+            chat_id, prefix + rest, ONCE, lead, kind=kind, assignment=assignment
         )
 
     def postpone(self, chat_id: int, text: str = "") -> str:
@@ -2073,7 +2269,8 @@ class Commands:
         if job is None:
             return "No sonó nada en la última media hora: no hay nada que posponer."
         offer(_undo_button(job.id))
-        return f"Pospuesto para {format_when(job.when, self.clock())}: «{job.message}»"
+        _CONFIRMED.set(True)
+        return f"Listo: te vuelvo a avisar {_confirm_when(job.when, self.clock())}: «{job.message}»"
 
     def list(self, chat_id: int) -> str:
         denial = self._denial(chat_id)
