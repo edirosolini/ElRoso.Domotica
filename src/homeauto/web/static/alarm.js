@@ -1,9 +1,9 @@
-// Vista de alarma en la tele: hora grande, mensaje y fecha; al minuto o al dejar de sonar vuelve al kiosco.
+// Vista de alarma en la tele: hora en que sonó, mensaje y fecha; al dejar de sonar o al tope vuelve al kiosco.
 (function () {
   "use strict";
 
   var POLL_MS = 5000;
-  var VIEW_MS = 60000;
+  var MAX_VIEW_MS = 2100000;
   var KIOSK = "/pantalla?ver=1";
   var DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
   var MONTHS = [
@@ -17,9 +17,14 @@
     return match ? parseInt(match[1], 10) : null;
   }
 
-  // Adónde ir: null mientras suena y no pasó VIEW_MS desde que se cargó, si no el kiosco.
+  // Adónde ir: null mientras suena y no pasó MAX_VIEW_MS desde que se cargó, si no el kiosco.
   function nextPage(data, shownMs) {
-    return data && data.ringing && shownMs < VIEW_MS ? null : KIOSK;
+    return data && data.ringing && shownMs < MAX_VIEW_MS ? null : KIOSK;
+  }
+
+  // Adónde ir con el feed caído: null hasta MAX_VIEW_MS desde que se cargó, después el kiosco.
+  function offlinePage(shownMs) {
+    return shownMs < MAX_VIEW_MS ? null : KIOSK;
   }
 
   // Para quién es la alarma, o vacío si no es de nadie en particular.
@@ -39,8 +44,14 @@
     return DAYS[date.getDay()] + " " + date.getDate() + " de " + MONTHS[date.getMonth()];
   }
 
+  // La hora grande: la de cuando sonó si el feed la trae, si no la actual.
+  function alarmText(data, now) {
+    return data && data.at ? data.at : clockText(now);
+  }
+
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { jobFrom: jobFrom, nextPage: nextPage, clockText: clockText, dateText: dateText,
+    module.exports = { MAX_VIEW_MS: MAX_VIEW_MS, jobFrom: jobFrom, nextPage: nextPage,
+      offlinePage: offlinePage, clockText: clockText, dateText: dateText, alarmText: alarmText,
       forText: forText };
   }
   if (typeof document === "undefined") {
@@ -48,6 +59,7 @@
   }
 
   var offset = 0;
+  var last = null;
   var loadedAt = Date.now();
   var job = jobFrom(location.search);
 
@@ -57,7 +69,9 @@
 
   function tick() {
     var now = new Date(Date.now() + offset);
-    byId("time").textContent = clockText(now);
+    byId("time").textContent = alarmText(last, now);
+    byId("clock").textContent = clockText(now);
+    byId("clock").hidden = !(last && last.at);
     byId("date").textContent = dateText(now);
   }
 
@@ -74,6 +88,7 @@
       leave();
       return;
     }
+    last = data;
     byId("message").textContent = data.message || "";
     byId("for").textContent = forText(data);
     byId("for").hidden = !forText(data);
@@ -94,6 +109,10 @@
         render(data, sentAt, Date.now());
       })
       .catch(function () {
+        if (offlinePage(Date.now() - loadedAt)) {
+          leave();
+          return;
+        }
         byId("problems").textContent = "Sin conexión con la casa.";
       });
   }

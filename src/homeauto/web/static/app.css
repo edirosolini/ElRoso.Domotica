@@ -164,6 +164,7 @@ button.ghost { color: var(--text); }
 .alarm-view .alarm-time { font-size: 22vh; font-size: min(32vh, 28vw); font-weight: 250; line-height: .9; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
 .alarm-view .alarm-message { font-size: clamp(28px, 7vh, 80px); font-weight: 600; line-height: 1.1; overflow-wrap: break-word; max-width: 100%; }
 .alarm-view .eyebrow { font-size: clamp(16px, 3vh, 32px); }
+.alarm-view .alarm-clock { font-size: 6vh; font-weight: 500; line-height: 1; opacity: .7; font-variant-numeric: tabular-nums; }
 .alarm-view .alarm-for { font-size: clamp(20px, 4.4vh, 48px); font-weight: 600; color: var(--accent-ink); background: var(--accent-soft); border-radius: 999px; padding: .2em .9em; }
 
 /* Agenda */

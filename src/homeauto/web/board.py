@@ -349,8 +349,9 @@ class Board:
         return now.replace(tzinfo=self.timezone).isoformat() if now.tzinfo is None else now.isoformat()
 
     def ringing(self, job_id: int) -> dict:
-        """Si la alarma sigue sonando y su mensaje, con la hora del servidor."""
+        """Si la alarma sigue sonando, su mensaje y a qué hora sonó, con la hora del servidor."""
         found = self.ringing_store.get(job_id) if self.ringing_store is not None else None
+        rang = self._naive(found.fired_at) if found is not None else None
         return {
             "now": self._stamp(self.clock()),
             "ringing": found is not None,
@@ -359,6 +360,7 @@ class Board:
                 for_name(found.assignee, found.assignee_id, person_names(self.household))
                 if found is not None else None
             ),
+            "at": f"{rang.hour}:{rang.minute:02d}" if rang is not None else None,
         }
 
     def screen(self) -> dict:
