@@ -47,7 +47,8 @@ class StubBoard:
         if self.fail:
             raise self.fail
         return {"now": "2026-10-15T07:00:00-03:00", "ringing": job_id == 17,
-                "message": "<b>arriba</b>" if job_id == 17 else None}
+                "message": "<b>arriba</b>" if job_id == 17 else None,
+                "at": "7:00" if job_id == 17 else None}
 
 
 @pytest.fixture
@@ -865,7 +866,7 @@ def test_the_alarm_view_loads_its_own_script_and_has_its_places(app):
 
     assert 'src="/static/alarm.js"' in page
     assert "fullcalendar" not in page
-    for place in ("time", "message", "date"):
+    for place in ("time", "clock", "message", "date"):
         assert f'id="{place}"' in page, place
     assert "/api/ringing/" in script
     assert ".textContent = " in script
@@ -885,6 +886,7 @@ def test_the_ringing_feed_says_whether_the_alarm_still_rings(app, board):
     assert response.headers["Cache-Control"] == "no-store"
     assert body_json(response) == {
         "now": "2026-10-15T07:00:00-03:00", "ringing": True, "message": "<b>arriba</b>",
+        "at": "7:00",
     }
     assert board.asked == [17]
     assert body_json(get(app, "/api/ringing/18"))["ringing"] is False

@@ -778,11 +778,23 @@ def test_the_alarm_view_reads_the_alarm_that_rings(parts, tmp_path):
 
     assert built.ringing(17) == {
         "now": "2026-10-05T12:00:00-03:00", "ringing": True, "message": "arriba, <b>ya</b>",
-        "for": None,
+        "for": None, "at": "12:00",
     }
     ringing.take(17)
     assert built.ringing(17)["ringing"] is False
     assert built.ringing(17)["message"] is None
+    assert built.ringing(17)["at"] is None
+
+
+def test_the_alarm_view_says_when_it_rang_without_a_leading_zero(parts, tmp_path):
+    from homeauto.schedule.ringing import RingingStore
+
+    ringing = RingingStore(tmp_path / "jobs.db")
+    ringing.remember(17, 42, "arriba", "recamara", datetime(2026, 10, 5, 7, 5))
+    built = Board(store=parts["store"], history=parts["history"], clock=Clock(), timezone=TZ,
+                  ringing=ringing)
+
+    assert built.ringing(17)["at"] == "7:05"
 
 
 def test_without_a_ringing_store_nothing_rings(parts):
