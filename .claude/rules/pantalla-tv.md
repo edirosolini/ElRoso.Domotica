@@ -62,8 +62,11 @@ desaloja.
 - **En descanso o en vacaciones no restaura**: `restore_url()` devuelve `None` y la tele
   queda con lo que dejó el receptor de audio.
 
-**Vista de alarma.** `/alarma?job=<id>` muestra la hora grande, el mensaje y la fecha, y
-consulta `/api/ringing/<id>` cada cinco segundos.
+**Vista de alarma.** `/alarma?job=<id>` muestra grande la hora en que sonó, chica la hora
+actual, el mensaje y la fecha, y consulta `/api/ringing/<id>` cada cinco segundos.
+
+- **La hora grande es la del `at` del feed** («H:MM» de `fired_at`), en `#time`; la actual va
+  chica en `#clock` (`alarmText()`). Sin `at`, `#clock` se esconde y `#time` es el reloj.
 
 - **Se lee de lejos**: el `body` es `kiosk alarm-view` y todo mide en `vh`. La hora va en
   `min(32vh, 28vw)`, con `22vh` antes como respaldo para el navegador sin `min()`, así entra
@@ -84,11 +87,15 @@ consulta `/api/ringing/<id>` cada cinco segundos.
   `comedor,recamara,habitacion`. `model_name` no sirve para saberlo (ver **Gotchas**, en `.claude/rules/voz.md`).
 - **Mientras suena, lo que se restaura después de cada repetición es la vista de alarma**, no
   el kiosco: `ScreenStore.job_for()` dice qué alarma tiene esa tele.
-- **La vista de alarma dura un minuto por sonido** (`VIEW_MS` en `alarm.js`, contado desde que
-  carga la página): después pasa sola a `/pantalla?ver=1` aunque siga sonando, y la próxima
-  repetición la vuelve a cargar al restaurar. Entre repeticiones hay cinco minutos de kiosco.
-- **Cuando deja de sonar, la página también pasa sola a `/pantalla?ver=1`**: el feed contesta
-  `ringing: false` y `alarm.js` cambia de dirección. Las dos reglas viven en `nextPage()`.
+- **La vista de alarma queda mientras suena**, también entre repeticiones: cada anuncio
+  desaloja DashCast y al restaurar vuelve la vista. Reemplaza el minuto por sonido de #78,
+  decisión del dueño del 2026-11-12.
+- **Tope de treinta y cinco minutos desde que carga la página** (`MAX_VIEW_MS` en `alarm.js`):
+  pasado, va a `/pantalla?ver=1` aunque siga sonando.
+- **Cuando deja de sonar, la página pasa sola a `/pantalla?ver=1`**: el feed contesta
+  `ringing: false` y `alarm.js` cambia de dirección. Esto y el tope viven en `nextPage()`.
+- **Con el feed caído muestra «Sin conexión con la casa.» y sigue**, hasta el mismo tope
+  (`offlinePage()`): no se queda colgada en una alarma que nadie confirma.
 - 🔴 **A los quince minutos de que deja de sonar se cierra DashCast** (`OFF_DELAY`), con el
   timer `screen-off:<equipo>`, y **solo si sigue abierto**, igual que `apagar`; con la app,
   también cierra su vista. Una alarma

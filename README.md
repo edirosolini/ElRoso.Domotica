@@ -197,9 +197,9 @@ vacaciones. Qué equipos tienen pantalla se configura en `SCREEN_DEVICES`: a uno
 ahí le contesta que no tiene pantalla. Sin `API_TOKEN` no hay pantalla que mostrar.
 
 **Alarma en la tele.** Una alarma en un equipo de `SCREEN_DEVICES` prende la tele con la hora
-grande, el mensaje y para quién es durante un minuto después de cada sonido, y entre una repetición y la
-siguiente muestra el kiosco. Cuando deja de sonar pasa sola al kiosco, y a los 15
-minutos se cierra, si nadie puso otra cosa. En descanso o de vacaciones no se prende.
+en que sonó bien grande, la hora actual chica, el mensaje y para quién es, y queda así mientras
+suena, también entre repeticiones, con un tope de 35 minutos. Cuando deja de sonar pasa sola al
+kiosco, y a los 15 minutos se cierra, si nadie puso otra cosa. En descanso o de vacaciones no se prende.
 
 **Elegir equipo.** Cualquier comando acepta `en <equipo>` adelante y va solo a ese; `/usar`
 cambia el que se usa cuando no decís nada, y queda guardado por chat. Un timer recuerda a
@@ -899,8 +899,11 @@ La primera vez que se abre, con el control:
    actualizar sola.
 
 Después muestra la pantalla de la casa y, al prender la tele, se conecta sola con el CT. La
-elección queda guardada. Para cambiarla, bajar con el control hasta «Cambiar tele o persona»,
-abajo a la derecha; BACK vuelve sin cambiar nada.
+elección queda guardada. Para cambiarla, mantener apretado el OK del control tres segundos en
+la pantalla de la casa, sin ninguna alarma sonando; BACK vuelve sin cambiar nada.
+
+Si la tele no llega a la casa dice «No encuentro la casa. Revisá que la tele tenga WiFi.»; si la
+casa contesta con un error, «La casa no pudo hacerlo. Probá de nuevo en un rato.».
 
 ### El protector de pantalla
 
@@ -953,14 +956,17 @@ preguntar por esa versión hasta seis horas después. Al terminar de instalar, l
 conectarse sola con el CT. Se instala encima porque se firma con la misma clave: no hay que
 desinstalar ni volver a elegir la tele.
 
-Cuando suena una alarma, la tele muestra la hora grande y abajo «OK para apagar»: el OK del
-control la apaga a nombre de la persona elegida. Sin persona elegida, el OK no la apaga.
+Cuando suena una alarma, la tele muestra abajo «OK = 🔕 Apagar alarma»: el OK del control la
+apaga a nombre de la persona elegida y, si la casa lo confirma, dice «🔕 Alarma apagada» dos
+segundos. Si no se pudo, el aviso queda abajo hasta el próximo OK, que vuelve a probar. Sin
+persona elegida, el OK no la apaga.
 
 Un recordatorio que espera «Hecho» sale como cartel encima de lo que se esté mirando, incluso
-otra app, sin pausarla: el mensaje, para quién es y «OK para marcar hecho». El OK lo marca hecho
-a nombre de la persona elegida; cualquier otra tecla lo cierra hasta el próximo re-aviso. Sin
-persona elegida, el OK solo lo cierra. Con una alarma sonando no aparece, y en el horario de
-descanso o de vacaciones tampoco. HOME no lo cierra: queda arriba del inicio hasta otra tecla.
+otra app, sin pausarla: el mensaje, para quién es y «OK = Hecho · Atrás = más tarde». El OK lo
+marca hecho a nombre de la persona elegida; Atrás lo cierra hasta el próximo re-aviso. Sin
+persona elegida dice «OK o Atrás = cerrar», y los dos lo cierran. Las otras teclas no hacen
+nada. Con una alarma sonando no aparece, y en el horario de descanso o de vacaciones tampoco.
+HOME no lo cierra: queda arriba del inicio hasta OK o Atrás.
 
 ## Desarrollo
 
