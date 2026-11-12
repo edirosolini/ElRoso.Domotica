@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Captura las páginas de la casa en celular, tablet, PC y tele, en tema claro y oscuro. Solo hace GET.
-# Uso: CAPTURE_BROWSER=<chrome o chromium> [CAPTURE_FLAGS=--no-sandbox] deploy/capture-ui.sh <url-base> [carpeta] [job-de-alarma]
+# Uso: CAPTURE_BROWSER=<chrome o chromium> [CAPTURE_FLAGS=--no-sandbox] [CAPTURE_SOY=<id>] deploy/capture-ui.sh <url-base> [carpeta] [job-de-alarma]
 set -euo pipefail
 
 BASE="${1:?uso: deploy/capture-ui.sh <url-base> [carpeta] [job-de-alarma]}"
@@ -9,6 +9,8 @@ JOB="${3:-}"
 BROWSER="${CAPTURE_BROWSER:-chromium}"
 WAIT_MS="${CAPTURE_WAIT_MS:-6000}"
 LIMIT_S="${CAPTURE_TIMEOUT_S:-60}"
+# Id de una persona del padrón: suma /control ya elegido a su nombre.
+SOY="${CAPTURE_SOY:-}"
 # Banderas de más para el navegador, por ejemplo --no-sandbox donde no hay sandbox de usuario.
 read -r -a EXTRA <<< "${CAPTURE_FLAGS:-}"
 BASE="${BASE%/}"
@@ -27,6 +29,9 @@ LONG=("cel 412,2600" "pc 1440,1800")
 PAGES=("control /control" "agenda /agenda" "pantalla /pantalla" "pantalla-tele /pantalla?ver=1")
 if [[ -n "$JOB" ]]; then
   PAGES+=("alarma /alarma?job=$JOB")
+fi
+if [[ -n "$SOY" ]]; then
+  PAGES+=("control-soy /control?soy=$SOY")
 fi
 
 # Saca una captura con un perfil vacío, así no arrastra lo guardado en localStorage.
@@ -50,7 +55,7 @@ for page in "${PAGES[@]}"; do
     shoot "$OUT/$name-${entry%% *}.png" "${entry#* }" "$BASE$path"
   done
   case "$name" in
-    control|agenda)
+    control|control-soy|agenda)
       for entry in "${LONG[@]}"; do
         shoot "$OUT/$name-${entry%% *}-largo.png" "${entry#* }" "$BASE$path"
         shoot "$OUT/$name-${entry%% *}-largo-oscuro.png" "${entry#* }" "$BASE$path" \

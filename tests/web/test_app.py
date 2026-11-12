@@ -849,6 +849,7 @@ def test_the_kiosk_has_a_read_only_mode_for_the_tv(app):
 
     assert "readOnly(location.search)" in script
     assert "ver=1" in script
+    assert "display: none" in rule(stylesheet(app), ".kiosk.read-only .site-nav")
 
 
 def test_the_policy_still_refuses_to_be_framed(app):
@@ -1119,9 +1120,54 @@ def test_the_icons_are_pngs_of_their_size(app, name, side):
     assert int.from_bytes(raw[20:24], "big") == side
 
 
-@pytest.mark.parametrize("path", ["/agenda", "/pantalla"])
-def test_the_agenda_and_the_kiosk_link_to_the_control(app, path):
-    assert 'href="/control"' in get(app, path).body.decode("utf-8")
+SITE_NAV = [("/control", "Inicio"), ("/agenda", "Agenda"), ("/pantalla", "Pantalla")]
+
+
+def site_nav(page):
+    """Los enlaces del menú común como (href, texto, aria-current), en orden."""
+    found = re.findall(r'<nav class="site-nav"[^>]*>(.*?)</nav>', page, re.S)
+    assert len(found) == 1
+    return [(href, text, current) for href, current, text in
+            re.findall(r'<a class="ghost" href="([^"]+)"(?: aria-current="(page)")?>([^<]+)</a>', found[0])]
+
+
+@pytest.mark.parametrize("path", ["/control", "/agenda", "/pantalla"])
+def test_the_three_pages_share_the_same_menu_and_mark_their_own(app, path):
+    links = site_nav(get(app, path).body.decode("utf-8"))
+
+    assert [(href, text) for href, text, _ in links] == SITE_NAV
+    assert [href for href, _, current in links if current] == [path]
+
+
+@pytest.mark.parametrize("path", ["/control", "/agenda", "/pantalla"])
+def test_the_menu_replaces_the_loose_links(app, path):
+    page = get(app, path).body.decode("utf-8")
+
+    assert 'class="links"' not in page
+    assert "corner-link" not in page
+
+
+def test_the_interactive_kiosk_leaves_room_for_the_menu_below_the_board(app):
+    css = stylesheet(app)
+    wide = css.split("@media (max-width: 599px)", 1)[0]
+    narrow = css.split("@media (max-width: 599px)", 1)[1].split("\n}\n", 1)[0] + "\n}"
+
+    assert "var(--tap)" in declarations(rule(wide, ".kiosk:not(.read-only) .board"))["padding-bottom"]
+    assert "var(--tap)" not in declarations(rule(narrow, ".kiosk:not(.read-only) .board"))["padding-bottom"]
+
+
+def test_the_alarm_view_has_no_menu(app):
+    assert "site-nav" not in get(app, "/alarma").body.decode("utf-8")
+
+
+def test_the_kiosk_menu_sits_bottom_right_and_reads_well(app):
+    css = stylesheet(app)
+
+    assert "position: fixed" in rule(css, ".kiosk .site-nav")
+    assert "right: 0" in rule(css, ".kiosk .site-nav")
+    assert "bottom: 0" in rule(css, ".kiosk .site-nav")
+    assert declarations(rule(css, ".kiosk .site-nav a"))["color"] == "var(--text)"
+    assert "vh" in declarations(rule(css, ".kiosk .site-nav a"))["font-size"]
 
 
 def test_the_control_script_uses_both_feeds_and_answers_as_text(app):
@@ -1758,9 +1804,34 @@ def test_the_control_panels_do_not_stretch_and_the_rows_are_a_grid(app):
 
 @pytest.mark.parametrize("page", [".control", ".agenda"])
 def test_the_control_and_the_agenda_size_their_text_without_vh(app, page):
-    for selectors, body in css_rules(stylesheet(app)):
+    css = stylesheet(app)
+
+    for selectors, body in css_rules(css):
         if any(s.startswith(page + " ") for s in selectors):
             assert "vh" not in declarations(body).get("font-size", ""), selectors
+    assert declarations(rule(css, page))["font-size"] == "18px"
+
+
+def test_nothing_in_the_agenda_is_written_below_fourteen_pixels(app):
+    for selectors, body in css_rules(stylesheet(app)):
+        if any(s.startswith((".agenda", ".fc")) for s in selectors):
+            size = re.fullmatch(r"([\d.]+)px", declarations(body).get("font-size", "99px"))
+            if size:
+                assert float(size.group(1)) >= 14, selectors
+
+
+@pytest.mark.parametrize("selector", [".control .hint", ".control .urgent-meta"])
+def test_the_control_hints_and_details_read_at_sixteen_pixels(app, selector):
+    found = declarations(rule(stylesheet(app), selector))
+
+    assert found["font-size"] == "16px"
+    assert found["color"] == "var(--text)"
+
+
+def test_the_faint_color_is_only_for_what_is_crossed_out(app):
+    for selectors, body in css_rules(stylesheet(app)):
+        if "var(--faint)" in body:
+            assert all(".done" in s for s in selectors), selectors
 
 
 def test_only_the_alarm_and_the_forms_break_words_anywhere(app):
