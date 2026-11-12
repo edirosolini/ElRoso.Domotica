@@ -23,15 +23,15 @@ gh pr view <N> --json state,mergedAt,mergeCommit,baseRefName,headRefName,reviewD
 
 ```bash
 git checkout mainline && git pull --ff-only
-git branch -d <rama>                       # solo si está mergeada
+git branch -D <rama>                       # merge squash: -d la rechaza; solo con el PR MERGED
 git push origin --delete <rama>            # si GitHub no la borró
 ```
 
 ## 3. Despliegue
 
-- Nunca correr `deploy/deploy.sh` ni escribir en `jobs.db` del CT: darle al dueño el comando listo, con ruta absoluta (su shell puede estar en otro directorio):
-  `! <raíz del repo>/deploy/deploy.sh`, con la raíz que da `git rev-parse --show-toplevel`.
-- `deploy.sh` empaqueta la copia local, no `origin/mainline`: el paso 2 va **antes** de pasar el comando.
+- Nunca correr `deploy/deploy.sh` ni escribir en `jobs.db` del CT: darle al dueño el comando listo, desde un worktree limpio de `origin/mainline`, nunca desde el repo principal:
+  `git fetch && git worktree add --detach <scratchpad>/mainline origin/mainline` (si ya existe: `checkout --detach origin/mainline`) y `! <scratchpad>/mainline/deploy/deploy.sh` (ruta absoluta).
+- `deploy.sh` empaqueta el árbol de donde corre, no `origin/mainline`: pasar el comando solo con el PR MERGED.
 - Solo si el dueño pide desplegar. Verificar después con lecturas, las dos:
   - servicio: `ssh root@192.168.68.60 'pct exec 300 -- journalctl -u domotica -n 50 --no-pager'`
   - código nuevo: un archivo o símbolo del PR presente en `/opt/domotica/src` (`pct exec 300 -- grep -rn <símbolo> /opt/domotica/src`). `active` no prueba que subió lo nuevo.

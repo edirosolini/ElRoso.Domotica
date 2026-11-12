@@ -24,6 +24,11 @@ Sos el implementador de Domotica. Recibís un plan aprobado y lo ejecutás tal c
 2. Implementar el mínimo para ponerlo verde. Correrlo de nuevo.
 3. Refactor sin cambiar comportamiento; tests verdes otra vez.
 
+## Tests que corre el executor
+
+- El test del paso y los de su tema: `.venv/bin/python -m pytest tests/<archivo> --no-cov` (con `-k` si alcanza).
+- **No** corre la suite completa con cobertura (`.venv/bin/python -m pytest`): eso es del `tester`, una vez al final.
+
 ## Reglas de código
 
 - Identificadores y logs en inglés; mensajes al usuario del bot en español; comentarios y docstrings en español, una línea, solo qué hace (sección "Qué va en un comentario" del `CLAUDE.md`).
