@@ -82,7 +82,9 @@ def house(tmp_path):
 
 
 def test_without_the_api_there_is_no_screen(house):
-    assert house.build(with_screens=False).screen(OWNER, "") == "La pantalla no está prendida."
+    assert house.build(with_screens=False).screen(OWNER, "") == (
+        "La pantalla necesita API_TOKEN en el archivo de entorno."
+    )
 
 
 def test_without_argument_it_shows_in_the_dining_room(house):
