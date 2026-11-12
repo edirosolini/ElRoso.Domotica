@@ -6,6 +6,7 @@ from homeauto.timespec import (
     TimeSpecError,
     format_weekdays,
     next_weekday,
+    parse_duration,
     parse_monthday,
     parse_schedule,
     parse_weekdays,
@@ -74,14 +75,35 @@ def test_missing_message_after_clock_time_is_rejected():
         parse_schedule("7:30   ", now=NOW)
 
 
+DURATION_HINT = "No entendí cuánto tiempo. Probá así: 10m o 1h30m"
+CLOCK_HINT = "No entendí la hora. Probá así: 7:30 o mañana 9:00"
+DATE_HINT = "No entendí la fecha. Probá así: 25/10 o 25/10 18:00"
+WHEN_HINT = "No entendí cuándo. Probá así: 10m, 7:30 o mañana 9:00"
+
+
 def test_unparseable_spec_is_rejected():
-    with pytest.raises(TimeSpecError, match="No entiendo"):
+    with pytest.raises(TimeSpecError) as exc:
         parse_schedule("cuando salga el sol avisame", now=NOW)
+    assert str(exc.value) == WHEN_HINT
 
 
 def test_invalid_clock_time_is_rejected():
-    with pytest.raises(TimeSpecError, match="No entiendo"):
+    with pytest.raises(TimeSpecError) as exc:
         parse_schedule("25:99 nada", now=NOW)
+    assert str(exc.value) == CLOCK_HINT
+
+
+@pytest.mark.parametrize("text", ["mañana 7.3x nada", "mañana 25:00 nada"])
+def test_invalid_clock_after_tomorrow_explains_how(text):
+    with pytest.raises(TimeSpecError) as exc:
+        parse_schedule(text, now=NOW)
+    assert str(exc.value) == CLOCK_HINT
+
+
+def test_unreadable_duration_explains_how():
+    with pytest.raises(TimeSpecError) as exc:
+        parse_duration("diezm")
+    assert str(exc.value) == DURATION_HINT
 
 
 def test_empty_input_is_rejected():
@@ -239,6 +261,27 @@ def test_an_impossible_date_is_refused(text):
 def test_what_cannot_be_read_is_refused(text):
     with pytest.raises(TimeSpecError):
         parse_return_date(text, TODAY)
+
+
+@pytest.mark.parametrize("text", ["el domingo", "25-10"])
+def test_an_unreadable_date_explains_how(text):
+    with pytest.raises(TimeSpecError) as exc:
+        parse_return_date(text, TODAY)
+    assert str(exc.value) == DATE_HINT
+
+
+@pytest.mark.parametrize("text", ["31/02", "29/02/2027"])
+def test_an_impossible_date_explains_how(text):
+    with pytest.raises(TimeSpecError) as exc:
+        parse_return_date(text, TODAY)
+    assert str(exc.value) == "Esa fecha no existe. Probá así: 25/10 o 25/10 18:00"
+
+
+@pytest.mark.parametrize("text", ["25/10 tarde", "25/10 25:00"])
+def test_an_unreadable_return_clock_explains_how(text):
+    with pytest.raises(TimeSpecError) as exc:
+        parse_return_date(text, TODAY)
+    assert str(exc.value) == CLOCK_HINT
 
 
 @pytest.mark.parametrize(

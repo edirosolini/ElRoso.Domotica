@@ -70,8 +70,9 @@ def test_an_empty_day_is_said_politely():
 
 
 def test_an_unknown_word_is_rejected():
-    with pytest.raises(ValueError, match="hoy"):
+    with pytest.raises(ValueError) as exc:
         service(FakeCalendar()).spoken("el jueves que viene")
+    assert str(exc.value) == "No entendí qué día. Probá con hoy o mañana."
 
 
 def test_a_calendar_failure_bubbles_up():
