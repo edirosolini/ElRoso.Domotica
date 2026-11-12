@@ -65,7 +65,7 @@ def test_a_daily_reminder(cmd):
     assert job.repeat == "daily"
     assert job.when == NOW.replace(hour=8)
     assert job.message == "tomar la pastilla"
-    assert reply.startswith("Recordatorio todos los días #")
+    assert reply.startswith("Recordatorio todos los días en ")
 
 
 def test_a_reminder_on_some_days(cmd):
@@ -111,7 +111,7 @@ def test_a_monthly_reminder(cmd):
     assert job.repeat == "monthly"
     assert job.monthday == 10
     assert job.when == datetime(2026, 10, 10, 9, 0)
-    assert reply.startswith("Recordatorio el 10 de cada mes #")
+    assert reply.startswith("Recordatorio el 10 de cada mes en ")
 
 
 def test_a_monthly_reminder_on_the_thirty_first_warns_about_short_months(cmd):
@@ -141,7 +141,8 @@ def test_a_reminder_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.remind, OWNER, "diaria 8:00 la pastilla")
 
     [job] = cmd.reminders.list(OWNER)
-    assert reply.actions == ((f"Cancelar #{job.id}", f"cancelar {job.id}"),)
+    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert f"#{job.id}" not in reply.text
 
 
 def test_a_timer_is_a_one_shot_reminder(cmd):
@@ -247,9 +248,9 @@ def test_delete_button_works_from_any_chat_and_tells_the_rest(cmd):
 
     reply = cmd.press(OTHER, f"borrar {job.id}", who="Ana")
 
-    assert reply == f"🗑 Borrado #{job.id}: «arriba»"
+    assert reply == "🗑 Borrado: «arriba»"
     assert cmd.reminders.store.get(job.id) is None
-    assert cmd.told == [(OWNER, f"🗑 Ana borró #{job.id}: «arriba»")]
+    assert cmd.told == [(OWNER, "🗑 Ana borró «arriba»")]
 
 
 def test_delete_button_twice_says_it_was_gone(cmd):
@@ -258,7 +259,7 @@ def test_delete_button_twice_says_it_was_gone(cmd):
 
     reply = cmd.press(OWNER, f"borrar {job.id}", who="Eze")
 
-    assert "ya no" in reply.lower()
+    assert reply == "Ese aviso ya no está."
     assert len(cmd.told) == 1
 
 
@@ -267,7 +268,7 @@ def test_delete_without_a_name_still_works(cmd):
 
     cmd.press(OWNER, f"borrar {job.id}")
 
-    assert cmd.told == [(OTHER, f"🗑 Alguien borró #{job.id}: «arriba»")]
+    assert cmd.told == [(OTHER, "🗑 Alguien borró «arriba»")]
 
 
 def test_delete_is_a_button_and_not_something_to_route(cmd):

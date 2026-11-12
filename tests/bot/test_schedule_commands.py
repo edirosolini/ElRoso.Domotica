@@ -214,7 +214,7 @@ def test_monthly_alarm_lands_on_its_day_this_month(cmd):
     assert job.monthday == 10
     assert job.when == datetime(2026, 9, 10, 9, 0)  # NOW es 29 de agosto
     assert job.message == "pagar la luz"
-    assert reply.startswith("Alarma el 10 de cada mes #")
+    assert reply.startswith("Alarma el 10 de cada mes en ")
 
 
 def test_monthly_alarm_later_today_stays_today(cmd):

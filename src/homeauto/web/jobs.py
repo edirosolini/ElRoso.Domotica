@@ -47,7 +47,7 @@ def _in_thread(work: Callable[[], None]) -> None:
 
 def cancel_action(job_id: int) -> tuple[str, str]:
     """El botón que borra el aviso desde cualquier chat."""
-    return (f"Cancelar #{job_id}", f"borrar {job_id}")
+    return ("Cancelar este aviso", f"borrar {job_id}")
 
 
 def _person(person: Person) -> dict:
@@ -183,7 +183,7 @@ class JobsService:
         job = self.store.get(job_id)
         if job is None or not self.reminders.cancel(None, job_id, any_owner=True):
             raise NotFound(f"No existe el aviso #{job_id}.")
-        self._tell(f"🖥️ Se canceló desde la pantalla #{job.id}: «{job.message}»", ())
+        self._tell(f"🖥️ Se canceló desde la pantalla: «{job.message}»", ())
 
     def cross_out(self, list_name: str, item_id: int) -> str:
         """Saca un ítem de una lista por su id y devuelve su texto."""
@@ -327,8 +327,8 @@ class JobsService:
         return person.name if person is not None else None
 
     def _describe(self, job: Job) -> str:
-        """El aviso en una línea de chat: ícono, número, cuándo, repetición y mensaje."""
-        text = f"{KIND_ICONS[item_kind(job.kind, job.repeat)]} #{job.id} · "
+        """El aviso en una línea de chat: ícono, cuándo, repetición y mensaje."""
+        text = f"{KIND_ICONS[item_kind(job.kind, job.repeat)]} "
         text += format_when(job.when, self.clock())
         repetition = repetition_label(job)
         if repetition:

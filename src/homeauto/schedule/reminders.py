@@ -235,7 +235,7 @@ class Reminders:
             if chat == chat_id or self.notify is None:
                 continue
             try:
-                self.notify(chat, f"🗑 {who} borró #{job_id}: «{job.message}»")
+                self.notify(chat, f"🗑 {who} borró «{job.message}»")
             except Exception:
                 log.exception("no se pudo avisar al chat %s del borrado %s", chat, job_id)
         return job
