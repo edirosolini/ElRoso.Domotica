@@ -1120,6 +1120,88 @@ async def test_slash_inicio_answers_with_the_topics(wired, tmp_path, monkeypatch
     assert "tema avisos" in data
 
 
+def _command(wired, name):
+    [handler] = [
+        h for h in wired.handlers if isinstance(h, main.CommandHandler) and name in h.commands
+    ]
+    return handler
+
+
+async def _typed(wired, chat_id, text):
+    update = _HomeUpdate(chat_id, text)
+    update.message.text = text
+    await _command(wired, text.split()[0][1:]).callback(update, None)
+    text, markup = update.message.replies[-1]
+    data = [row[0].callback_data for row in markup.inline_keyboard] if markup else []
+    return text, data
+
+
+@pytest.mark.parametrize("key", ["avisos", "parlante", "comida", "hoy"])
+async def test_a_topic_command_opens_its_topic(wired, tmp_path, monkeypatch, key):
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42\n"))
+
+    text, data = await _typed(wired, 42, f"/{key}")
+
+    from homeauto.bot.commands import TOPICS
+
+    assert TOPICS[key][0] in text
+    assert data[-1] == "inicio"
+
+
+async def test_the_settings_command_opens_only_for_an_alert_chat(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\nALERT_CHAT_IDS=42\n"))
+
+    owner_text, owner_data = await _typed(wired, 42, "/ajustes")
+    family_text, family_data = await _typed(wired, 77, "/ajustes")
+
+    assert "depurar" in owner_data
+    assert family_data == [] and "ajustes" not in family_text.lower()
+
+
+async def test_an_empty_silence_says_how_the_house_is_and_adds_its_topic(
+    wired, tmp_path, monkeypatch
+):
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42\n"))
+
+    text, data = await _typed(wired, 42, "/silencio")
+
+    assert text.startswith("Estoy hablando.")
+    assert "silencio 1h" in data and data[-1] == "inicio"
+    assert len(data) == len(set(data))
+
+
+async def test_a_silence_with_a_duration_runs_as_before(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42\n"))
+
+    text, data = await _typed(wired, 42, "/silencio 1h")
+
+    assert text.startswith("Listo, no hablo hasta")
+    assert "inicio" not in data
+
+
+async def test_an_empty_question_adds_its_topic(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42\n"))
+
+    text, data = await _typed(wired, 42, "/preguntar")
+
+    assert "armar preguntar" in data and data[-1] == "inicio"
+
+
+def test_the_post_init_gets_the_alert_chats(wired, tmp_path, monkeypatch):
+    handed = {}
+    original = main.build_post_init
+
+    def spy(notifier, reminders, api=None, vacation=None, alert_chats=()):
+        handed["alert_chats"] = alert_chats
+        return original(notifier, reminders, api, vacation, alert_chats)
+
+    monkeypatch.setattr(main, "build_post_init", spy)
+
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\nALERT_CHAT_IDS=42\n"))
+
+    assert set(handed["alert_chats"]) == {42}
+
+
 def test_a_button_has_a_handler(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 
@@ -1787,9 +1869,9 @@ def test_the_post_init_rearms_the_end_of_the_vacations(wired, tmp_path, monkeypa
     handed = {}
     original = main.build_post_init
 
-    def spy(notifier, reminders, api=None, vacation=None):
+    def spy(notifier, reminders, api=None, vacation=None, alert_chats=()):
         handed["vacation"] = vacation
-        return original(notifier, reminders, api, vacation)
+        return original(notifier, reminders, api, vacation, alert_chats)
 
     monkeypatch.setattr(main, "build_post_init", spy)
     commands = _spy_init(monkeypatch, main.Commands)

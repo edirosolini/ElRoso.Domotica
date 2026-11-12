@@ -787,6 +787,12 @@ class Commands:
         offer(*actions, BACK_TO_TOPICS)
         return f"{label}: ¿qué querés hacer?"
 
+    def _offer_topic(self, chat_id: int, key: str) -> None:
+        """Suma los botones del tema `key` que la respuesta todavía no ofrece."""
+        _, actions = self._topics(chat_id)[key]
+        offered = _ACTIONS.get()
+        offer(*(action for action in actions + (BACK_TO_TOPICS,) if action not in offered))
+
     def arrange(self, chat_id: int, text: str = "") -> str:
         """Deja armado el comando de un botón y devuelve la pregunta por el dato que le falta."""
         command = text.strip().lower()
@@ -927,6 +933,8 @@ class Commands:
         denial = self._denial(chat_id)
         if denial:
             return denial
+        if not text.strip():
+            self._offer_topic(chat_id, "preguntar")
 
         if self.asker is None:
             return self._unconfigured(
@@ -1480,6 +1488,8 @@ class Commands:
             ARRANGE_BUTTON: self.arrange,
         }
         run = {**self._dispatch(), **buttons}.get(command)
+        if run is None and command in TOPICS:
+            run, argument = self.topic, command
         answer, _, token = argument.strip().partition(" ")
         if command == PURGE_COMMAND and answer in (PURGE_OK, PURGE_NO):
             run = self.purge_confirm if answer == PURGE_OK else self.purge_drop
@@ -1494,8 +1504,8 @@ class Commands:
             _WHO.reset(token)
 
     def typed(self, name: str) -> bool:
-        """Si `name` se puede escribir con barra fuera de Telegram: un comando de `_dispatch`, la ayuda o el inicio."""
-        return name in (HELP_BUTTON, HOME_BUTTON) or name in self._dispatch()
+        """Si `name` se puede escribir con barra fuera de Telegram: un comando de `_dispatch`, la ayuda, el inicio o un tema."""
+        return name in (HELP_BUTTON, HOME_BUTTON) or name in TOPICS or name in self._dispatch()
 
     def press_without_chat(self, data: str, who: str = "") -> str:
         """Un botón de alguien de la casa sin chat: solo apagar una alarma o marcar «Hecho»."""
@@ -1996,7 +2006,9 @@ class Commands:
 
         asked = text.strip()
         if not asked:
-            return self._silence_status()
+            status = self._silence_status()
+            self._offer_topic(chat_id, "silencio")
+            return status
 
         try:
             duration = parse_duration(asked)

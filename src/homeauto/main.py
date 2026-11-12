@@ -14,7 +14,7 @@ from datetime import date, datetime, time as clock_time
 from pathlib import Path
 from typing import Iterable
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, BotCommandScopeChat, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -32,7 +32,7 @@ from homeauto.air import AirClient
 from homeauto.ask import ASK_TIMEOUT, Asker
 from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
-from homeauto.bot.commands import Commands, broken, with_actions
+from homeauto.bot.commands import SETTINGS_TOPIC, Commands, broken, with_actions
 from homeauto.bible import VerseOfTheDay
 from homeauto.briefing import Briefing
 from homeauto.cleanup import Cleaner
@@ -185,8 +185,10 @@ VACATION_COMMANDS = ("vacaciones",)
 TURNS_COMMANDS = ("turnos",)
 MENU_COMMANDS = ("menu",)
 PURGE_COMMANDS = ("depurar",)
+# Los temas que no son un comando propio: escritos, abren sus botones.
+TOPIC_COMMANDS = ("avisos", "parlante", "comida", "hoy", SETTINGS_TOPIC)
 ALL_COMMANDS = (
-    HOME_COMMANDS + HELP_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS
+    HOME_COMMANDS + TOPIC_COMMANDS + HELP_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS
     + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + SCREEN_COMMANDS + WEATHER_COMMANDS
@@ -197,20 +199,19 @@ ALL_COMMANDS = (
     + TURNS_COMMANDS + MENU_COMMANDS + PURGE_COMMANDS
 )
 
-# Lo que ofrece Telegram al escribir "/". Corto a propósito: el resto sigue
-# andando escrito y está listado en `HELP`, el catálogo completo.
+# Lo que ofrece Telegram al escribir "/": un comando por tema; el resto está en `HELP`.
 COMMAND_MENU = (
-    ("decir", "Decirlo en voz alta ahora"),
-    ("llamar", "Llamar a la casa — /llamar a cenar"),
-    ("alarma", "Despertar a una hora — /alarma 7:30 arriba"),
-    ("recordar", "Recordar algo los días que digas — /recordar lun-vie 7:30 colegio"),
-    ("lista", "Ver y cancelar lo que está programado"),
-    ("silencio", "No hablar por un rato — /silencio 2h"),
-    ("preguntar", "Averiguar algo y contestarlo en voz alta"),
-    ("compras", "Qué falta comprar, y tacharlo"),
-    ("equipos", "Qué equipos tengo y cuál está activo"),
-    ("ayuda", "Todos los comandos y cómo se usan"),
+    ("inicio", "Elegir un tema con botones"),
+    ("avisos", "Alarmas, recordatorios y pastillas"),
+    ("parlante", "Decir algo o llamar en la casa"),
+    ("comida", "Compras, pendientes y menú de la semana"),
+    ("hoy", "La agenda y el clima"),
+    ("preguntar", "Averiguar, calcular o traducir"),
+    ("silencio", "Que la casa no hable por un rato"),
+    ("ayuda", "Cómo se usa, y todos los comandos"),
 )
+# El menú de los chats de alertas: el general más los ajustes.
+MENU_ALERTS = COMMAND_MENU + ((SETTINGS_TOPIC, "Equipos, pantalla, estado y depurar"),)
 
 
 # Los botones abajo de cada aviso: (etiqueta, comando con su argumento).
@@ -407,7 +408,7 @@ def schedule_holidays(app, client, store) -> None:
     app.job_queue.run_daily(job, time=moment, name="holidays")
 
 
-def build_post_init(notifier, reminders, api=None, vacation=None):
+def build_post_init(notifier, reminders, api=None, vacation=None, alert_chats=()):
     """Lo que tiene que pasar con el loop ya corriendo, antes de atender a nadie.
 
     `reminders.start()` corre fuera del loop: recuperar un job perdido lo
@@ -428,6 +429,12 @@ def build_post_init(notifier, reminders, api=None, vacation=None):
             [BotCommand(name, description) for name, description in COMMAND_MENU]
         )
         log.info("menú de comandos registrado en Telegram")
+        alert_menu = [BotCommand(name, description) for name, description in MENU_ALERTS]
+        for chat_id in alert_chats:
+            try:
+                await app.bot.set_my_commands(alert_menu, scope=BotCommandScopeChat(chat_id))
+            except Exception:  # noqa: BLE001 - un chat que falla no frena el arranque
+                log.warning("no pude publicar el menú de alertas en el chat %s", chat_id)
 
     return post_init
 
@@ -790,6 +797,8 @@ def register(
     routes = (
         (HOME_COMMANDS, commands.home),
         (HELP_COMMANDS, commands.help),
+        *(((key,), lambda chat_id, _text, key=key: commands.topic(chat_id, key))
+          for key in TOPIC_COMMANDS),
         (SAY_COMMANDS, commands.say),
         (CALL_COMMANDS, commands.call),
         (VOLUME_COMMANDS, commands.volume),
@@ -1246,7 +1255,9 @@ def main() -> None:
     else:
         log.info("API deshabilitada: no hay API_TOKEN en la configuración")
 
-    app.post_init = build_post_init(notifier, reminders, api, vacation)
+    app.post_init = build_post_init(
+        notifier, reminders, api, vacation, alert_chats=config.alert_recipients
+    )
     if watcher is not None:
         schedule_calendar_jobs(app, watcher)
 
