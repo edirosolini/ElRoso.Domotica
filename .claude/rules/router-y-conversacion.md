@@ -26,16 +26,21 @@ devolviendo un string: los botones van aparte.
 - 🔴 **Un comando ofrece botones con `offer()`, y `with_actions()` los junta con la
   respuesta** en un `Reply`. Van en un `contextvars.ContextVar`, como la coletilla del
   parlante, porque son del pedido y dos mensajes se atienden a la vez. Así ningún comando
-  cambió de firma, y el «Entendí: /alarma …» del texto libre y la nota de voz heredan los
-  botones del comando que corrieron sin hacer nada.
+  cambió de firma, y la respuesta del texto libre y de la nota de voz heredan los botones
+  del comando que corrieron sin hacer nada.
 - **Qué ofrece cada uno**: lo programado —`/timer`, `/alarma`, `/recordar`, `/posponer`—
-  trae «Cancelar este aviso», que es el deshacer que ya prometía el «Entendí:», y ni el botón
-  ni la respuesta muestran el número; `/lista`, un «Cancelar #N» por cada uno; `/compras` y
-  `/pendientes`, un «✓ ítem» por cada uno y «Vaciar»; `/menu`, «🛒 Pasar a compras» y
-  «🔄 Otra idea».
+  trae «🗑 Borrar este aviso» (`cancelar <id>`), que es el deshacer de lo que se agendó, y ni
+  el botón ni la respuesta muestran el número; `/lista`, un «🗑 <cuándo> <mensaje>» por cada
+  uno; `/compras` y `/pendientes`, un «✓ ítem» por cada uno y «Vaciar»; `/menu`, «🛒 Pasar a
+  compras» y «🔄 Otra idea»; `/silencio` con un silencio puesto, «Volver a hablar»
+  (`TALK_ACTION`); `/vacaciones` y todo lo que se niega por vacaciones, «Volví de vacaciones»
+  (`BACK_ACTION`); `/pantalla`, «Sacar la pantalla».
+- **`/lista` es «Mis avisos»**: el encabezado, un renglón por aviso con su `#N` y el pie
+  «Tocá uno para borrarlo.». El botón dice cuándo suena y qué dice (`format_when()`), cortado
+  a cuarenta caracteres como toda etiqueta.
 - **El número queda donde se elige por él**: `/lista`, `/cancelar`, `/pastillas`, `/turnos`,
-  el 404 de la API y `/depurar`. Un `/cancelar` de un número que no existe contesta «No
-  encontré ese aviso. Fijate con /lista».
+  el 404 de la API y `/depurar`. `/cancelar` contesta «🗑 Borrado: «…»», con el mensaje y sin
+  el número; uno que no existe, «No encontré ese aviso. Fijate con /lista».
 - 🔴 **Tachar va por id, no por posición.** Con `sacar 1`, tachar el primero corría los
   demás y el botón siguiente sacaba otro ítem. El botón manda `sacar id:17`, que
   `ListStore.remove_id()` borra solo si sigue en esa lista. Escrito a mano, `/sacar 2` sigue
@@ -60,9 +65,16 @@ y con qué argumento. No ejecuta nada — `Commands` ya sabe hacerlo y los parse
 existen ya saben rechazar un argumento malo.
 
 - **Ejecuta y avisa qué entendió; no pide confirmación.** Es decisión del dueño de la casa.
-  La respuesta arranca con `Entendí: /timer 10m sacá la pizza` para que una lectura errada se
-  vea, y `/cancelar` es el deshacer. Lo único que se pregunta antes es un dato que falta —ver
-  **Conversación**—, y eso no es confirmar: es no inventarlo.
+  La respuesta arranca con `Entendí: /clima` para que una lectura errada se vea. Lo único que
+  se pregunta antes es un dato que falta —ver **Conversación**—, y eso no es confirmar: es no
+  inventarlo.
+- 🔴 **Lo que se agenda confirma en castellano, sin «Entendí:».** `/timer`, `/alarma`,
+  `/recordar` y `/posponer` contestan «Listo: te aviso hoy a las 21:10 en Parlante: «…»»,
+  «Listo: la alarma suena todos los días a las 7:30 …» o «Listo: te vuelvo a avisar …»
+  (`_confirm_when()`), y eso ya dice qué se entendió; el deshacer es «🗑 Borrar este aviso».
+  El comando marca `_CONFIRMED` solo si agendó, y `_route_and_run()` saca el «Entendí:» solo
+  con esa marca: un argumento que no parsea sigue saliendo `Entendí: /timer 25:99 …` con el
+  error, que es donde más importa ver la lectura.
 - **Un llamado es la excepción, y por eso es un comando aparte.** "llamar a todos a cenar" no
   contiene la frase a decir; `llamar` la genera. Ver **Llamar a la casa**, en `.claude/rules/voz.md`.
 - 🔴 **Lo que la casa va a decir con voz propia tiene que salir del mensaje.** Un modelo al
@@ -133,8 +145,10 @@ existen ya saben rechazar un argumento malo.
   segundos delante de "bajá el volumen". El que sí busca es `ASK_MODEL`, y solo cuando la
   cosa terminó siendo una pregunta.
 - 🔴 **Que el router falle no es una pregunta.** Mandar "apagá la tele" a buscar en internet
-  contestaría algo que nadie pidió, lento y con seguridad. `RouteError` sale como texto y
-  apunta a `/ayuda`; solo un "esto no era un comando" cae en `preguntar`.
+  contestaría algo que nadie pidió, lento y con seguridad. Un `RouteError` sin hilo contesta
+  `NOT_UNDERSTOOD` («No te entendí. Elegí un tema o escribilo de otra forma.») con los botones
+  de los temas, no el texto del error; solo un "esto no era un comando" cae en `preguntar`.
+  Una respuesta que no sirve al hilo contesta lo mismo.
 - **Medido: el modelo rutea las preguntas a `preguntar`, no a "ninguno".** Los dos caminos
   terminan en `Commands.ask`, así que da igual, pero conviene saberlo antes de pelearse con
   el prompt por eso.
@@ -144,8 +158,8 @@ existen ya saben rechazar un argumento malo.
   nombra un comando, y nombrar no es transporte. Hay test en las dos direcciones — que todo
   lo que el router puede pedir se pueda ejecutar, y que no haya nada ejecutable que el router
   nunca nombre. Sin eso, agregar un comando lo deja mudo al texto libre y nadie se entera.
-- ⚠️ Sin la clave del proveedor de texto no hay intérprete: un mensaje suelto contesta que
-  los comandos están en `/ayuda`.
+- ⚠️ Sin la clave del proveedor de texto no hay intérprete: un mensaje suelto contesta
+  `NO_ROUTER` («Así escrito no te entiendo. Elegí un tema.») con los temas.
 
 ## Notas de voz
 
@@ -161,10 +175,11 @@ suelto: router, dato que falta, ejecución. `listen.py` es lo único nuevo.
   en un vCPU, con riesgo de OOM justo cuando alguien habla.
 - **El que escucha es el modelo barato de Google**, `LLM_MODEL`, sin búsqueda, como el router.
 - ⚠️ **Las notas de voz necesitan `LLM_API_KEY` aunque `LLM_PROVIDER` sea `anthropic`**: Claude
-  no acepta audio. Sin esa clave el texto anda con Claude, una nota de voz contesta «No escucho
-  audios» y el arranque lo deja en el log.
-- **Se contesta qué se escuchó y qué se entendió**: `🎤 «...»` y abajo el `Entendí: /...`. Con
-  audio hay dos lugares donde se puede errar, no uno, así que los dos quedan a la vista.
+  no acepta audio. Sin esa clave el texto anda con Claude, una nota de voz contesta `NO_AUDIO`
+  («No escucho audios. Escribime o elegí un tema.») con los temas, y el arranque lo deja en el log.
+- **Se contesta qué se escuchó y qué se entendió**: `🎤 «...»` y abajo el `Entendí: /...`, o
+  el «Listo:» de lo que se agendó. Con audio hay dos lugares donde se puede errar, no uno, así
+  que los dos quedan a la vista.
 - **Un audio de más de un minuto se rechaza sin bajarlo** (`MAX_VOICE_SECONDS`). Un comando
   dicho es una oración.
 - **Lo que no se entiende no se adivina**: el modelo contesta `NADA` y el chat dice que no se
@@ -194,8 +209,8 @@ donde entró y nada más.
   propósito: nadie pide a las tres de la mañana que la alerta suene. Lo demás del monitor y
   Seq solo se escribe a alertas: ver **Vigilancia**, en `.claude/rules/vigilancia.md`.
 - 🔴 **En vacaciones no sale nada por el parlante**, ni lo urgente: todo eso va solo al chat.
-  `/decir`, `/llamar` y lo pedido «por el parlante» contestan el motivo con la pista
-  `/vacaciones off`. Ver **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`.
+  `/decir`, `/llamar` y lo pedido «por el parlante» contestan el motivo con el botón
+  «Volví de vacaciones». Ver **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`.
 - 🔴 **La coletilla se saca antes de rutear.** El router arma el argumento del comando y se la
   comería, así que `free_text()` la detecta sobre el mensaje entero, la quita y deja puesto un
   `contextvars.ContextVar`. Va en un contextvar y no en el objeto porque es del pedido: dos
@@ -309,39 +324,77 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   que falta. Con un nombre fuera del padrón saca igual las palabras del nombre, y el comando
   contesta el error.
 - 🔴 **Las preguntas van al chat, nunca al parlante**, así que son la excepción a la regla de
-  los dígitos: "¿Cuál cancelo? El número sale en /lista" se lee, no se dice.
+  los dígitos: "¿Cuál borro? El número sale en /lista, Mis avisos." se lee, no se dice.
 - ⚠️ **La fidelidad de `decir` pasa a medirse contra el hilo entero.** La respuesta llega en el
   mensaje de después; comparando solo contra el último renglón, "que bajen a comer" no
   estaría y la casa se quedaría sin decir algo que la persona sí escribió.
 - **Sin `Conversation` cableada, todo se comporta como antes**: un comando incompleto sale con
   el error del parser. La conversación es una pieza opcional del constructor, como el resto.
 
+## Inicio y temas
+
+`/inicio` y `/start` contestan `home()`: «¿Qué querés hacer? …» y un botón por tema de
+`TOPICS`. Un tema (`tema <clave>`) muestra sus botones y «⬅ Temas», que vuelve al inicio.
+
+- **Siete temas**: ⏰ Avisos, 🗣 Hablar en la casa, 🛒 Compras y comida, 📅 Hoy, ❓ Preguntar,
+  🤫 Silencio y ⚙️ Ajustes. **«Ajustes» solo lo ven los chats de `alert_recipients`**
+  (`_topics()`); a otro chat, `tema ajustes` contesta «No conozco ese tema.». ⚠️ Con el bot
+  abierto `alert_recipients` está vacía y nadie ve «Ajustes».
+- **Un botón de tema corre un comando o lo deja armado.** «Mis avisos» manda `lista`; «Avisame
+  en…» manda `armar timer`. `arrange()` guarda el pendiente con la pregunta del dato que falta
+  (`slots.missing()`, o `slots.QUESTION` para `preguntar`, que escrito no tiene dato
+  obligatorio) y la devuelve. Sin `Conversation`, corre el comando vacío.
+- 🔴 **Dos formas de armar** (`ARRANGEABLE`). `timer`, `alarma` y `recordar` siembran el hilo
+  con una frase («poneme un timer», «creá una alarma», «creá un recordatorio que se repite»)
+  y la respuesta pasa por el router con el mismo prompt, como cualquier hilo. Los demás
+  —`decir`, `volumen`, `agregar`, `preguntar`, `calcular`, `traducir`, `usar`— guardan el hilo
+  vacío, y `_run_arranged()` corre el comando con la respuesta tal cual, sin el modelo y sin
+  «Entendí:».
+- ⚠️ **Las tres frases semilla no están medidas en el CT.** El prompt no cambió, pero el hilo
+  que ve el router arranca con una frase que ninguna corrida de `measure_router.py` incluye.
+  Si el router lee mal la respuesta de un botón de Avisos, el primer sospechoso es la semilla.
+- ⚠️ **Un hilo vacío no se interrumpe**: lo que se escriba después del botón es el argumento,
+  aunque sea otro comando completo. Solo `olvidalo` y sus variantes lo cortan.
+- **`/ayuda` es la ayuda corta** (`HELP_SHORT`): ejemplos escritos como se le habla a alguien
+  y los temas abajo. `/ayuda completa` devuelve `HELP`, el catálogo entero.
+- **Las respuestas de «no entendí» ofrecen los temas** y no nombran `/ayuda`:
+  `NOT_UNDERSTOOD`, `NO_ROUTER` y `NO_AUDIO`.
+
 ## Comandos y alias
 
-`ALL_COMMANDS` tiene 42 nombres: 32 comandos y 10 **alias** (`help`, `tiempo`,
-`donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los alias
-funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a nadie.
+`ALL_COMMANDS` tiene 48 nombres: 33 comandos, 5 temas que no son comando propio
+(`TOPIC_COMMANDS`: `avisos`, `parlante`, `comida`, `hoy`, `ajustes`) y 10 **alias** (`help`,
+`tiempo`, `donde`, `volume`, `stop`, `start`, `siesta`, `pregunta`, `llama`, `convertir`). Los
+alias funcionan pero no van al menú de Telegram: verlos duplicados al escribir `/` no ayuda a
+nadie.
 
-🔴 **El menú de Telegram tiene 10, no los 32.** `recordar` entró como el décimo, y es el
-tope que fija el test. Con los 18, la lista que sale al escribir `/`
-era un catálogo que nadie lee, y los que se perdían adentro eran justo los que llevan
-argumento. Quedan los que se escriben a propósito; los otros —`timer`, `cancelar`, `volumen`,
-`parar`, `apagar`, `clima`, `agenda`, `estado`, `usar`, `calcular`, `agregar`, `pendientes`,
-`sacar`, `traducir`, `posponer`, `pastillas`, `vacaciones`, `turnos`, `pantalla`, `menu`, `depurar`— **siguen andando escritos** y se alcanzan sin barra por el router.
+🔴 **El menú de Telegram es un comando por tema**, ocho (`COMMAND_MENU`): `inicio`, `avisos`,
+`parlante`, `comida`, `hoy`, `preguntar`, `silencio` y `ayuda`. Una lista de comandos sueltos
+era un catálogo que nadie lee; los temas llevan a los botones. Lo demás —`OUT_OF_MENU` en
+`tests/bot/test_command_menu.py`— **sigue andando escrito**, se alcanza sin barra por el
+router y casi todo está en los botones de su tema.
 
-- **`HELP` es el catálogo completo**, y por eso `/ayuda` está en el menú. Un comando que se
-  va del menú tiene que seguir en la ayuda o queda invisible; `tests/bot/test_command_menu.py`
-  ata las dos mitades.
-- **`/lista` nombra a `/cancelar` y `/compras` nombra a `/sacar`.** Son las salidas del menú
-  que dejan a otro comando sin puerta: quien ve la lista ahí mismo lee cómo borrar de ella.
-- **`depurar` está en `HELP` y no en el menú**: es solo para los chats de alertas. Sus botones
-  `depurar ok <token>` y `depurar no <token>` los desvía `press()` a `purge_confirm()` y
-  `purge_drop()`. Ver `.claude/rules/depurador.md`.
+- **Los chats de alertas ven `MENU_ALERTS`**: el mismo menú más `ajustes`. `build_post_init()`
+  lo publica chat por chat con `BotCommandScopeChat`; un chat que falla queda en el log y no
+  frena el arranque ni a los otros. ⚠️ Nada borra ese menú: un chat que deja de ser de
+  alertas lo conserva hasta que se le publique otro.
+- **`preguntar` y `silencio` son comando y tema a la vez.** Vacíos, contestan lo suyo y suman
+  los botones del tema (`_offer_topic()`). Eso vive en `Commands`, así que vale también en
+  `/control`.
+- **`HELP` es el catálogo completo**, y sale con `/ayuda completa`. Un comando que no está en
+  el menú tiene que seguir en la ayuda o queda invisible; el test ata `OUT_OF_MENU` con `HELP`.
+- **`/compras` nombra a `/sacar`**: quien ve la lista ahí mismo lee cómo sacar de ella.
+  `/lista` ya no nombra a `/cancelar`: borra con sus botones.
+- **`depurar` está en `HELP` y en «Ajustes», no en el menú**: es solo para los chats de
+  alertas. Sus botones `depurar ok <token>` y `depurar no <token>` los desvía `press()` a
+  `purge_confirm()` y `purge_drop()`. Ver `.claude/rules/depurador.md`.
 - **`hecho`, `borrar`, `callar` y `confirmar` no están en `ALL_COMMANDS`**: son solo botones, en
-  `Commands.press()`. Ni se escriben ni los nombra el router.
-- **`ayuda` es comando de Telegram y además botón** (`HELP_BUTTON`): en `press()` devuelve lo
-  mismo que `/ayuda`, `start()`. En Telegram lo cablea `main.py` y no está en `_dispatch()`.
-  No es de `CHATLESS_BUTTONS`: sin Telegram, `press_without_chat()` contesta `CHATLESS_ONLY`.
-- **`Commands.typed(name)` dice qué se puede escribir con barra fuera de Telegram**: `ayuda` o
-  un nombre de `_dispatch()`. Los botones de solo-botón y los alias de `main.py` quedan
-  afuera. Lo usa `/control`; ver **Control desde la web**, en `.claude/rules/web.md`.
+  `Commands.press()`. Ni se escriben ni los nombra el router. Lo mismo `tema` y `armar`.
+- **`ayuda` e `inicio` son comandos de Telegram y además botones** (`HELP_BUTTON`,
+  `HOME_BUTTON`): en `press()` corren `help()` y `home()`, y una clave de `TOPICS` corre
+  `topic()`. En Telegram los cablea `main.py` y no están en `_dispatch()`. No son de
+  `CHATLESS_BUTTONS`: sin Telegram, `press_without_chat()` contesta `CHATLESS_ONLY`.
+- **`Commands.typed(name)` dice qué se puede escribir con barra fuera de Telegram**: `ayuda`,
+  `inicio`, una clave de `TOPICS` o un nombre de `_dispatch()`. Los botones de solo-botón y los
+  alias de `main.py` quedan afuera. Lo usa `/control`; ver **Control desde la web**, en
+  `.claude/rules/web.md`.

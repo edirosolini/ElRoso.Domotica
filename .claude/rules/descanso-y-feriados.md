@@ -27,7 +27,9 @@ hace falta una excepción por mensaje, cuidado con la palabra clave elegida: `en
 enseñó que un prefijo que también puede ser texto real se come parte del mensaje.
 
 `/silencio 2h` agrega una ventana **a pedido** encima de la fija, para una siesta o una
-reunión. `quiet.Hush` la implementa.
+reunión. `quiet.Hush` la implementa. La respuesta, y `/silencio` vacío con un silencio
+puesto, traen «Volver a hablar» (`TALK_ACTION`, manda `hablar`); `/silencio` vacío suma
+además los botones del tema Silencio.
 
 - 🔴 **`Hush` tiene la misma forma que `QuietHours`.** Contesta `is_quiet()` y `reason()`, así
   que el anunciador, los comandos, la API y `HouseVoice` siguen consultando lo mismo sin
@@ -73,9 +75,10 @@ leer, contesta cómo están y cómo se usa.
   llega también a los comandos escritos y al texto libre; en una nota de voz queda «Alguien».
 - 🔴 **Activarlas corta las alarmas que estén sonando** (`Reminders.stop_all_ringing`), con
   el historial abierto, como el tope. Durante las vacaciones **una alarma no repite** y sale
-  sin «🔕 Apagar»: no hay nada que apagar.
-- **`/decir`, `/llamar` y lo pedido «por el parlante» se niegan** con el motivo y la pista
-  `/vacaciones off`. `/pantalla` tampoco prende la tele. `/apagar`, `/parar` y `/volumen` siguen andando: no hablan. El resumen,
+  sin «🔕 Apagar alarma»: no hay nada que apagar.
+- **`/decir`, `/llamar` y lo pedido «por el parlante» se niegan** con el motivo y el botón
+  «Volví de vacaciones» (`BACK_ACTION`), que manda `vacaciones off`; `/vacaciones` y
+  `/silencio` en vacaciones traen el mismo. `/pantalla` tampoco prende la tele. `/apagar`, `/parar` y `/volumen` siguen andando: no hablan. El resumen,
   el cierre, el clima y la agenda salen solo por chat, como en descanso. El aviso del menú
   antes de cada comida no sale: ver **Menú semanal**, en `.claude/rules/consultas.md`.
 - ⚠️ **Todo camino nuevo que castee tiene que preguntarle a `Hush`**, o se saltea las

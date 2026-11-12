@@ -42,8 +42,8 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | caída confirmada | los otros chats de alertas: «✅ <nombre> confirmó: X no responde» |
 | resumen y cierre | todos; la línea de caídos y los errores de la noche, solo escritos a alertas y nunca dichos. Un cierre con solo caídos se escribe a alertas y al resto no le llega |
 | resumen semanal | todos, solo escrito |
-| alarmas, recordatorios y timers | los chats del aviso según su asignación: todos, o solo el de la persona asignada con Telegram; con posponer, la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
-| repetición de una alarma sin apagar | los chats del aviso, en cada repetición y solo con «🔕 Apagar», también en descanso; «Dejé de sonar» al tope, a todos si era de una persona |
+| alarmas, recordatorios y timers | los chats del aviso según su asignación: todos, o solo el de la persona asignada con Telegram; con posponer, la alarma también con «🔕 Apagar alarma», recordatorios y timers con «Hecho» |
+| repetición de una alarma sin apagar | los chats del aviso, en cada repetición y solo con «🔕 Apagar alarma», también en descanso; «Dejé de sonar» al tope, a todos si era de una persona |
 | alarma apagada o «Hecho» | los demás chats del aviso: «🔕 <nombre> apagó la alarma» / «✅ <nombre> marcó hecho» |
 | re-aviso de un recordatorio o timer sin «Hecho» | los chats del aviso, solo con «Hecho»; el último, a todos si era de una persona. Además se dice en los equipos del aviso, salvo en descanso, silencio o vacaciones |
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
@@ -54,8 +54,8 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | vacaciones activadas o cortadas | los demás chats: «🧳 <nombre> activó vacaciones hasta el …» / «… cortó las vacaciones» |
 | fin de las vacaciones | todos: «🧳 Terminó el modo vacaciones, vuelvo a hablar.» |
 | agenda, clima, lluvia, API | todos |
-| alta, cambio o baja desde la pantalla | todos, sin número; el alta y el cambio, con «Cancelar este aviso» |
-| borrado con ese «Cancelar este aviso» | los demás chats: «🗑 <nombre> borró «<mensaje>»» |
+| alta, cambio o baja desde la pantalla | todos, sin número; el alta y el cambio, con «🗑 Borrar este aviso» |
+| borrado con ese «🗑 Borrar este aviso» | los demás chats: «🗑 <nombre> borró «<mensaje>»» |
 | lo hecho desde `/control` | lo mismo que el botón o el comando en Telegram: los demás chats, con «<nombre> (pantalla)» |
 | alarma apagada o «Hecho» desde `/control` por una persona sin Telegram | todos los chats del aviso, con «<nombre> (pantalla)» |
 | respuesta de un comando | el chat que lo escribió; el motivo de una falla, solo si es de alertas |
@@ -77,7 +77,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 - **El parlante no sabe de chats.** Lo que suena, suena en toda la casa: separar los chats no
   hace privado un aviso dicho en voz alta.
 - `/lista` y `/cancelar` siguen siendo de quien creó la alarma, aunque el aviso le llegue a
-  todos. El «Cancelar este aviso» de un aviso de la pantalla no: borra desde cualquier chat. Ver
+  todos. El «🗑 Borrar este aviso» de un aviso de la pantalla no: borra desde cualquier chat. Ver
   **Pantalla de la casa**, en `.claude/rules/web.md`.
 - **`/control` no tiene destinatarios propios.** Corre el comando a nombre del chat elegido,
   así que ese chat queda como «el que lo tocó» y no recibe el aviso a los demás. Ver
