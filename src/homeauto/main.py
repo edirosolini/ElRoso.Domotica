@@ -204,7 +204,7 @@ COMMAND_MENU = (
     ("lista", "Ver y cancelar lo que está programado"),
     ("silencio", "No hablar por un rato — /silencio 2h"),
     ("preguntar", "Averiguar algo y contestarlo en voz alta"),
-    ("compras", "Qué falta comprar — /agregar leche, pan"),
+    ("compras", "Qué falta comprar, y tacharlo"),
     ("equipos", "Qué equipos tengo y cuál está activo"),
     ("ayuda", "Todos los comandos y cómo se usan"),
 )
