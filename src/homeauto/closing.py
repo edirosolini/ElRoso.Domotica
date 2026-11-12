@@ -1,8 +1,6 @@
 """El cierre del día: lo que viene mañana y lo que sigue roto.
 
-Mismas reglas que el resumen de la mañana —fuentes independientes, una que
-falla deja un hueco, nada hablado lleva dígitos— con una diferencia: si no
-quedó nada para decir, no se dice nada. A esta hora un cierre vacío es ruido.
+Mismas reglas que el resumen de la mañana; si no juntó nada, no sale nada.
 """
 
 from __future__ import annotations
@@ -43,12 +41,12 @@ class Closing:
         return self.speech().spoken
 
     def speech(self) -> Summary:
-        """Lo hablado, igual a lo escrito, y la copia sin servicios caídos."""
+        """Lo hablado y la copia de los otros chats sin servicios caídos; lo escrito, con ellos."""
         tomorrow, sky = self._safe(self._tomorrow), self._safe(self._sky)
         trouble, shopping = self._safe(self._trouble), self._safe(self._shopping)
-        said = " ".join(part for part in (tomorrow, sky, trouble, shopping) if part)
-        public = " ".join(part for part in (tomorrow, sky, shopping) if part)
-        return Summary(spoken=said, written=said, public=public)
+        written = " ".join(part for part in (tomorrow, sky, trouble, shopping) if part)
+        said = " ".join(part for part in (tomorrow, sky, shopping) if part)
+        return Summary(spoken=said, written=written, public=said)
 
     @staticmethod
     def _safe(source: Callable[[], str]) -> str:

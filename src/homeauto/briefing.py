@@ -1,9 +1,7 @@
 """El resumen de la mañana: el feriado, el día, el cielo, las cifras, lo caído y el versículo.
 
-Fuentes independientes juntadas en un solo texto hablado: una que falla deja un
-hueco, nunca cancela el resumen. Nada de lo hablado lleva dígitos. Los
-titulares son la única fuente que no se dice, así que `speech()` devuelve las
-dos mitades: lo que la casa dice y la copia que queda en el chat.
+Fuentes independientes: una que falla deja un hueco, nunca cancela el resumen.
+`speech()` devuelve lo que la casa dice, sin dígitos, y las copias escritas.
 """
 
 from __future__ import annotations
@@ -72,7 +70,7 @@ class Briefing:
     def speech(self) -> Summary:
         """El resumen hablado, la copia que queda en el chat y la que no lleva alertas.
 
-        Lo hablado y lo escrito se diferencian en los titulares, que van solo al chat.
+        Lo caído, los errores de la noche y los titulares van solo al chat.
         """
         day, sky, money = self._safe(self._day), self._safe(self._sky), self._safe(self._money)
         trouble = self._safe(self._trouble)
@@ -85,7 +83,7 @@ class Briefing:
 
         spoken_verse = verse.spoken if verse is not None else ""
         night_spoken = night.spoken if night else ""
-        said = self._join(holiday_spoken, day, sky, money, trouble, night_spoken, spoken_verse)
+        said = self._join(holiday_spoken, day, sky, money, spoken_verse)
         shown = self._join(holiday_written, day, sky, money, trouble, night_spoken, spoken_verse)
         calm = self._join(holiday_written, day, sky, money, spoken_verse)
 

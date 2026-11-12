@@ -1,4 +1,4 @@
-"""El aviso a los dueños cuando le escribe al bot alguien que no está en la lista."""
+"""El aviso a los chats de alertas cuando le escribe al bot alguien que no está en la lista."""
 
 from __future__ import annotations
 
@@ -62,13 +62,13 @@ class Strangers:
         self.clock = clock
 
     def knock(self, chat_id: int, who: str) -> None:
-        """Avisa a los dueños la primera vez que escribe un chat fuera de la lista."""
+        """Avisa a los chats de alertas la primera vez que escribe un chat fuera de la lista."""
         if self.config.is_allowed(chat_id) or self.store.known(chat_id):
             return
 
         text = self._text(chat_id, who)
         told = False
-        for owner in sorted(self.config.allowed_chat_ids):
+        for owner in sorted(self.config.alert_recipients):
             try:
                 self.notify(owner, text)
                 told = True

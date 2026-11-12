@@ -217,10 +217,10 @@ DONE_ACTIONS = (("✅ Hecho", "hecho {job}"),)
 REMINDER_ACTIONS = DONE_ACTIONS + SNOOZE_ACTIONS
 OFF_ACTIONS = (("🔕 Apagar", "callar {job}"),)
 ALARM_ACTIONS = OFF_ACTIONS + SNOOZE_ACTIONS
-MONITOR_ACTIONS = (("Ver estado", "estado"), ("Silenciar 1 h", "silencio 1h"))
+MONITOR_ACTIONS = (("Ver estado", "estado"),)
 # `{name}` lo completa el aviso de caída con el nombre del chequeo.
 CONFIRM_ACTIONS = (("✅ Confirmar", "confirmar {name}"),)
-SEQ_ACTIONS = (("Silenciar 1 h", "silencio 1h"),)
+SEQ_ACTIONS = ()
 
 # Un error que no llega al chat se ve igual que un bot colgado.
 BROKEN = "🔴 No pude procesar la solicitud: {reason}"
@@ -339,13 +339,13 @@ def schedule_briefing(app, config, briefing, announce) -> None:
 
 
 def schedule_closing(app, config, closing, announce) -> None:
-    """El cierre del día, que se calla cuando no juntó nada que decir."""
+    """El cierre del día, que se calla cuando no juntó nada que escribir."""
     if config.closing_at is None:
         return
 
     def speak() -> None:
         summary = closing.speech()
-        if summary.spoken:
+        if summary.written:
             announce(summary.spoken, summary.written, summary.public)
 
     _schedule_daily(app, config.closing_at, speak, name="closing", label="cierre del día")
@@ -439,16 +439,19 @@ def _alert(
     detail: str = "",
     actions: tuple[tuple[str, str], ...] = (),
 ) -> None:
-    """Lo dice si se puede, y siempre lo deja escrito en el chat.
+    """Lo urgente lo dice si se puede; todo lo deja escrito en los chats de alertas.
 
     El detalle se escribe, nunca se dice: un estado HTTP o la cita de un log es
     lo que hay que leer y lo último que querés escuchar.
     """
     written = f"{text}\n{detail}" if detail else text
+    if not urgent:
+        house.tell(f"⚠️ {written}", None, actions)
+        return
     # Solo los chats de alertas: `others=None` no le escribe al resto.
-    result = house.announce(text, urgent=urgent, written=written, actions=actions, others=None)
+    result = house.announce(text, urgent=True, written=written, actions=actions, others=None)
     if result["spoken"]:
-        house.tell(f"{'🚨' if urgent else '⚠️'} {written}", None, actions)
+        house.tell(f"🚨 {written}", None, actions)
 
 
 def _monitor_actions(name: str = "") -> tuple[tuple[str, str], ...]:
@@ -460,17 +463,12 @@ def _monitor_actions(name: str = "") -> tuple[tuple[str, str], ...]:
 
 
 def _still_down(house: HouseVoice, text: str, name: str, detail: str = "", still: str = "") -> None:
-    """Re-avisa una caída sin confirmar: suena como lo urgente pero nunca despierta."""
+    """Re-avisa por escrito una caída sin confirmar, solo a los chats de alertas."""
     heading = "Sigue caído" if still in ("", Check.still) else still[:1].upper() + still[1:]
     written = f"🚨 {heading}: {name}"
     if detail:
         written = f"{written}\n{detail}"
-    actions = _monitor_actions(name)
-    result = house.announce(
-        text, urgent=False, written=written, actions=actions, others=None, chime=chime.ALARM
-    )
-    if result["spoken"]:
-        house.tell(written, None, actions)
+    house.tell(written, None, _monitor_actions(name))
 
 
 def _tell_alert_chats(notify, chat_ids, skip: int, text: str) -> None:
@@ -490,7 +488,11 @@ def _announce(house: HouseVoice, text: str, written: str | None = None, others=S
     `written` lleva más que lo hablado cuando la fuente tiene las dos mitades:
     el resumen de la mañana escribe los titulares tal como los publicaron los
     medios, con dígitos y todo. `others` es la copia de los chats sin alertas.
+    Sin `text` no habla: solo escribe.
     """
+    if not text:
+        house.tell(f"🔔 {written}", others)
+        return
     result = house.announce(text, written=written, others=others)
     if result["spoken"]:
         if others is not SAME:
@@ -1032,7 +1034,7 @@ def main() -> None:
     uplink = Uplink(
         marks=Marks(db_path),
         speak=lambda text: house.speak_only(text, chime=chime.SOFT),
-        tell=house.tell_everyone,
+        tell=lambda text: house.tell(text, None),
     )
 
     monitor = None

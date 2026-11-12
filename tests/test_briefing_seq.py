@@ -31,14 +31,13 @@ def test_a_quiet_night_says_nothing():
     assert "error" not in briefing.text().lower()
 
 
-def test_the_night_errors_are_remembered_with_app_and_environment():
-    briefing = Briefing(seq=FakeNight(error(), error()))
+def test_the_night_errors_are_written_with_app_and_environment_and_never_said():
+    summary = Briefing(seq=FakeNight(error(), error())).speech()
 
-    said = briefing.text()
-
-    assert "producción" in said.lower()
-    assert "Facturador Backend" in said
-    assert "noche" in said.lower()
+    assert "producción" in summary.written.lower()
+    assert "Facturador Backend" in summary.written
+    assert "noche" in summary.written.lower()
+    assert "Facturador Backend" not in summary.spoken
 
 
 def test_what_is_said_carries_no_digits():
