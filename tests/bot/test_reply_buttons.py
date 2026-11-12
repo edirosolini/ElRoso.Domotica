@@ -75,14 +75,16 @@ def test_a_timer_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.timer, OWNER, "10m sacá la pizza")
 
     job = cmd.reminders.list(OWNER)[0]
-    assert reply.actions == ((f"Cancelar #{job.id}", f"cancelar {job.id}"),)
+    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert f"#{job.id}" not in reply.text
 
 
 def test_an_alarm_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.alarm, OWNER, "diaria 7:30 arriba")
 
     job = cmd.reminders.list(OWNER)[0]
-    assert data(reply) == [f"cancelar {job.id}"]
+    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert f"#{job.id}" not in reply.text
 
 
 def test_what_could_not_be_scheduled_offers_nothing(cmd):
@@ -97,7 +99,8 @@ def test_a_postponed_alarm_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.postpone, OWNER, "")
 
     job = cmd.reminders.list(OWNER)[0]
-    assert data(reply) == [f"cancelar {job.id}"]
+    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert reply.text.startswith("Pospuesto para ")
 
 
 # --- #6 cancelar desde la lista ----------------------------------------------

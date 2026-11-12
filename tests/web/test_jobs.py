@@ -295,7 +295,8 @@ def test_create_tells_every_chat_with_a_cancel_button(parts):
     for _, text, actions in parts["told"]:
         assert "sacar la basura" in text
         assert "Eze" in text
-        assert actions == ((f"Cancelar #{created['id']}", f"borrar {created['id']}"),)
+        assert f"#{created['id']}" not in text
+        assert actions == (("Cancelar este aviso", f"borrar {created['id']}"),)
 
 
 def test_the_notice_names_the_device(parts):
@@ -546,7 +547,8 @@ def test_update_edits_the_series_and_keeps_the_author(parts):
     assert updated["message"] == "la pastilla"
     assert [chat for chat, _, _ in parts["told"]] == [DIEGO, EZE]
     assert all("la pastilla" in text for _, text, _ in parts["told"])
-    assert all(actions == ((f"Cancelar #{job.id}", f"borrar {job.id}"),)
+    assert all(f"#{job.id}" not in text for _, text, _ in parts["told"])
+    assert all(actions == (("Cancelar este aviso", f"borrar {job.id}"),)
                for _, _, actions in parts["told"])
 
 
@@ -605,7 +607,8 @@ def test_delete_removes_anyones_job_and_tells_everyone(parts):
     assert parts["store"].get(created["id"]) is None
     assert str(created["id"]) not in parts["timer"].armed
     assert [chat for chat, _, _ in parts["told"]] == [DIEGO, EZE]
-    assert all("arriba" in text and actions == () for _, text, actions in parts["told"])
+    assert all(text == "🖥️ Se canceló desde la pantalla: «arriba»" and actions == ()
+               for _, text, actions in parts["told"])
 
 
 def test_deleting_a_missing_job_is_not_found(parts):

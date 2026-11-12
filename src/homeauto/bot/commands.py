@@ -368,6 +368,11 @@ def _cancel_button(job_id: int) -> tuple[str, str]:
     return (f"Cancelar #{job_id}", f"cancelar {job_id}")
 
 
+def _undo_button(job_id: int) -> tuple[str, str]:
+    """El botón que cancela el aviso de una respuesta, sin mostrar su número."""
+    return ("Cancelar este aviso", f"cancelar {job_id}")
+
+
 def format_when(when: datetime, now: datetime) -> str:
     """Un momento dicho como lo diría una persona."""
     days = (when.date() - now.date()).days
@@ -1428,8 +1433,8 @@ class Commands:
 
         job = self.reminders.discard(chat_id, job_id, _WHO.get() or "Alguien")
         if job is None:
-            return f"El #{job_id} ya no está programado."
-        return f"🗑 Borrado #{job_id}: «{job.message}»"
+            return "Ese aviso ya no está."
+        return f"🗑 Borrado: «{job.message}»"
 
     def _purge_refusal(self, chat_id: int) -> str | None:
         """La negativa del depurador para ese chat, o None si puede usarlo."""
@@ -1964,9 +1969,9 @@ class Commands:
             assignee=assignment.assignee, assignee_id=assignment.person_id,
             author_id=self._author(chat_id),
         )
-        offer(_cancel_button(job.id))
+        offer(_undo_button(job.id))
         reply = (
-            f"{label} #{job.id} en {_labels(aliases)} "
+            f"{label} en {_labels(aliases)} "
             f"para {format_when(when, now)}: «{message}»"
         )
         if assignment.label:
@@ -2058,8 +2063,8 @@ class Commands:
         job = self.reminders.snooze(chat_id, delay)
         if job is None:
             return "No sonó nada en la última media hora: no hay nada que posponer."
-        offer(_cancel_button(job.id))
-        return f"Pospuesto #{job.id} para {format_when(job.when, self.clock())}: «{job.message}»"
+        offer(_undo_button(job.id))
+        return f"Pospuesto para {format_when(job.when, self.clock())}: «{job.message}»"
 
     def list(self, chat_id: int) -> str:
         denial = self._denial(chat_id)
