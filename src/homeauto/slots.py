@@ -76,6 +76,8 @@ CALCULATION = Slot("cuenta", "¿Qué cuenta querés que haga?")
 ITEM = Slot("item", "¿Qué agrego?")
 POSITION = Slot("numero", "¿Cuál saco? El número sale en /compras.")
 PHRASE = Slot("texto", "¿Qué traduzco?")
+# La pide solo el botón de preguntar: escrito, `preguntar` no tiene dato obligatorio.
+QUESTION = Slot("pregunta", "¿Qué querés saber?")
 
 
 # Los que aceptan «para <persona>» adelante; la persona nunca se pregunta.

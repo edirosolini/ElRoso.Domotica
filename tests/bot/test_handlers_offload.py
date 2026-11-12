@@ -101,6 +101,7 @@ class ThreadSpyCommands:
     add_item = shopping = todo = remove_item = translate = postpone = pills = vacation = turns = _record
     menu = _record
     purge = _record
+    home = help = _record
 
     def heard(self, *_args, **_kwargs):
         # Lo real devuelve un Reply, no un string.
@@ -174,6 +175,7 @@ class ExplodingCommands:
     add_item = shopping = todo = remove_item = translate = postpone = pills = vacation = turns = _boom
     menu = _boom
     purge = _boom
+    home = help = _boom
 
 
 @pytest.mark.asyncio
@@ -202,3 +204,55 @@ async def test_an_alert_chat_reads_what_blew_up():
         await callback(update, None)
         answer = update.message.answers[0]
         assert answer == "🔴 No pude procesar la solicitud: Address already in use"
+
+
+class NamedRecorder:
+    """Guarda cada handler de comando por sus nombres."""
+
+    def __init__(self):
+        self.by_name = {}
+
+    def add_handler(self, handler):
+        for name in getattr(handler, "commands", ()):
+            self.by_name[name] = handler.callback
+
+
+class EntryCommands(ThreadSpyCommands):
+    """Anota qué método corrió y con qué texto."""
+
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    def home(self, chat_id, text=""):
+        self.calls.append(("home", text))
+        return "inicio"
+
+    def help(self, chat_id, text=""):
+        self.calls.append(("help", text))
+        return "ayuda"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["inicio", "start"])
+async def test_home_and_start_open_the_topics(name):
+    app, commands = NamedRecorder(), EntryCommands()
+    main.register(app, commands)
+
+    update = FakeUpdate(f"/{name}")
+    await app.by_name[name](update, None)
+
+    assert commands.calls == [("home", "")]
+    assert update.message.answers == ["inicio"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["ayuda", "help"])
+async def test_help_gets_what_was_asked(name):
+    app, commands = NamedRecorder(), EntryCommands()
+    main.register(app, commands)
+
+    update = FakeUpdate(f"/{name} completa")
+    await app.by_name[name](update, None)
+
+    assert commands.calls == [("help", "completa")]

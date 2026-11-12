@@ -1087,6 +1087,39 @@ def test_what_rang_is_kept_in_the_history_of_the_one_database(wired, tmp_path, m
     assert (entry.message, entry.closed, entry.done_by) == ("la pastilla", "done", "Eze")
 
 
+class _HomeMessage:
+    def __init__(self, text):
+        self.text = text
+        self.replies = []
+
+    async def reply_text(self, text, reply_markup=None):
+        self.replies.append((text, reply_markup))
+
+
+class _HomeUpdate:
+    def __init__(self, chat_id, text):
+        self.message = _HomeMessage(text)
+        self.effective_chat = type("Chat", (), {"id": chat_id})()
+        self.effective_user = None
+
+
+async def test_slash_inicio_answers_with_the_topics(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42\n"))
+
+    [handler] = [
+        h for h in wired.handlers
+        if isinstance(h, main.CommandHandler) and "inicio" in h.commands
+    ]
+    assert {"inicio", "start"} <= set(handler.commands)
+    update = _HomeUpdate(42, "/inicio")
+    await handler.callback(update, None)
+
+    text, markup = update.message.replies[-1]
+    assert text != main.WORKING
+    data = [row[0].callback_data for row in markup.inline_keyboard]
+    assert "tema avisos" in data
+
+
 def test_a_button_has_a_handler(wired, tmp_path, monkeypatch):
     run_main(monkeypatch, config_file(tmp_path))
 
