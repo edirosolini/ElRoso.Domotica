@@ -87,15 +87,16 @@ escribe a todos «🧳 Terminó el modo vacaciones, vuelvo a hablar.». `/hablar
 Se guardan en SQLite: si vencen con el servicio caído, el aviso sale al arrancar.
 
 **Resumen de la mañana.** A la hora de `BRIEFING_AT` (por defecto 08:00, `off` lo apaga) dice
-de una vez lo que hay para el día: si es feriado, la agenda, el clima, la economía, qué
-servicios vigilados no responden, los errores de la noche y, al final, el versículo del día. Los titulares van solo
-al chat. Si todo está en orden no nombra ningún servicio. No hace falta tener agenda
+de una vez lo que hay para el día: si es feriado, la agenda, el clima, la economía y, al
+final, el versículo del día. Los titulares van solo al chat, y qué servicios vigilados no
+responden y los errores de la noche, solo escritos a los chats de `ALERT_CHAT_IDS`. Si todo está en orden no nombra ningún servicio. No hace falta tener agenda
 configurada: con el clima solo ya sirve, y una fuente que falla no se lleva puestas a las
 otras. El detalle está en [El resumen de la mañana](#el-resumen-de-la-mañana).
 
 **Cierre del día.** A la hora de `CLOSING_AT` (por defecto 22:00, `off` lo apaga) dice lo que
-viene: qué tenés agendado mañana, cómo va a estar el día y qué servicios siguen sin responder.
-Si no juntó nada que decir, se queda callado. Ponerlo después de `QUIET_FROM` lo deja escrito
+viene: qué tenés agendado mañana, cómo va a estar el día y cuánto falta comprar; qué servicios
+siguen sin responder, solo escrito a los chats de `ALERT_CHAT_IDS`. Si no juntó nada, se queda
+callado; si solo hay servicios caídos, se escribe a esos chats y no suena. Ponerlo después de `QUIET_FROM` lo deja escrito
 en el chat, sin voz.
 
 **Resumen semanal.** A la hora de `WEEKLY_AT` (por defecto el domingo a las 19:00, `off` lo
@@ -472,11 +473,10 @@ original: nadie se queda sin aviso porque el modelo estaba lento.
 ## El resumen de la mañana
 
 A la hora de `BRIEFING_AT` la casa dice, en un solo texto: si hoy es feriado y por qué, qué
-hay en la agenda, cómo está el cielo, los tres números de la economía, qué servicios están
-caídos, los errores de Seq de las últimas doce horas, los titulares del día y, al final, el
-versículo del día. Los servicios
-caídos y los errores de la noche solo se escriben a los chats de `ALERT_CHAT_IDS`; el
-parlante los dice igual.
+hay en la agenda, cómo está el cielo, los tres números de la economía y, al final, el
+versículo del día. La copia escrita suma los titulares del día, y la de los chats de
+`ALERT_CHAT_IDS` además qué servicios están caídos y los errores de Seq de las últimas doce
+horas. Esas dos cosas no se dicen.
 
 **Las fuentes son independientes**: la que no contesta deja un hueco, nunca cancela el
 resumen. Un calendario caído no te puede costar el clima.
@@ -546,24 +546,25 @@ Campos: `name`, y `url` **o** `host`+`port`. Opcionales: `expect` (código HTTP 
 un typo en `urgent` significaría que nunca te despierta—, y también un `name` de más de
 cincuenta y cuatro bytes, que no entra en el botón de confirmar.
 
-**Confirmar una caída.** El aviso de caída trae «✅ Confirmar», además de «Ver estado» y
-«Silenciar 1 h». Mientras nadie lo toque, la casa vuelve a avisar a los 5, 10 y 15 minutos y
-después cada 30, con «Atención: X sigue sin responder» dicho y «🚨 Sigue caído: X» escrito,
-hasta que alguien confirma o el servicio vuelve. Los re-avisos salen en la vuelta del
+**A quién y cómo.** Los avisos del monitor y de Seq van solo escritos, con «⚠️», a los chats
+de `ALERT_CHAT_IDS`, y no pasan por el parlante. La excepción es la caída de un chequeo
+`urgent`: suena con tres beeps, también en el horario de descanso, y se escribe con «🚨».
+
+**Confirmar una caída.** El aviso de caída trae «✅ Confirmar», además de «Ver estado».
+Mientras nadie lo toque, la casa vuelve a avisar a los 5, 10 y 15 minutos y después cada 30,
+solo escrito: «🚨 Sigue caído: X», hasta que alguien confirma o el servicio vuelve. Los re-avisos salen en la vuelta del
 monitor, así que se pueden atrasar hasta un intervalo de chequeo, y sobreviven un reinicio.
 Confirmar solo se puede desde un chat de `ALERT_CHAT_IDS` y les avisa a los otros chats de
-alertas quién lo hizo. Un aviso urgente despierta una sola vez: los re-avisos suenan con los
-tres beeps pero nunca pasan por encima del horario de descanso ni de `/silencio`, y ahí solo
-se escriben. Silenciar no confirma. En modo vacaciones ni la primera caída urgente suena:
-todo va solo al chat.
+alertas quién lo hizo. Un aviso urgente despierta una sola vez: los re-avisos no suenan.
+En modo vacaciones ni la primera caída urgente suena: todo va solo al chat.
 
 **Los logs.** Consulta Seq y avisa si hay errores nuevos. Seq dice *por qué* se rompió algo,
 no solo que no responde; pero muere junto con el VPS, y por eso el túnel se vigila aparte.
 
 Se vigila **un Seq por VPS**, con una clave de configuración por instancia
-(`SEQ_URL_<ALIAS>` y `SEQ_API_KEY_<ALIAS>`), igual que los calendarios. El alias **se dice
-en voz alta** —"hay dos errores nuevos en Seq de hosting externo"—, así que no lleva dígitos
-ni guiones medios. Para un nombre de varias palabras se usa guion bajo, que al hablar se dice
+(`SEQ_URL_<ALIAS>` y `SEQ_API_KEY_<ALIAS>`), igual que los calendarios. El alias va en la
+frase del aviso —"hay dos errores nuevos en Seq de hosting externo"—, que se arma como texto
+hablado, así que no lleva dígitos ni guiones medios. Los avisos de Seq no traen botones. Para un nombre de varias palabras se usa guion bajo, que al hablar se dice
 como espacio: `SEQ_URL_HOSTING_EXTERNO`. ⚠️ Que pase la validación no quiere decir que se
 entienda dicho: `vps` son letras y el sintetizador lo lee como palabra, no como siglas. Cada instancia lleva su propio enfriamiento y su propia
 marca de hasta dónde leyó: un VPS ruidoso no puede tapar el aviso del otro. Con alias, una URL sin
@@ -579,13 +580,13 @@ Seq: un corte del proveedor no se avisa como caída del VPS. Corre aunque no hay
 `checks.json`. Dos rondas seguidas sin salida declaran el corte, y la casa dice «Se cortó
 internet.» una sola vez, con un beep suave, **solo por el parlante** y nunca en el horario de
 descanso, con `/silencio` ni de vacaciones: ahí se pierde. Cuando vuelve, lo dice con cuánto duró y escribe a
-todos los chats «🌐 Internet se cortó de HH:MM a HH:MM (N min)». Un corte de una sola ronda no
+los chats de `ALERT_CHAT_IDS` «🌐 Internet se cortó de HH:MM a HH:MM (N min)». Un corte de una sola ronda no
 dice nada. El estado sobrevive un reinicio.
 
 **El Proxmox.** Con `PVE_URL`, el monitor suma cuatro chequeos por la API del host:
 `proxmox` (que conteste), `el disco del proxmox`, `las máquinas del proxmox` y
 `los respaldos`. Se ven en `/estado`, traen «✅ Confirmar» y entran en la línea de caídos del
-resumen y del cierre. Ninguno es urgente.
+resumen y del cierre. Ninguno es urgente: sus avisos solo se escriben.
 
 - **Disco**: los storages activos y la raíz del host. Avisa desde `PVE_DISK_ALERT` y vuelve
   recién cinco puntos por debajo, también después de un reinicio.
@@ -607,8 +608,8 @@ Tres reglas evitan que esto se vuelva ruido, que es como mueren los monitores:
 
 - Un fallo suelto no es una caída: hacen falta dos rondas seguidas para avisar.
 - Se avisa **al cambiar de estado**; mientras dure, solo insiste si nadie confirmó la caída.
-  La recuperación también se avisa, y
-  nunca como urgente: no hay que despertar a nadie por una buena noticia.
+  La recuperación también se avisa, solo escrita
+  y nunca como urgente: no hay que despertar a nadie por una buena noticia.
 - Los errores de Seq tienen enfriamiento (`SEQ_COOLDOWN_MINUTES`): un servicio roto logra
   cientos de errores por minuto y no puede convertirse en cientos de avisos. El enfriamiento
   corre por instancia, no para todas juntas.
@@ -1044,9 +1045,11 @@ systemctl restart domotica
 Se deja así solo para el alta inicial; una vez que sabés tu chat ID, se completa y se reinicia.
 
 Con más de una persona en la lista, las alarmas, los recordatorios, los timers, la agenda y el clima les llegan a
-todas. Los avisos del monitor y de Seq, a `ALERT_CHAT_IDS`, que tiene que ser parte de
+todas. Los avisos del monitor y de Seq, la vuelta de internet y el aviso de que escribió
+alguien fuera de la lista, a `ALERT_CHAT_IDS`, que tiene que ser parte de
 `ALLOWED_CHAT_IDS`. Esos chats también son los únicos que leen los servicios caídos y los
-errores de la noche en el resumen y el cierre; el parlante los dice igual.
+errores de la noche en el resumen y el cierre, que el parlante no dice. Con el bot abierto no
+hay chats de alertas: lo técnico que no es urgente no le llega a nadie.
 
 **Cómo habla.** Piper no deja pausa entre oraciones si no se le pide, y eso hace que un
 aviso de dos frases suene apurado. Se ajusta por entorno, sin tocar código:

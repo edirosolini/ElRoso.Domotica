@@ -22,7 +22,7 @@ paths:
 ## Resumen de la mañana
 
 `briefing.py` junta el feriado, agenda, clima, economía, servicios caídos, titulares y el
-versículo del día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 en el CT).
+versículo del día en un solo resumen, a la hora de `BRIEFING_AT` (08:45 en el CT).
 
 - **Las fuentes son independientes.** Una que falla deja un hueco, no cancela el
   resumen: un calendario que no contesta no te puede costar el clima. Es la misma postura
@@ -36,9 +36,9 @@ versículo del día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 
   arrastrarse. `/agenda`, que se pide a propósito, lo sigue diciendo: es el argumento `place`
   de `speech.describe()`.
 - 🔴 **Los servicios caídos y los errores de la noche solo se escriben a los chats de
-  alertas** (`ALERT_CHAT_IDS`). `Summary.public` es la copia del resto: sin esas dos
-  fuentes y, si no queda nada, con el "No tengo nada" de siempre. ⚠️ **Lo hablado no cambia**:
-  el parlante los dice igual y se escuchan en toda la casa.
+  alertas** (`ALERT_CHAT_IDS`), **y no se dicen**. Lo hablado y `Summary.public`, la copia
+  del resto, van sin esas dos fuentes y, si no queda nada, con el "No tengo nada" de siempre.
+  El parlante suena en toda la casa: lo técnico no pasa por ahí.
 - **Un párrafo por fuente, escrito y hablado.** En el chat es una línea en blanco; en el
   parlante, la pausa de punto y aparte de `VoiceSynth`. Pegado, el resumen era un bloque que
   no se podía leer de un vistazo ni seguir de oído.
@@ -46,8 +46,8 @@ versículo del día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 
   configurado. Por eso está fuera de `schedule_calendar_jobs()`.
 - **De los servicios solo se nombran los caídos.** Escuchar "todo en orden" cada mañana
   enseña a no escuchar; el estado completo está en `/estado`.
-- 🔴 **Los errores de la noche se recuerdan acá**, y es la razón de que de madrugada no
-  despierten a nadie. Se piden a los mismos clientes que vigilan de día, de las últimas doce
+- 🔴 **Los errores de la noche se recuerdan acá, por escrito a alertas**, y es la razón de
+  que de madrugada no despierten a nadie. Se piden a los mismos clientes que vigilan de día, de las últimas doce
   horas (`NIGHT_HOURS`). Sin "Atención, producción" adelante: el fuego ya pasó, esto lo
   recuerda —para eso `summarize()` acepta `lead=False`—. Una noche tranquila no dice nada,
   igual que los servicios en orden.
@@ -62,16 +62,16 @@ versículo del día en un solo texto hablado, a la hora de `BRIEFING_AT` (08:45 
 `closing.py` es el espejo del resumen a la hora de `CLOSING_AT` (20:00 en el CT, 22:00 por
 defecto): lo agendado para **mañana**, el pronóstico de **mañana** y lo que sigue caído.
 
-- 🔴 **Un cierre vacío no se dice.** Es la única diferencia de forma con el resumen, que
+- 🔴 **Un cierre vacío no sale.** Es la única diferencia de forma con el resumen, que
   contesta "No tengo nada para el resumen de hoy": a la mañana ese texto avisa que la casa
-  está viva, a las diez de la noche es hablar por hablar. `text()` devuelve `""` y `main()`
-  no anuncia nada.
+  está viva, a las diez de la noche es hablar por hablar. Sin `written`, `main()` no anuncia
+  nada; con `written` y sin `spoken`, `main._announce()` no habla y solo escribe.
 - 🔴 **Mira para adelante, no para atrás.** Por eso no lleva economía, titulares ni los
   errores de Seq: el día ya pasó y esas tres son noticias de la mañana. Lo que entra es lo
   que cambia un plan antes de dormir, y por eso se sumó **cuánto falta comprar**.
-- 🔴 **La línea de los servicios caídos solo se escribe a los chats de alertas**, igual que
-  en el resumen: `speech()` devuelve la copia del resto en `public`. Si lo único que había
-  era un servicio caído, al resto no le llega nada, por la misma regla del cierre vacío.
+- 🔴 **La línea de los servicios caídos solo se escribe a los chats de alertas y no se
+  dice**, igual que en el resumen: `spoken` y `public` van sin ella. Si lo único que había
+  era un servicio caído, se escribe «🔔 …» a alertas, no suena y al resto no le llega nada.
 - ⚠️ **De la lista de compras solo se dice el conteo**, en palabras. Los ítems se leen en
   `/compras`: dictar quince productos es exactamente el error que se evitó con los titulares.
 - **La agenda se pide con `place=False`**, igual que en el resumen y por lo mismo: escuchado

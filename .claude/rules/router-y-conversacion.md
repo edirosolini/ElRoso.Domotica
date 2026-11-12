@@ -185,9 +185,10 @@ donde entró y nada más.
 - **`/decir` y `/llamar` no consultan la regla.** Pedirles que hablen *es* el comando; un
   `/decir` que no suena no es nada. Los que sí la consultan son los tres que antes hablaban
   sin que nadie se lo pidiera: `/clima`, `/agenda` y `/preguntar`.
-- 🔴 **Las alarmas, los timers, el resumen de la mañana, el cierre del día y los avisos del
-  monitor y de Seq siguen saliendo por el parlante**, siempre, más su copia al chat. Son lo que interrumpe a
-  propósito: nadie pide a las tres de la mañana que la alerta suene.
+- 🔴 **Las alarmas, los timers, el resumen de la mañana, el cierre del día y lo `urgent` del
+  monitor siguen saliendo por el parlante**, siempre, más su copia al chat. Son lo que interrumpe a
+  propósito: nadie pide a las tres de la mañana que la alerta suene. Lo demás del monitor y
+  Seq solo se escribe a alertas: ver **Vigilancia**, en `.claude/rules/vigilancia.md`.
 - 🔴 **En vacaciones no sale nada por el parlante**, ni lo urgente: todo eso va solo al chat.
   `/decir`, `/llamar` y lo pedido «por el parlante» contestan el motivo con la pista
   `/vacaciones off`. Ver **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`.
