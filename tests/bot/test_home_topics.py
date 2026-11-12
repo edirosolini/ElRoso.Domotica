@@ -149,6 +149,25 @@ def test_home_can_be_typed_with_a_slash(tmp_path):
     assert build(tmp_path).typed("inicio")
 
 
+@pytest.mark.parametrize("key", ["avisos", "parlante", "comida", "hoy", "ajustes"])
+def test_a_topic_can_be_typed_with_a_slash(tmp_path, key):
+    assert build(tmp_path).typed(key)
+
+
+@pytest.mark.parametrize("key", ["avisos", "parlante", "comida", "hoy"])
+def test_a_topic_name_alone_opens_the_topic(tmp_path, key):
+    cmd = build(tmp_path)
+
+    assert with_actions(cmd.press, FAMILY, key) == with_actions(cmd.press, FAMILY, f"tema {key}")
+
+
+@pytest.mark.parametrize("key", ["preguntar", "silencio"])
+def test_a_topic_that_is_a_command_still_runs_the_command(tmp_path, key):
+    cmd = build(tmp_path)
+
+    assert with_actions(cmd.press, OWNER, key) == with_actions(cmd._dispatch()[key], OWNER, "")
+
+
 def test_the_back_button_goes_home(tmp_path):
     cmd = build(tmp_path)
 

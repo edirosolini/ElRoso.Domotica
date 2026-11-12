@@ -198,11 +198,10 @@ def test_it_is_in_the_help_and_reachable_without_slash(house):
 
 
 def test_it_is_registered_but_not_in_the_menu():
-    from homeauto.main import ALL_COMMANDS, COMMAND_MENU
+    from homeauto.main import ALL_COMMANDS, MENU_ALERTS
 
     assert "pantalla" in ALL_COMMANDS
-    assert "pantalla" not in {name for name, _ in COMMAND_MENU}
-    assert len(COMMAND_MENU) == 10
+    assert "pantalla" not in {name for name, _ in MENU_ALERTS}
 
 
 def test_the_replies_and_buttons_use_the_device_name(house):

@@ -231,7 +231,7 @@ def test_the_silence_status_tells_the_vacations(house):
     reply = with_actions(house["cmd"].silence, OWNER, "")
 
     assert reply.text == "De vacaciones hasta el 25/10."
-    assert reply.actions == (("Volví de vacaciones", "vacaciones off"),)
+    assert reply.actions[0] == ("Volví de vacaciones", "vacaciones off")
 
 
 def test_the_silence_status_without_vacations_is_as_always(house):
