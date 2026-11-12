@@ -94,6 +94,7 @@ def test_people_are_the_allowed_chats_with_their_names(parts):
         "writable": True,
         "people": [{"chat_id": DIEGO, "name": "Chat 7"}, {"chat_id": EZE, "name": "Eze"}],
         "devices": ["comedor", "parlante"],
+        "names": {"comedor": "Comedor", "parlante": "Parlante"},
         "persons": [],
         "chats": [{"chat_id": DIEGO, "seen": None}, {"chat_id": EZE, "seen": "Eze"}],
     }
@@ -103,6 +104,7 @@ def test_without_allowed_chats_the_screen_is_read_only(parts):
     jobs = parts["build"](chat_ids=())
 
     assert jobs.people() == {"writable": False, "people": [], "devices": ["comedor", "parlante"],
+                             "names": {"comedor": "Comedor", "parlante": "Parlante"},
                              "persons": [], "chats": []}
     with pytest.raises(ReadOnly):
         jobs.create(payload())
@@ -294,6 +296,13 @@ def test_create_tells_every_chat_with_a_cancel_button(parts):
         assert "sacar la basura" in text
         assert "Eze" in text
         assert actions == ((f"Cancelar #{created['id']}", f"borrar {created['id']}"),)
+
+
+def test_the_notice_names_the_device(parts):
+    parts["build"]().create(payload(device="comedor"))
+
+    assert " · Comedor — " in parts["told"][0][1]
+    assert parts["store"].pending()[0].device == "comedor"
 
 
 def test_the_cancel_button_fits_in_telegram_with_a_big_id():

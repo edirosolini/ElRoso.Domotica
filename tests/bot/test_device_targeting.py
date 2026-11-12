@@ -54,7 +54,7 @@ def test_en_alias_picks_that_device(cmd):
 
     assert tv.said == ["que bajen a comer"]
     assert parlante.said == []
-    assert "tv" in reply
+    assert "Tv" in reply
 
 
 def test_en_something_that_is_not_a_device_is_just_text(cmd):
@@ -91,7 +91,7 @@ def test_usar_an_unknown_device_lists_what_there_is(cmd):
     reply = commands.use(OWNER, "cocina")
 
     assert "cocina" in reply
-    assert "parlante" in reply and "tv" in reply
+    assert "Parlante" in reply and "Tv" in reply
 
 
 def test_devices_command_lists_them_and_marks_the_active_one(cmd):
@@ -99,7 +99,7 @@ def test_devices_command_lists_them_and_marks_the_active_one(cmd):
 
     reply = commands.devices(OWNER)
 
-    assert "parlante" in reply and "tv" in reply
+    assert "Parlante" in reply and "Tv" in reply
     assert "◀" in reply or "activo" in reply.lower()
 
 
@@ -149,4 +149,4 @@ def test_the_list_shows_the_device(cmd):
 
     commands.timer(OWNER, "en tv 10m que bajen")
 
-    assert "tv" in commands.list(OWNER)
+    assert "Tv" in commands.list(OWNER)

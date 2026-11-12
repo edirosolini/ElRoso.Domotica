@@ -1380,7 +1380,7 @@ def test_the_screen_knows_the_people_of_the_house(wired, tmp_path, monkeypatch):
 
     assert answer == {"writable": True, "people": [
         {"chat_id": 42, "name": "Eze"}, {"chat_id": 77, "name": "Chat 77"},
-    ], "devices": ["parlante"], "persons": [], "chats": [
+    ], "devices": ["parlante"], "names": {"parlante": "Parlante"}, "persons": [], "chats": [
         {"chat_id": 42, "seen": "Eze"}, {"chat_id": 77, "seen": None},
     ]}
 

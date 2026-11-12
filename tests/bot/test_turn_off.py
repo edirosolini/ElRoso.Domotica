@@ -51,7 +51,7 @@ def test_turns_off_a_named_device(tmp_path):
     reply = cmd.turn_off(OWNER, "en comedor")
 
     assert spk["comedor"].turned_off == 1
-    assert "comedor" in reply
+    assert "Comedor" in reply
 
 
 def test_turns_off_everything(tmp_path):
@@ -69,7 +69,7 @@ def test_a_device_that_fails_does_not_stop_the_rest(tmp_path):
 
     assert spk["parlante"].turned_off == 1
     assert spk["comedor"].turned_off == 1
-    assert "recamara" in reply and "no responde" in reply
+    assert "Recámara" in reply and "no responde" in reply
 
 
 def test_a_stranger_cannot_turn_off_the_house(tmp_path):

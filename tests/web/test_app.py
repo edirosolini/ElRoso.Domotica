@@ -717,7 +717,7 @@ def test_without_jobs_there_is_no_padron(app):
     assert send(app, "POST", "/api/persons", {"name": "Abuela"}).status == 404
     assert send(app, "DELETE", "/api/persons/3").status == 404
     assert body_json(get(app, "/api/people")) == {
-        "writable": False, "people": [], "devices": [], "persons": [], "chats": []}
+        "writable": False, "people": [], "devices": [], "names": {}, "persons": [], "chats": []}
 
 
 def test_a_list_only_accepts_post(writer, jobs):
@@ -824,7 +824,7 @@ def test_without_the_service_the_screen_cannot_write(app):
     assert send(app, "POST", "/api/jobs", {"message": "x"}).status == 405
     assert get(app, "/api/people").status == 200
     assert body_json(get(app, "/api/people")) == {"writable": False, "people": [], "devices": [],
-                                                  "persons": [], "chats": []}
+                                                  "names": {}, "persons": [], "chats": []}
 
 
 def test_writes_carry_no_cors_headers(writer):

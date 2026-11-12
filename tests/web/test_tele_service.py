@@ -71,6 +71,7 @@ def hello(**changes):
 def test_setup_lists_the_screens_and_the_people(service):
     assert service.setup() == {
         "devices": ["comedor", "recamara", "habitacion"],
+        "names": {"comedor": "Comedor", "recamara": "Recámara", "habitacion": "Habitación"},
         "people": [{"chat_id": 42, "name": "Eze"}, {"chat_id": 77, "name": "Chat 77"}],
         "persons": [],
     }

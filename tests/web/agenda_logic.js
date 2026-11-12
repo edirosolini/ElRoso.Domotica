@@ -163,4 +163,9 @@ assert.strictEqual(agenda.opensNew("?nuevo=0"), false);
 assert.strictEqual(agenda.opensNew("?nuevo=10"), false);
 assert.strictEqual(agenda.opensNew(""), false);
 
+// El equipo se muestra con su nombre; sin nombre del CT, con el alias.
+assert.strictEqual(agenda.deviceLabel({ recamara: "Recámara" }, "recamara"), "Recámara");
+assert.strictEqual(agenda.deviceLabel({}, "comedor"), "comedor");
+assert.strictEqual(agenda.deviceLabel(undefined, "comedor"), "comedor");
+
 console.log("ok");

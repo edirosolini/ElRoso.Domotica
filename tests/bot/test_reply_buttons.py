@@ -59,7 +59,7 @@ def test_a_command_without_buttons_answers_plain_text(cmd):
     reply = with_actions(cmd.devices, OWNER)
 
     assert reply.actions == ()
-    assert "parlante" in reply.text
+    assert "Parlante" in reply.text
 
 
 def test_buttons_from_one_command_do_not_leak_into_the_next(cmd):

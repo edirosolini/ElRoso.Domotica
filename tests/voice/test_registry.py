@@ -48,7 +48,7 @@ def test_unknown_alias_says_what_there_is():
         registry.get("cocina")
 
     assert "cocina" in str(caught.value)
-    assert "parlante" in str(caught.value) and "tv" in str(caught.value)
+    assert "Parlante" in str(caught.value) and "Tv" in str(caught.value)
 
 
 def test_lists_its_aliases_in_order():
@@ -68,3 +68,12 @@ def test_nothing_is_built_until_asked():
     _, built = build_registry()
 
     assert built == [], "no conectarse a todos los equipos al arrancar"
+
+
+def test_unknown_alias_lists_the_device_names():
+    registry = SpeakerRegistry({"recamara": NEST, "habitacion": TV}, build=lambda _: None)
+
+    with pytest.raises(UnknownDevice) as caught:
+        registry.get("cocina")
+
+    assert str(caught.value) == "No conozco 'cocina'. Tengo: Recámara, Habitación"

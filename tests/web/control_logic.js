@@ -161,4 +161,9 @@ assert.strictEqual(control.timerCommand("", "pizza"), null);
 assert.strictEqual(control.timerCommand("0", "pizza"), null);
 assert.strictEqual(control.timerCommand("2.5", "pizza"), null);
 
+// El equipo se muestra con su nombre; sin nombre del CT, con el alias.
+assert.strictEqual(control.deviceLabel({ recamara: "Recámara" }, "recamara"), "Recámara");
+assert.strictEqual(control.deviceLabel({}, "comedor"), "comedor");
+assert.strictEqual(control.deviceLabel(undefined, "comedor"), "comedor");
+
 console.log("ok");

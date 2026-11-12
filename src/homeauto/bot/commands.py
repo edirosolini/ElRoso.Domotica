@@ -85,6 +85,7 @@ from homeauto.timespec import (
     skips_holidays,
 )
 from homeauto.voice.caster import CastError
+from homeauto.voice.names import device_label, find_alias
 from homeauto.voice.registry import UnknownDevice
 from homeauto.voice.tts import TtsError
 from homeauto.weather import WeatherError
@@ -102,8 +103,8 @@ MAX_STRANGER_WORDS = 3
 # Un nombre de persona no arranca con artículo: «para las 8:00» es una hora.
 ARTICLES = frozenset({"el", "la", "los", "las", "un", "una"})
 
-# Una tanda de alias adelante: "comedor", "comedor,recamara", "comedor, recamara".
-_TARGET_LIST = re.compile(r"^([a-z0-9_-]+(?:\s*,\s*[a-z0-9_-]+)*)(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
+# Una tanda de equipos adelante, por alias o nombre: "comedor", "comedor,recamara", "Comedor, Recámara".
+_TARGET_LIST = re.compile(r"^([\w-]+(?:\s*,\s*[\w-]+)*)(?:\s+(.*))?$", re.DOTALL)
 _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
 # «de pendientes» al final de un /sacar.
 _LIST_SUFFIX = re.compile(r"\s+(?:de|en)\s+(.+)$", re.IGNORECASE)
@@ -184,13 +185,18 @@ def _feminine(alias: str) -> bool:
 
 
 def _the(alias: str) -> str:
-    """El equipo con su artículo: «el comedor», «la recamara»."""
-    return f"{'la' if _feminine(alias) else 'el'} {alias}"
+    """El equipo con su artículo: «el Comedor», «la Recámara»."""
+    return f"{'la' if _feminine(alias) else 'el'} {device_label(alias)}"
 
 
 def _of(alias: str) -> str:
-    """El equipo como complemento: «del comedor», «de la recamara»."""
-    return f"de la {alias}" if _feminine(alias) else f"del {alias}"
+    """El equipo como complemento: «del Comedor», «de la Recámara»."""
+    return f"de la {device_label(alias)}" if _feminine(alias) else f"del {device_label(alias)}"
+
+
+def _labels(aliases) -> str:
+    """Los equipos por su nombre, separados por coma."""
+    return ", ".join(device_label(alias) for alias in aliases)
 
 
 class TargetError(Exception):
@@ -479,19 +485,20 @@ class Commands:
         if spec.lower() == ALL_WORD:
             return list(self.speakers.aliases)
 
-        parts = [part.strip().lower() for part in spec.split(",")]
+        parts = [part.strip() for part in spec.split(",")]
         parts = [part for part in parts if part]
         if not parts:
             return None
 
-        unknown = [part for part in parts if not self.speakers.has(part)]
+        found = [find_alias(part, self.speakers.aliases) for part in parts]
+        unknown = [part for part, alias in zip(parts, found) if alias is None]
         if not unknown:
-            return list(dict.fromkeys(parts))  # dedup, keeping the order typed
+            return list(dict.fromkeys(found))
         if len(parts) > 1:
             # Una lista con comas es inequívocamente un destino: se dice qué está
             # mal en vez de hablar la mitad como si fuera el mensaje.
             raise TargetError(
-                f"No conozco: {', '.join(unknown)}. Tengo: {', '.join(self.speakers.aliases)}"
+                f"No conozco: {', '.join(unknown)}. Tengo: {_labels(self.speakers.aliases)}"
             )
         # Una sola palabra desconocida es el mensaje: "/decir en casa hace frío".
         return None
@@ -631,13 +638,13 @@ class Commands:
         detail = chat_id in self.config.alert_recipients
         ok = [alias for alias, problem in results.items() if problem is None]
         bad = [
-            f"{alias}: {problem if detail else 'no responde'}"
+            f"{device_label(alias)}: {problem if detail else 'no responde'}"
             for alias, problem in results.items()
             if problem
         ]
         if not ok:
             return f"{failed}\n" + "\n".join(bad)
-        text = f"{done} en {', '.join(ok)}"
+        text = f"{done} en {_labels(ok)}"
         if bad:
             text += "\n\nNo pude en:\n" + "\n".join(bad)
         return text
@@ -1760,7 +1767,8 @@ class Commands:
     def _one_screen(self, alias: str, off: bool, several: bool) -> str:
         """Prende o apaga la pantalla en un equipo y dice cómo salió."""
         if not self.screens.is_screen(alias):
-            return f"{_the(alias).capitalize()} no tiene pantalla."
+            the = _the(alias)
+            return f"{the[0].upper()}{the[1:]} no tiene pantalla."
         try:
             if off:
                 if self.screens.hide(alias):
@@ -1775,7 +1783,7 @@ class Commands:
             if off:
                 return f"No veo la tele {_of(alias)}."
             return f"No veo la tele {_of(alias)}: prendela y probá de nuevo."
-        label = f"Apagar pantalla ({alias})" if several else "Apagar pantalla"
+        label = f"Apagar pantalla ({device_label(alias)})" if several else "Apagar pantalla"
         offer((label, f"pantalla apagar en {alias}"))
         return f"📺 Puse la pantalla en la tele {_of(alias)}."
 
@@ -1786,7 +1794,7 @@ class Commands:
 
         active = self._default_aliases(chat_id)
         lines = [
-            f"{alias}{'  ◀ activo' if alias in active else ''}"
+            f"{device_label(alias)}{'  ◀ activo' if alias in active else ''}"
             for alias in self.speakers.aliases
         ]
         return (
@@ -1812,12 +1820,11 @@ class Commands:
         except TargetError as exc:
             return str(exc)
         if not aliases:
-            known = ", ".join(self.speakers.aliases)
-            return f"No conozco '{spec}'. Tengo: {known}"
+            return f"No conozco '{spec}'. Tengo: {_labels(self.speakers.aliases)}"
 
         if self.preferences:
             self.preferences.set_default_device(chat_id, ",".join(aliases))
-        return f"Listo, ahora uso {', '.join(aliases)}"
+        return f"Listo, ahora uso {_labels(aliases)}"
 
     # --- silencio ----------------------------------------------------------
 
@@ -1959,7 +1966,7 @@ class Commands:
         )
         offer(_cancel_button(job.id))
         reply = (
-            f"{label} #{job.id} en {', '.join(aliases)} "
+            f"{label} #{job.id} en {_labels(aliases)} "
             f"para {format_when(when, now)}: «{message}»"
         )
         if assignment.label:
@@ -2066,7 +2073,7 @@ class Commands:
         offer(*(_cancel_button(job.id) for job in jobs[:MAX_BUTTONS]))
         now = self.clock()
         lines = [
-            f"{'🔔' if job.is_reminder else '⏰'} #{job.id} · {format_when(job.when, now)} · {', '.join(job.devices) or self.config.default_device}"
+            f"{'🔔' if job.is_reminder else '⏰'} #{job.id} · {format_when(job.when, now)} · {_labels(job.devices or [self.config.default_device])}"
             f"{self._repetition(job)}{self._for_whom(job)} — {job.message}"
             for job in jobs
         ]

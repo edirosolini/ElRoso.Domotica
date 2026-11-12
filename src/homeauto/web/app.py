@@ -246,7 +246,7 @@ class WebApp:
 
         if self.jobs is None:
             if path == PEOPLE:
-                return _json(200, {"writable": False, "people": [], "devices": [],
+                return _json(200, {"writable": False, "people": [], "devices": [], "names": {},
                                    "persons": [], "chats": []})
             if path == PERSONS or person:
                 return _json(404, {"error": "no existe"})

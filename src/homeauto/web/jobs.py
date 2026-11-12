@@ -17,6 +17,7 @@ from homeauto.schedule.spec import (
 from homeauto.schedule.store import (
     ASSIGNEES, MONTHLY, NOBODY, PERSON, WEEKLY, Job, on_monthday,
 )
+from homeauto.voice.names import device_label
 from homeauto.web.board import KIND_ICONS, for_name, person_names
 
 log = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ class JobsService:
                 for chat_id in self.chat_ids
             ],
             "devices": sorted(self.devices),
+            "names": {alias: device_label(alias) for alias in sorted(self.devices)},
             "persons": [_person(person) for person in persons],
             "chats": [{"chat_id": chat_id, "seen": names.get(chat_id)} for chat_id in self.chat_ids],
         }
@@ -332,7 +334,7 @@ class JobsService:
         if repetition:
             text += f" · {repetition}"
         if job.device:
-            text += f" · {job.device}"
+            text += f" · {', '.join(device_label(alias) for alias in job.devices)}"
         whom = for_name(job.assignee, job.assignee_id, person_names(self.household))
         if whom:
             text += f" · para {whom}"
