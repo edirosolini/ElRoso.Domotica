@@ -85,6 +85,14 @@ def test_an_audio_it_cannot_hear_says_so_and_runs_nothing():
     assert spk["parlante"].said == []
 
 
+def test_an_audio_that_could_not_be_sent_is_answered_plainly():
+    cmd, _ = build(transcribe=FakeTranscriber(boom=ListenError("No pude escuchar el audio")))
+
+    reply = cmd.heard(OWNER, AUDIO)
+
+    assert reply.text == "No pude escuchar el audio. Probá de nuevo o escribime."
+
+
 def test_without_a_transcriber_it_says_it_does_not_listen():
     cmd, _ = build()
     cmd.transcribe = None

@@ -64,11 +64,11 @@ def test_without_text_it_says_how_to_use_it():
 
 
 def test_a_translator_that_fails_is_answered_not_crashed():
-    cmd, _ = build(FakeTranslator(boom=TranslateError("No pude traducir: sin red")))
+    cmd, _ = build(FakeTranslator(boom=TranslateError("Ahora no puedo traducir. Probá en un rato.")))
 
     reply = cmd.translate(OWNER, "hola")
 
-    assert "no pude traducir" in reply.lower()
+    assert reply == "Ahora no puedo traducir. Probá en un rato."
 
 
 def test_without_a_key_it_says_what_is_missing():

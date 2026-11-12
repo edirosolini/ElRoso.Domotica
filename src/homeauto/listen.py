@@ -38,7 +38,8 @@ class Transcriber:
         try:
             heard = self.model(self.prompt, audio=audio, mime=mime)
         except Exception as exc:  # noqa: BLE001 - la falla se contesta en el chat
-            raise ListenError(f"no pude escuchar el audio: {exc}") from exc
+            log.warning("no pude transcribir el audio: %s", exc)
+            raise ListenError("No pude escuchar el audio") from exc
 
         heard = (heard or "").strip().strip(_QUOTES).strip()
         if not heard or heard.upper() == NOTHING:

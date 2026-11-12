@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from homeauto.weather import WeatherError, WeatherClient, describe_code, fetch_open_meteo
@@ -93,9 +95,38 @@ def test_it_warns_when_it_feels_much_colder():
     assert "sensación" in spoken.lower() or "se sienten" in spoken.lower()
 
 
-def test_a_network_failure_is_reported_in_spanish():
-    with pytest.raises(WeatherError, match="No pude"):
-        client(boom=TimeoutError("se cayó")).now()
+NOW = datetime(2026, 11, 12, 10, 0)
+PLAIN = "Ahora no puedo ver el clima. Probá en un rato."
+
+
+@pytest.mark.parametrize(
+    "ask",
+    [
+        lambda c: c.now(),
+        lambda c: c.rain_ahead(NOW),
+        lambda c: c.hours_ahead(NOW),
+        lambda c: c.tomorrow(),
+        lambda c: c.day_ahead(),
+    ],
+)
+def test_a_network_failure_is_plain_and_the_reason_is_logged(ask, caplog):
+    with pytest.raises(WeatherError) as raised:
+        ask(client(boom=TimeoutError("connect timeout a api.open-meteo.com")))
+
+    assert str(raised.value) == PLAIN
+    assert "connect timeout a api.open-meteo.com" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "ask",
+    [lambda c: c.now(), lambda c: c.tomorrow(), lambda c: c.day_ahead()],
+)
+def test_an_answer_that_cannot_be_read_is_plain_and_the_reason_is_logged(ask, caplog):
+    with pytest.raises(WeatherError) as raised:
+        ask(client(payload={"current": {}}))
+
+    assert str(raised.value) == PLAIN
+    assert "daily" in caplog.text
 
 
 def test_a_broken_answer_is_reported():

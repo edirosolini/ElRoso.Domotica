@@ -81,11 +81,12 @@ class Translator:
             answer = self.model(self.prompt.format(language=language, text=body))
         except Exception as exc:  # noqa: BLE001
             log.warning("no pude traducir: %s", exc)
-            raise TranslateError(f"No pude traducir: {exc}") from exc
+            raise TranslateError("Ahora no puedo traducir. Probá en un rato.") from exc
 
         answer = (answer or "").strip().strip('"«»')
         if not answer:
-            raise TranslateError("El modelo no devolvió nada.")
+            log.warning("traducción vacía del modelo")
+            raise TranslateError("No encontré respuesta. Probá de otra forma.")
         if len(answer) > max(len(body) * MAX_GROWTH, 80):
             raise TranslateError("Lo que volvió no parece una traducción.")
         return answer

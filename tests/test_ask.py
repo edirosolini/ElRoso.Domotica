@@ -98,15 +98,20 @@ def test_a_model_failure_becomes_an_ask_error():
     """No hay original al que volver: una pregunta sin respuesta no tiene respaldo."""
     asker = Asker(model_failing(RuntimeError("timeout")))
 
-    with pytest.raises(AskError):
+    with pytest.raises(AskError) as raised:
         asker.ask("algo")
 
+    assert "timeout" not in str(raised.value)
 
-def test_an_empty_answer_becomes_an_ask_error():
+
+def test_an_empty_answer_becomes_an_ask_error(caplog):
     asker = Asker(model_saying("   "))
 
-    with pytest.raises(AskError):
+    with pytest.raises(AskError) as raised:
         asker.ask("algo")
+
+    assert str(raised.value) == "No encontré respuesta. Probá preguntarlo de otra forma."
+    assert "respuesta vacía" in caplog.text
 
 
 def test_only_the_spoken_tag_still_leaves_something_written():

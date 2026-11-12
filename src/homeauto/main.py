@@ -12,6 +12,7 @@ import os
 import socket
 from datetime import date, datetime, time as clock_time
 from pathlib import Path
+from typing import Iterable
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -31,7 +32,7 @@ from homeauto.air import AirClient
 from homeauto.ask import ASK_TIMEOUT, Asker
 from homeauto.route import Router
 from homeauto.api import ApiServer, ApiService
-from homeauto.bot.commands import Commands, with_actions
+from homeauto.bot.commands import Commands, broken, with_actions
 from homeauto.bible import VerseOfTheDay
 from homeauto.briefing import Briefing
 from homeauto.cleanup import Cleaner
@@ -221,9 +222,6 @@ MONITOR_ACTIONS = (("Ver estado", "estado"),)
 # `{name}` lo completa el aviso de caída con el nombre del chequeo.
 CONFIRM_ACTIONS = (("✅ Confirmar", "confirmar {name}"),)
 SEQ_ACTIONS = ()
-
-# Un error que no llega al chat se ve igual que un bot colgado.
-BROKEN = "🔴 No pude procesar la solicitud: {reason}"
 
 # El «escribiendo…» de Telegram no se ve en todos los clientes. Esta burbuja
 # se edita después con la respuesta.
@@ -741,13 +739,19 @@ def _signed(household, chat_id: int, fallback: str) -> str:
 
 
 def register(
-    app: Application, commands: Commands, strangers=None, people=None, household=None
+    app: Application,
+    commands: Commands,
+    strangers=None,
+    people=None,
+    household=None,
+    alert_recipients: Iterable[int] = (),
 ) -> None:
     """Cablea todos los comandos, corriendo el trabajo fuera del event loop.
 
     El descubrimiento (zeroconf) y la síntesis (Piper) bloquean: en el loop no
-    encuentran nada y congelan el bot.
+    encuentran nada y congelan el bot. Solo `alert_recipients` lee el motivo de una falla.
     """
+    alerts = frozenset(alert_recipients)
 
     def signed_run(run, chat_id: int, argument: str, fallback: str):
         return with_actions(run, chat_id, argument, who=_signed(household, chat_id, fallback))
@@ -776,7 +780,7 @@ def register(
                 answer, markup = reply.text, _keyboard(reply.actions)
             except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
                 log.exception("el comando se rompió")
-                answer = BROKEN.format(reason=exc)
+                answer = broken(exc, chat_id in alerts)
             await _answer(waiting, update.message, answer, markup)
 
         return callback
@@ -846,7 +850,8 @@ def register(
             )
         except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
             log.exception("el audio se rompió")
-            await _answer(waiting, update.message, BROKEN.format(reason=exc))
+            answer = broken(exc, update.effective_chat.id in alerts)
+            await _answer(waiting, update.message, answer)
             return
 
         markup = _keyboard(reply.actions)
@@ -881,7 +886,7 @@ def register(
             answer, markup = reply.text, _keyboard(reply.actions)
         except Exception as exc:  # noqa: BLE001 - se contesta, no se calla
             log.exception("el botón se rompió")
-            answer = BROKEN.format(reason=exc)
+            answer = broken(exc, update.effective_chat.id in alerts)
         await query.message.reply_text(answer, reply_markup=markup)
 
     app.add_handler(CallbackQueryHandler(tap))
@@ -1153,6 +1158,7 @@ def main() -> None:
         Strangers(config=config, store=StrangerStore(db_path), notify=notifier),
         People(people, config.allowed_chat_ids),
         household,
+        alert_recipients=config.alert_recipients,
     )
 
     watcher = None

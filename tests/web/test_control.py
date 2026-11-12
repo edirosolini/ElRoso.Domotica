@@ -40,6 +40,8 @@ class StubCommands:
 
     def press_without_chat(self, data, who=""):
         self.asked.append(("press_without_chat", data, who))
+        if self.fail:
+            raise self.fail
         return f"apretado sin chat {data}"
 
     def typed(self, name):
@@ -270,13 +272,33 @@ def test_a_person_without_a_chat_cannot_type_help(db, commands, house):
     assert commands.asked == []
 
 
-def test_a_command_that_breaks_is_answered_not_silenced(db):
+def test_a_command_that_breaks_tells_an_alert_chat_why(db):
     control = make(db, commands=StubCommands(fail=RuntimeError("Address already in use")))
 
     answer = control.run({"chat_id": 42, "data": "decir hola"})
 
     assert answer == {"text": "🔴 No pude procesar la solicitud: Address already in use",
                       "actions": []}
+
+
+def test_a_command_that_breaks_is_answered_plainly_to_the_family(db, caplog):
+    control = make(db, commands=StubCommands(fail=RuntimeError("Address already in use")))
+
+    answer = control.run({"chat_id": 77, "text": "decí hola"})
+
+    assert answer == {"text": "No me salió. Probá de nuevo en un rato.", "actions": []}
+    assert "Address already in use" in caplog.text
+
+
+def test_a_person_without_a_chat_is_answered_plainly(db, house, caplog):
+    abuela = house.add("Abuela")
+    control = make(db, commands=StubCommands(fail=RuntimeError("Address already in use")),
+                   household=house)
+
+    answer = control.run({"person_id": abuela.id, "data": "hecho 3"})
+
+    assert answer == {"text": "No me salió. Probá de nuevo en un rato.", "actions": []}
+    assert "Address already in use" in caplog.text
 
 
 @pytest.mark.parametrize("chat_id", [99, None, "42", True])

@@ -36,9 +36,12 @@ def test_the_audio_goes_with_the_prompt():
     assert mime == "audio/ogg"
 
 
-def test_a_model_that_fails_is_not_a_transcription():
-    with pytest.raises(ListenError):
+def test_a_model_that_fails_is_plain_and_the_reason_is_logged(caplog):
+    with pytest.raises(ListenError) as raised:
         Transcriber(FakeModel(fail=True))(AUDIO)
+
+    assert str(raised.value) == "No pude escuchar el audio"
+    assert "la API no contestó" in caplog.text
 
 
 def test_an_empty_answer_is_not_a_transcription():

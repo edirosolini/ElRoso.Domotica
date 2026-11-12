@@ -68,6 +68,9 @@ UV_MARK = "uv-alert"
 AIR_MARK = "air-alert"
 
 
+UNAVAILABLE = "Ahora no puedo ver el clima. Probá en un rato."
+
+
 class WeatherError(Exception):
     """El pronóstico no se pudo traer o entender."""
 
@@ -173,7 +176,7 @@ class WeatherClient:
             payload = self.fetch(self.latitude, self.longitude)
         except Exception as exc:
             log.warning("no se pudo consultar el clima: %s", exc)
-            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+            raise WeatherError(UNAVAILABLE) from exc
 
         try:
             current = payload["current"]
@@ -188,7 +191,8 @@ class WeatherClient:
                 code=int(current["weather_code"]),
             )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise WeatherError(f"El servicio de clima contestó algo que no entiendo: {exc}") from exc
+            log.warning("no se entiende la respuesta del clima: %s", exc)
+            raise WeatherError(UNAVAILABLE) from exc
 
     def rain_ahead(self, now: datetime, hours: int = RAIN_WINDOW_HOURS) -> RainAhead | None:
         """La primera hora de la ventana con lluvia probable, o None.
@@ -200,7 +204,7 @@ class WeatherClient:
             payload = self.fetch(self.latitude, self.longitude)
         except Exception as exc:
             log.warning("no se pudo consultar el pronóstico por hora: %s", exc)
-            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+            raise WeatherError(UNAVAILABLE) from exc
 
         hourly = payload.get("hourly") or {}
         moments = hourly.get("time") or []
@@ -229,7 +233,7 @@ class WeatherClient:
             payload = self.fetch(self.latitude, self.longitude)
         except Exception as exc:
             log.warning("no se pudo consultar el pronóstico por hora: %s", exc)
-            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+            raise WeatherError(UNAVAILABLE) from exc
 
         return self._hours_of(payload, now, hours)
 
@@ -272,7 +276,7 @@ class WeatherClient:
             payload = self.fetch(self.latitude, self.longitude)
         except Exception as exc:
             log.warning("no se pudo consultar el clima de mañana: %s", exc)
-            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+            raise WeatherError(UNAVAILABLE) from exc
 
         try:
             daily = payload["daily"]
@@ -283,7 +287,8 @@ class WeatherClient:
                 code=int(daily["weather_code"][TOMORROW]),
             )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise WeatherError(f"El servicio de clima contestó algo que no entiendo: {exc}") from exc
+            log.warning("no se entiende la respuesta del clima: %s", exc)
+            raise WeatherError(UNAVAILABLE) from exc
 
     def spoken_tomorrow(self) -> str:
         """El día siguiente en una o dos oraciones, para el cierre del día."""
@@ -303,14 +308,15 @@ class WeatherClient:
             payload = self.fetch(self.latitude, self.longitude)
         except Exception as exc:
             log.warning("no se pudo consultar el clima de hoy: %s", exc)
-            raise WeatherError(f"No pude consultar el clima: {exc}") from exc
+            raise WeatherError(UNAVAILABLE) from exc
 
         try:
             daily = payload["daily"]
             maximum = round(daily["temperature_2m_max"][0])
             minimum = round(daily["temperature_2m_min"][0])
         except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise WeatherError(f"El servicio de clima contestó algo que no entiendo: {exc}") from exc
+            log.warning("no se entiende la respuesta del clima: %s", exc)
+            raise WeatherError(UNAVAILABLE) from exc
 
         # Un ultravioleta que falta o no se entiende queda en None, sin fallar.
         try:

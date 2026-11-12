@@ -51,14 +51,20 @@ def test_only_a_known_language_is_treated_as_one():
     assert "al final no fui" in seen[0].split("Texto:")[-1]
 
 
-def test_a_model_that_fails_is_reported():
-    with pytest.raises(TranslateError):
-        Translator(model(boom=RuntimeError("sin red"))).translate("hola")
+def test_a_model_that_fails_is_plain_and_the_reason_is_logged(caplog):
+    with pytest.raises(TranslateError) as raised:
+        Translator(model(boom=RuntimeError("HTTP 503 en generativelanguage"))).translate("hola")
+
+    assert str(raised.value) == "Ahora no puedo traducir. Probá en un rato."
+    assert "HTTP 503 en generativelanguage" in caplog.text
 
 
-def test_an_empty_answer_is_refused():
-    with pytest.raises(TranslateError):
+def test_an_empty_answer_is_refused_and_logged(caplog):
+    with pytest.raises(TranslateError) as raised:
         Translator(model("   ")).translate("hola")
+
+    assert str(raised.value) == "No encontré respuesta. Probá de otra forma."
+    assert "traducción vacía" in caplog.text
 
 
 def test_an_answer_that_ran_away_is_refused():

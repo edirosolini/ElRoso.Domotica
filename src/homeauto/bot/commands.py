@@ -254,6 +254,15 @@ def with_actions(run: Callable[..., str | Reply], *args, who: str = "") -> Reply
     return Reply(answer, actions=actions)
 
 
+BROKEN_PLAIN = "No me salió. Probá de nuevo en un rato."
+BROKEN_DETAIL = "🔴 No pude procesar la solicitud: {reason}"
+
+
+def broken(exc: BaseException, detail: bool) -> str:
+    """La respuesta a una falla: con el motivo si `detail`, llana si no."""
+    return BROKEN_DETAIL.format(reason=exc) if detail else BROKEN_PLAIN
+
+
 def _label(text: str) -> str:
     return text if len(text) <= MAX_LABEL else text[: MAX_LABEL - 1] + "…"
 
@@ -596,10 +605,17 @@ class Commands:
         with ThreadPoolExecutor(max_workers=len(aliases)) as pool:
             return dict(zip(aliases, pool.map(run, aliases)))
 
-    @staticmethod
-    def _summary(results: dict[str, str | None], done: str, failed: str) -> str:
+    def _summary(
+        self, chat_id: int, results: dict[str, str | None], done: str, failed: str
+    ) -> str:
+        """Qué equipos hicieron la acción y cuáles no; el motivo, solo a los chats de alertas."""
+        detail = chat_id in self.config.alert_recipients
         ok = [alias for alias, problem in results.items() if problem is None]
-        bad = [f"{alias}: {problem}" for alias, problem in results.items() if problem]
+        bad = [
+            f"{alias}: {problem if detail else 'no responde'}"
+            for alias, problem in results.items()
+            if problem
+        ]
         if not ok:
             return f"{failed}\n" + "\n".join(bad)
         text = f"{done} en {', '.join(ok)}"
@@ -636,7 +652,7 @@ class Commands:
         # muestra lo que salió por el parlante, no lo que se tipeó.
         spoken = self.correct(message)
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
-        summary = self._summary(results, "Ya le avisé", "No pude decirlo en ninguno:")
+        summary = self._summary(chat_id, results, "Ya le avisé", "No pude decirlo en ninguno:")
         if all(problem is None for problem in results.values()):
             summary += f": «{spoken}»"
         return summary + self._enrollment_hint(chat_id)
@@ -668,7 +684,7 @@ class Commands:
 
         spoken = self.polish(spoken)
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
-        summary = self._summary(results, "Ya le avisé", "No pude decirlo en ninguno:")
+        summary = self._summary(chat_id, results, "Ya le avisé", "No pude decirlo en ninguno:")
         if all(problem is None for problem in results.values()):
             summary += f": «{spoken}»"
         return summary
@@ -687,9 +703,11 @@ class Commands:
             percent = int(rest.strip())
         except ValueError:
             return "El volumen va como número de 0 a 100. Ej: /volumen 40"
+        if not 0 <= percent <= 100:
+            return "El volumen va como número de 0 a 100. Ej: /volumen 40"
 
         results = self._broadcast(aliases, lambda speaker: speaker.set_volume(percent))
-        return self._summary(results, f"Volumen en {percent}", "No pude cambiar el volumen:")
+        return self._summary(chat_id, results, f"Volumen en {percent}", "No pude cambiar el volumen:")
 
     def stop(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)
@@ -702,7 +720,7 @@ class Commands:
             return str(exc)
 
         results = self._broadcast(aliases, lambda speaker: speaker.stop())
-        return self._summary(results, "Cortado", "No pude parar:")
+        return self._summary(chat_id, results, "Cortado", "No pude parar:")
 
     def weather(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)
@@ -729,7 +747,7 @@ class Commands:
             return f"{spoken}\n\n{resting}"
 
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
-        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        summary = self._summary(chat_id, results, "Dicho", "No pude decirlo en ninguno:")
         return f"{spoken}\n\n{summary}"
 
     def ask(self, chat_id: int, text: str = "") -> str:
@@ -771,7 +789,7 @@ class Commands:
             return f"{answer.written}\n\n{resting}"
 
         results = self._broadcast(aliases, lambda speaker: speaker.say(answer.spoken))
-        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        summary = self._summary(chat_id, results, "Dicho", "No pude decirlo en ninguno:")
         return f"{answer.written}\n\n{summary}"
 
     def calculate(self, chat_id: int, text: str = "") -> str:
@@ -805,7 +823,7 @@ class Commands:
             return f"{result.written}\n\n{resting}"
 
         results = self._broadcast(aliases, lambda speaker: speaker.say(result.spoken))
-        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        summary = self._summary(chat_id, results, "Dicho", "No pude decirlo en ninguno:")
         return f"{result.written}\n\n{summary}"
 
     def translate(self, chat_id: int, text: str = "") -> str:
@@ -1633,7 +1651,10 @@ class Commands:
         try:
             spoken = self.agenda.spoken(when)
         except CalendarError as exc:
-            return f"No pude leer el calendario: {exc}"
+            log.warning("no pude leer la agenda: %s", exc)
+            if chat_id in self.config.alert_recipients:
+                return f"No pude leer el calendario: {exc}"
+            return "No pude leer el calendario. Probá en un rato."
         except ValueError as exc:
             return str(exc)
 
@@ -1645,7 +1666,7 @@ class Commands:
             return f"{spoken}\n\n{resting}"
 
         results = self._broadcast(aliases, lambda speaker: speaker.say(spoken))
-        summary = self._summary(results, "Dicho", "No pude decirlo en ninguno:")
+        summary = self._summary(chat_id, results, "Dicho", "No pude decirlo en ninguno:")
         return f"{spoken}\n\n{summary}"
 
     def status(self, chat_id: int, text: str = "") -> str:
@@ -1677,7 +1698,7 @@ class Commands:
             return str(exc)
 
         results = self._broadcast(aliases, lambda speaker: speaker.turn_off())
-        summary = self._summary(results, "Apagado", "No pude apagar:")
+        summary = self._summary(chat_id, results, "Apagado", "No pude apagar:")
         if any(problem is None for problem in results.values()):
             summary += "\n\nEl televisor se apaga solo si lo tenés configurado para hacerlo al perder señal."
         return summary

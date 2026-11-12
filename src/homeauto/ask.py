@@ -98,7 +98,8 @@ class Asker:
 
         written, spoken = self._split(_clean(reply or ""))
         if not written:
-            raise AskError("El modelo no contestó nada.")
+            log.warning("respuesta vacía del modelo a la pregunta")
+            raise AskError("No encontré respuesta. Probá preguntarlo de otra forma.")
 
         return Answer(spoken=self._safe_to_say(spoken), written=written[: self.max_written])
 

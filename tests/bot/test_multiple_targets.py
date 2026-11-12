@@ -11,6 +11,7 @@ from homeauto.voice.caster import CastError
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
 
 OWNER = 42
+FAMILY = 77
 NOW = datetime(2026, 8, 29, 21, 0)
 
 
@@ -33,7 +34,10 @@ def build(tmp_path, **failures):
     registry = StubRegistry(**speakers)
     reminders = Reminders(store=Store(tmp_path / "j.db"), timer=FakeTimer(), announce=lambda job: None)
     commands = Commands(
-        config=make_config(allowed={OWNER}, devices=dict.fromkeys(speakers)),
+        config=make_config(
+            allowed={OWNER, FAMILY}, alert_chat_ids=frozenset({OWNER}),
+            devices=dict.fromkeys(speakers),
+        ),
         speakers=registry,
         reminders=reminders,
         preferences=Preferences(tmp_path / "j.db"),
@@ -117,6 +121,42 @@ def test_when_every_device_fails_it_says_so(tmp_path):
     reply = cmd.say(OWNER, "en todos hola")
 
     assert "no pude" in reply.lower()
+
+
+def test_the_family_reads_which_device_did_not_answer_not_why(tmp_path, caplog):
+    cmd, spk = build(tmp_path, recamara=CastError("Address already in use"))
+
+    reply = cmd.say(FAMILY, "en todos atención")
+
+    assert spk["parlante"].said == ["atención"]
+    assert "No pude en:\nrecamara: no responde" in reply
+    assert "Address already in use" not in reply
+    assert "Address already in use" in caplog.text
+
+
+def test_the_family_reads_that_none_answered_not_why(tmp_path, caplog):
+    cmd, _ = build(
+        tmp_path,
+        parlante=CastError("apagado"),
+        comedor=CastError("apagado"),
+        recamara=CastError("apagado"),
+    )
+
+    reply = cmd.say(FAMILY, "en todos hola")
+
+    assert reply == (
+        "No pude decirlo en ninguno:\n"
+        "parlante: no responde\ncomedor: no responde\nrecamara: no responde"
+    )
+    assert "apagado" in caplog.text
+
+
+def test_an_out_of_range_volume_is_explained_to_the_family(tmp_path):
+    cmd, spk = build(tmp_path)
+
+    reply = cmd.volume(FAMILY, "500")
+
+    assert reply == "El volumen va como número de 0 a 100. Ej: /volumen 40"
 
 
 def test_volume_applies_to_several(tmp_path):
