@@ -50,14 +50,13 @@ class Broken:
         raise RuntimeError("no hay chequeos")
 
 
-def test_the_three_sources_end_up_in_one_text():
-    briefing = Briefing(agenda=FakeAgenda(), weather=FakeWeather(), monitor=FakeMonitor(vpn=False))
+def test_the_three_sources_end_up_in_one_text_but_the_services_are_only_written():
+    summary = Briefing(agenda=FakeAgenda(), weather=FakeWeather(), monitor=FakeMonitor(vpn=False)).speech()
 
-    said = briefing.text()
-
-    assert "dentista" in said
-    assert "veinte grados" in said
-    assert "vpn" in said
+    assert "dentista" in summary.spoken
+    assert "veinte grados" in summary.spoken
+    assert "vpn" not in summary.spoken
+    assert "vpn" in summary.written
 
 
 def test_the_agenda_goes_first():
@@ -77,10 +76,10 @@ def test_services_that_are_up_are_not_mentioned():
 def test_several_services_down_are_named_together():
     briefing = Briefing(monitor=FakeMonitor(vpn=False, seq=False, backup=True))
 
-    said = briefing.text()
+    written = briefing.speech().written
 
-    assert "vpn" in said and "seq" in said
-    assert "backup" not in said
+    assert "vpn" in written and "seq" in written
+    assert "backup" not in written
 
 
 def test_a_broken_source_does_not_take_the_others_down():
@@ -113,7 +112,7 @@ def test_the_trouble_line_is_reworded_keeping_the_names():
         polish=lambda text, must_keep=(): f"[{'+'.join(must_keep)}] {text}",
     )
 
-    assert briefing.text().startswith("[vpn]")
+    assert "[vpn]" in briefing.speech().written
 
 
 def test_what_the_sources_already_polished_is_not_polished_again():

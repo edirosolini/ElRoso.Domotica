@@ -12,7 +12,7 @@ NEWCOMER = 12345
 NOW = datetime(2026, 9, 25, 10, 0)
 
 
-def build(tmp_path, allowed=(OWNER,), fail_for=()):
+def build(tmp_path, allowed=(OWNER,), fail_for=(), alert=()):
     sent = []
 
     def notify(chat_id, text):
@@ -21,7 +21,7 @@ def build(tmp_path, allowed=(OWNER,), fail_for=()):
         sent.append((chat_id, text))
 
     strangers = Strangers(
-        config=make_config(allowed=allowed),
+        config=make_config(allowed=allowed, alert_chat_ids=frozenset(alert)),
         store=StrangerStore(tmp_path / "jobs.db"),
         notify=notify,
         clock=lambda: NOW,
@@ -57,12 +57,20 @@ def test_the_announcement_carries_the_line_to_paste(tmp_path):
     assert "reinici" in sent[0][1]
 
 
-def test_every_owner_hears_about_it(tmp_path):
+def test_without_alert_chats_every_owner_hears_about_it(tmp_path):
     strangers, sent = build(tmp_path, allowed=(OWNER, OTHER_OWNER))
 
     strangers.knock(NEWCOMER, "Diego")
 
     assert sorted(chat_id for chat_id, _ in sent) == [OWNER, OTHER_OWNER]
+
+
+def test_only_the_alert_chats_hear_about_it(tmp_path):
+    strangers, sent = build(tmp_path, allowed=(OWNER, OTHER_OWNER), alert=(OWNER,))
+
+    strangers.knock(NEWCOMER, "Diego")
+
+    assert [chat_id for chat_id, _ in sent] == [OWNER]
 
 
 def test_a_newcomer_is_announced_only_once(tmp_path):

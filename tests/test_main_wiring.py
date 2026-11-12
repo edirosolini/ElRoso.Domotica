@@ -1539,22 +1539,36 @@ def test_the_monitor_and_seq_ask_the_uplink(wired, tmp_path, monkeypatch):
     assert seqs[0].online() is False
 
 
-def test_the_wired_uplink_speaks_softly_and_tells_everyone(wired, tmp_path, monkeypatch):
+def test_the_wired_uplink_speaks_softly(wired, tmp_path, monkeypatch):
     from homeauto.voice import chime
 
     uplinks = _spy_uplinks(monkeypatch)
-    spoken, told = [], []
+    spoken = []
     monkeypatch.setattr(
         main.HouseVoice, "speak_only", lambda self, text, chime=False: spoken.append((text, chime))
     )
-    monkeypatch.setattr(main.HouseVoice, "tell_everyone", lambda self, text, actions=(): told.append(text))
 
     run_main(monkeypatch, config_file(tmp_path))
     uplinks[0].speak("Se cortó internet.")
-    uplinks[0].tell("🌐 Internet se cortó")
 
     assert spoken == [("Se cortó internet.", chime.SOFT)]
-    assert told == ["🌐 Internet se cortó"]
+
+
+def test_the_wired_uplink_writes_only_to_the_alert_chats(wired, tmp_path, monkeypatch):
+    uplinks = _spy_uplinks(monkeypatch)
+    sent = []
+    original = main.HouseVoice.__init__
+
+    def spy(self, *args, **kwargs):
+        kwargs["notify"] = lambda chat_id, text, actions=(): sent.append((chat_id, text))
+        original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.HouseVoice, "__init__", spy)
+
+    run_main(monkeypatch, config_file(tmp_path, "ALLOWED_CHAT_IDS=42,77\nALERT_CHAT_IDS=42\n"))
+    uplinks[0].tell("🌐 Internet se cortó")
+
+    assert sent == [(42, "🌐 Internet se cortó")]
 
 
 # --- feriados ---------------------------------------------------------------

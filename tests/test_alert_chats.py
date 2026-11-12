@@ -193,16 +193,18 @@ def test_a_monitor_or_seq_alert_is_written_only_to_the_alert_chats():
     house = FakeHouse(spoken=True)
 
     main._alert(house, "vps no responde", True)
+    main._alert(house, "vps volvió", False)
 
-    assert house.told == [("🚨 vps no responde", None)]
+    assert house.told == [("🚨 vps no responde", None), ("⚠️ vps volvió", None)]
 
 
-def test_an_unspoken_alert_tells_the_house_it_is_only_for_the_alert_chats():
-    house = FakeHouse(spoken=False)
+def test_a_non_urgent_alert_is_only_written_to_the_alert_chats_and_never_said():
+    house = FakeHouse(spoken=True)
 
-    main._alert(house, "vps no responde", False)
+    main._alert(house, "vps volvió", False, "HTTP 200")
 
-    assert house.announced == [None]
+    assert house.announced == []
+    assert house.told == [("⚠️ vps volvió\nHTTP 200", None)]
 
 
 def test_an_announcement_can_carry_a_copy_for_the_others():
@@ -263,6 +265,14 @@ def test_the_briefing_for_the_others_leaves_out_the_services_and_seq():
     assert "explotó" not in summary.public
 
 
+def test_the_spoken_briefing_leaves_out_the_services_and_seq():
+    summary = Briefing(weather=FakeWeather(), monitor=FakeMonitor(vps=False), seq=FakeNight()).speech()
+
+    assert "Hay sol." in summary.spoken
+    assert "vps" not in summary.spoken
+    assert "Facturador" not in summary.spoken
+
+
 def test_the_briefing_for_the_others_is_the_same_on_a_calm_day():
     summary = Briefing(weather=FakeWeather(), monitor=FakeMonitor(vps=True)).speech()
 
@@ -276,20 +286,72 @@ def test_the_briefing_for_the_others_is_never_empty():
     assert "vps" not in summary.public
 
 
-def test_the_closing_for_the_others_leaves_out_the_services():
+def test_the_closing_only_writes_the_services_to_the_alert_chats():
     summary = Closing(weather=FakeWeather(), monitor=FakeMonitor(vps=False)).speech()
 
-    assert "vps" in summary.spoken
-    assert summary.written == summary.spoken
+    assert "vps" in summary.written
+    assert "Mañana hay sol." in summary.spoken
+    assert "vps" not in summary.spoken
     assert "Mañana hay sol." in summary.public
     assert "vps" not in summary.public
 
 
-def test_a_closing_with_only_services_down_says_nothing_to_the_others():
+def test_a_closing_with_only_services_down_is_only_written():
     summary = Closing(monitor=FakeMonitor(vps=False)).speech()
 
-    assert summary.spoken
+    assert summary.spoken == ""
     assert summary.public == ""
+    assert "vps" in summary.written
+
+
+class FakeJobs:
+    def __init__(self):
+        self.daily = {}
+
+    def run_daily(self, job, time, name):
+        self.daily[name] = job
+
+
+async def test_a_closing_with_only_services_down_still_reaches_the_alert_chats():
+    from datetime import time
+    from types import SimpleNamespace
+
+    app = SimpleNamespace(job_queue=FakeJobs())
+    announced = []
+    closing = Closing(monitor=FakeMonitor(vps=False))
+
+    main.schedule_closing(
+        app, SimpleNamespace(closing_at=time(20, 0)), closing, lambda *args: announced.append(args)
+    )
+    await app.job_queue.daily["closing"](None)
+
+    [(spoken, written, public)] = announced
+    assert spoken == "" and public == ""
+    assert "vps" in written
+
+
+async def test_an_empty_closing_is_not_announced():
+    from datetime import time
+    from types import SimpleNamespace
+
+    app = SimpleNamespace(job_queue=FakeJobs())
+    announced = []
+
+    main.schedule_closing(
+        app, SimpleNamespace(closing_at=time(20, 0)), Closing(), lambda *args: announced.append(args)
+    )
+    await app.job_queue.daily["closing"](None)
+
+    assert announced == []
+
+
+def test_an_announcement_with_nothing_to_say_is_only_written_to_the_alert_chats():
+    house, speaker, sent = build_house()
+
+    main._announce(house, "", "vps no responde", "")
+
+    assert speaker.said == []
+    assert sent == [(OWNER, "🔔 vps no responde")]
 
 
 def test_the_closing_text_is_still_what_is_spoken():
