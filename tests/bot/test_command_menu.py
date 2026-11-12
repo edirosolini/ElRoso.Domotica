@@ -60,6 +60,12 @@ def test_every_entry_has_a_usable_description():
         assert len(description) <= 256, f"/{name}: Telegram corta en 256 caracteres"
 
 
+def test_the_shopping_entry_does_not_send_to_another_command():
+    description = dict(COMMAND_MENU)["compras"]
+
+    assert description == "Qué falta comprar, y tacharlo"
+
+
 def test_the_commands_people_use_are_in_the_menu():
     names = {name for name, _ in COMMAND_MENU}
     for essential in ("decir", "alarma", "lista", "silencio", "ayuda"):

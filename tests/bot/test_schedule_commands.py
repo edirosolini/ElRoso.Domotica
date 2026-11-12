@@ -127,6 +127,10 @@ def test_cancel_of_an_unknown_job_says_so(cmd):
     assert "no encontr" in cmd.cancel(OWNER, "4321").lower()
 
 
+def test_cancel_of_an_unknown_job_does_not_assume_it_was_a_reminder(cmd):
+    assert cmd.cancel(OWNER, "4321") == "No encontré ese aviso. Fijate con /lista"
+
+
 def test_stranger_cannot_schedule(cmd):
     reply = cmd.timer(STRANGER, "10m algo")
 

@@ -2051,5 +2051,5 @@ class Commands:
             return "Decime el número. Ej: /cancelar 3 (lo ves con /lista)"
 
         if not self.reminders.cancel(chat_id, job_id):
-            return f"No encontré el recordatorio #{job_id}"
+            return "No encontré ese aviso. Fijate con /lista"
         return f"Cancelado #{job_id}"
