@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from homeauto.bot.commands import Commands
+from homeauto.bot.commands import Commands, with_actions
 from homeauto.quiet import Hush, HushStore, QuietHours
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
@@ -34,6 +34,22 @@ def test_asking_for_silence_says_until_when(cmd):
 
     assert "14:00" in reply
     assert cmd.quiet.is_quiet(NOON) is True
+
+
+def test_asking_for_silence_offers_to_talk_again(cmd):
+    reply = with_actions(cmd.silence, OWNER, "2h")
+
+    assert reply.text == "Listo, no hablo hasta las 14:00."
+    assert reply.actions == (("Volver a hablar", "hablar"),)
+
+
+def test_the_silence_status_offers_to_talk_again(cmd):
+    cmd.silence(OWNER, "2h")
+
+    reply = with_actions(cmd.silence, OWNER, "")
+
+    assert reply.text == "En silencio hasta las 14:00."
+    assert reply.actions == (("Volver a hablar", "hablar"),)
 
 
 def test_the_speaker_stays_quiet_during_the_silence(cmd):

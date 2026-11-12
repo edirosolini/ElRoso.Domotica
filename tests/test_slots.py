@@ -117,6 +117,10 @@ def test_the_question_is_for_the_chat_so_it_may_carry_digits():
     assert "/lista" in slots.missing("cancelar", "").question
 
 
+def test_the_number_question_names_my_reminders():
+    assert slots.missing("cancelar", "").question == "¿Cuál borro? El número sale en /lista, Mis avisos."
+
+
 @pytest.mark.parametrize(
     "argument",
     ["hola arriba", "mañana", "mañana arriba", "en comedor hola arriba"],

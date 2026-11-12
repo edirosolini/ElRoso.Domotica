@@ -216,7 +216,7 @@ SNOOZE_ACTIONS = (("Posponer 10 min", "posponer 10m"), ("Posponer 30 min", "posp
 # `{job}` lo completa quien avisa con el número del recordatorio.
 DONE_ACTIONS = (("✅ Hecho", "hecho {job}"),)
 REMINDER_ACTIONS = DONE_ACTIONS + SNOOZE_ACTIONS
-OFF_ACTIONS = (("🔕 Apagar", "callar {job}"),)
+OFF_ACTIONS = (("🔕 Apagar alarma", "callar {job}"),)
 ALARM_ACTIONS = OFF_ACTIONS + SNOOZE_ACTIONS
 MONITOR_ACTIONS = (("Ver estado", "estado"),)
 # `{name}` lo completa el aviso de caída con el nombre del chequeo.

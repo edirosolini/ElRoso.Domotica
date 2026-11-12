@@ -98,10 +98,14 @@ def test_list_numbers_the_jobs(cmd):
         assert str(job.id) in reply
 
 
-def test_list_points_at_how_to_cancel(cmd):
+def test_list_is_my_reminders_and_says_how_to_delete(cmd):
     cmd.timer(OWNER, "10m pizza")
 
-    assert "/cancelar" in cmd.list(OWNER)
+    reply = cmd.list(OWNER)
+
+    assert reply.startswith("Mis avisos\n")
+    assert reply.endswith("\nTocá uno para borrarlo.")
+    assert "/cancelar" not in reply
 
 
 def test_list_does_not_leak_other_chats(cmd):
@@ -117,7 +121,7 @@ def test_cancel_removes_the_job(cmd):
     reply = cmd.cancel(OWNER, str(job_id))
 
     assert cmd.reminders.list(OWNER) == []
-    assert "cancel" in reply.lower()
+    assert reply == "🗑 Borrado: «pizza»"
 
 
 def test_cancel_needs_a_number(cmd):

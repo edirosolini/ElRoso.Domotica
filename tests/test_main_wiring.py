@@ -1005,7 +1005,7 @@ def test_an_alarm_offers_to_be_turned_off_or_postponed(wired, tmp_path, monkeypa
     assert off[1].format(job=17) == "callar 17"
     assert tuple(snooze) == main.SNOOZE_ACTIONS
     [(label, data)] = seen["ring_actions"]
-    assert label == "🔕 Apagar"
+    assert label == "🔕 Apagar alarma"
     assert data.format(job=17) == "callar 17"
 
 

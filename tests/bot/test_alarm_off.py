@@ -133,7 +133,7 @@ def test_a_stranger_cannot_turn_it_off(cmd):
 
 
 def test_the_alarm_comes_with_off_and_snooze():
-    assert main.ALARM_ACTIONS[0] == ("🔕 Apagar", "callar {job}")
+    assert main.ALARM_ACTIONS[0] == ("🔕 Apagar alarma", "callar {job}")
     assert main.ALARM_ACTIONS[1:] == main.SNOOZE_ACTIONS
 
 

@@ -47,7 +47,7 @@ def _in_thread(work: Callable[[], None]) -> None:
 
 def cancel_action(job_id: int) -> tuple[str, str]:
     """El botón que borra el aviso desde cualquier chat."""
-    return ("Cancelar este aviso", f"borrar {job_id}")
+    return ("🗑 Borrar este aviso", f"borrar {job_id}")
 
 
 def _person(person: Person) -> dict:

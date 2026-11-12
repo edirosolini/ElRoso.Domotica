@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from homeauto.bot.commands import Commands, Reply, with_actions
+from homeauto.bot.commands import MAX_LABEL, Commands, Reply, with_actions
 from homeauto.lists import SHOPPING, TODO, ListStore
 from homeauto.pending import Conversation, PendingStore
 from homeauto.route import Decision
@@ -75,7 +75,7 @@ def test_a_timer_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.timer, OWNER, "10m sacá la pizza")
 
     job = cmd.reminders.list(OWNER)[0]
-    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert reply.actions == (("🗑 Borrar este aviso", f"cancelar {job.id}"),)
     assert f"#{job.id}" not in reply.text
 
 
@@ -83,7 +83,7 @@ def test_an_alarm_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.alarm, OWNER, "diaria 7:30 arriba")
 
     job = cmd.reminders.list(OWNER)[0]
-    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert reply.actions == (("🗑 Borrar este aviso", f"cancelar {job.id}"),)
     assert f"#{job.id}" not in reply.text
 
 
@@ -99,7 +99,7 @@ def test_a_postponed_alarm_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.postpone, OWNER, "")
 
     job = cmd.reminders.list(OWNER)[0]
-    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert reply.actions == (("🗑 Borrar este aviso", f"cancelar {job.id}"),)
     assert reply.text.startswith("Pospuesto para ")
 
 
@@ -113,7 +113,19 @@ def test_the_schedule_offers_to_cancel_each_one(cmd):
     reply = with_actions(lambda chat_id: cmd.list(chat_id), OWNER)
 
     ids = [job.id for job in cmd.reminders.list(OWNER)]
-    assert reply.actions == tuple((f"Cancelar #{i}", f"cancelar {i}") for i in ids)
+    assert reply.actions == (
+        ("🗑 hoy 10:10 uno", f"cancelar {ids[0]}"),
+        ("🗑 hoy 10:20 dos", f"cancelar {ids[1]}"),
+    )
+
+
+def test_a_long_reminder_is_cut_in_its_button(cmd):
+    cmd.timer(OWNER, "10m " + "a" * 60)
+
+    [(label, _)] = with_actions(lambda chat_id: cmd.list(chat_id), OWNER).actions
+
+    assert len(label) == MAX_LABEL
+    assert label.startswith("🗑 hoy 10:10 aaa") and label.endswith("…")
 
 
 def test_an_empty_schedule_offers_nothing(cmd):
