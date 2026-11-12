@@ -28,10 +28,14 @@ devolviendo un string: los botones van aparte.
   parlante, porque son del pedido y dos mensajes se atienden a la vez. Así ningún comando
   cambió de firma, y el «Entendí: /alarma …» del texto libre y la nota de voz heredan los
   botones del comando que corrieron sin hacer nada.
-- **Qué ofrece cada uno**: lo programado —`/timer`, `/alarma`, `/posponer`— trae «Cancelar
-  #N», que es el deshacer que ya prometía el «Entendí:»; `/lista`, un «Cancelar #N» por
-  cada uno; `/compras` y `/pendientes`, un «✓ ítem» por cada uno y «Vaciar»; `/menu`,
-  «🛒 Pasar a compras» y «🔄 Otra idea».
+- **Qué ofrece cada uno**: lo programado —`/timer`, `/alarma`, `/recordar`, `/posponer`—
+  trae «Cancelar este aviso», que es el deshacer que ya prometía el «Entendí:», y ni el botón
+  ni la respuesta muestran el número; `/lista`, un «Cancelar #N» por cada uno; `/compras` y
+  `/pendientes`, un «✓ ítem» por cada uno y «Vaciar»; `/menu`, «🛒 Pasar a compras» y
+  «🔄 Otra idea».
+- **El número queda donde se elige por él**: `/lista`, `/cancelar`, `/pastillas`, `/turnos`,
+  el 404 de la API y `/depurar`. Un `/cancelar` de un número que no existe contesta «No
+  encontré ese aviso. Fijate con /lista».
 - 🔴 **Tachar va por id, no por posición.** Con `sacar 1`, tachar el primero corría los
   demás y el botón siguiente sacaba otro ítem. El botón manda `sacar id:17`, que
   `ListStore.remove_id()` borra solo si sigue en esa lista. Escrito a mano, `/sacar 2` sigue
@@ -241,9 +245,24 @@ Un mensaje que tarda —Piper, el modelo, el cast— parecía ignorado. Ahora el
 
 🔴 **Un error se contesta, no se calla.** Una excepción moría en el log como "No error handlers
 are registered" y el mensaje quedaba sin respuesta: desde el teléfono se ve igual que un bot
-colgado. Ahora vuelve `🔴 No pude procesar la solicitud: <qué pasó>`, con el motivo adentro.
-Pasó de verdad: un llamado a varios equipos reventó con "Address already in use" y el chat no
-dijo nada por dos minutos.
+colgado. Pasó de verdad: un llamado a varios equipos reventó con "Address already in use" y el
+chat no dijo nada por dos minutos.
+
+- 🔴 **El motivo técnico lo leen solo los chats de `alert_recipients`.** `commands.broken(exc,
+  detail)` es la única forma del error genérico: con el motivo, «🔴 No pude procesar la
+  solicitud: <qué pasó>»; sin él, «No me salió. Probá de nuevo en un rato.». La usan el
+  comando, la nota de voz y el botón en `main.register()`, y `/control`. El motivo va
+  siempre al log. Con `ALERT_CHAT_IDS` vacía, alertas son todos y todos lo leen.
+- **Un equipo que falla dice «<Equipo>: no responde» a la familia**; el motivo, a alertas
+  (`Commands._summary()`). Clima, traducir, preguntar y la nota de voz contestan una frase
+  llana a todos y dejan el motivo en el log. La agenda, llana a la familia y con el motivo
+  a alertas.
+- 🔴 **Lo que falta configurar no le muestra la clave a la familia.**
+  `Commands._unconfigured(chat_id, detail)`: alertas leen el detalle con la clave de
+  entorno; los demás, «Esto todavía no está configurado. Avisale a <nombre>.», con los
+  nombres del padrón de los chats de alertas unidos por «o a», o «quien maneja la casa» si
+  no hay ninguno. Lo usan preguntar, traducir, menú, agenda, estado y `/pantalla` sin
+  `API_TOKEN`.
 
 - 🔴 **`MediaServer.start()` se llama desde un hilo por equipo.** `_broadcast` habla en
   paralelo y cada `Speaker` tiene su propio `_serving`, así que en el primer anuncio tras un

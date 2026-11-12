@@ -16,6 +16,7 @@ paths:
   - "tests/test_summon.py"
   - "tests/bot/test_say_correction.py"
   - "tests/bot/test_call_command.py"
+  - "tests/bot/test_device_names.py"
   - "tests/schedule/test_announcer.py"
 ---
 
@@ -254,6 +255,20 @@ del wav de Piper. Hay tres:
 - **Si el archivo ya no está, se vuelve a hacer**: `reuse()` devuelve False, `VoiceSynth`
   sintetiza y `Voicemail` codifica de nuevo. Si no puede tocar la fecha por otro error, lo
   loguea y usa el archivo igual.
+
+## Nombre de los equipos
+
+El alias de `CAST_DEVICES` es la clave; a una persona se le muestra su nombre en castellano.
+
+- **`voice/names.py` es el único lugar del nombre**: `device_label()` lo arma con la tabla
+  `_WORDS`, en código, por palabra del alias separada por `_` y con mayúscula inicial
+  («recamara» → «Recámara»). Lo usan las respuestas del bot, `SpeakerRegistry`, `/api/people`
+  y `/api/tele/setup` (`names: {alias: nombre}`, además de `devices`).
+- **Se acepta escrito por alias o por nombre, con o sin tilde ni mayúscula** (`find_alias()`,
+  que compara con `fold()`), y se guarda siempre el alias: `/usar`, los jobs y las preferencias
+  no cambian.
+- ⚠️ **Un nombre de varias palabras solo se escribe por su alias**: el destino es una palabra
+  por equipo. Un alias con una palabra fuera de `_WORDS` sale tal cual, con mayúscula inicial.
 
 ## Gotchas
 
