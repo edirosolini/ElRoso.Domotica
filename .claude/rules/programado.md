@@ -23,7 +23,7 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 
 | | Repite | Sonido | Botones | Si nadie responde |
 | --- | --- | --- | --- | --- |
-| `/alarma` | una vez, diaria, por días o mensual | el despertador, a 90 | «🔕 Apagar» y posponer | vuelve a sonar cada cinco minutos |
+| `/alarma` | una vez, diaria, por días o mensual | el despertador, a 90 | «🔕 Apagar alarma» y posponer | vuelve a sonar cada cinco minutos |
 | `/recordar` | **siempre**, en los días marcados o un día de cada mes | un beep suave | «✅ Hecho» y posponer | re-avisa |
 | `/timer` | nunca | un beep suave | «✅ Hecho» y posponer | re-avisa |
 
@@ -36,9 +36,10 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   opción «Una sola vez».
 - **`/recordar` dejó de ser alias de `/timer`.** Es su propio comando, con la misma forma que
   `/alarma` (`Commands._repeating`).
-- **El alta y `/posponer` no muestran el número**: «Programado en Comedor para …: «…»»,
-  «Pospuesto para …», con «Cancelar este aviso» (`_undo_button()`), que manda el mismo
-  `cancelar <id>`. El número se ve en `/lista` y se escribe en `/cancelar`, `/pastillas` y
+- **El alta y `/posponer` no muestran el número**: «Listo: te aviso mañana a las 10:00 en
+  Comedor: «…»», «Listo: la alarma suena lun, mar, mié, jue, vie a las 7:30 …», «Listo: te
+  vuelvo a avisar …», con «🗑 Borrar este aviso» (`_undo_button()`), que manda el mismo
+  `cancelar <id>`. `/cancelar` contesta «🗑 Borrado: «…»». El número se ve en `/lista` y se escribe en `/cancelar`, `/pastillas` y
   `/turnos`. La baja que se avisa a los demás chats tampoco lo lleva: «🗑 <nombre> borró «…»».
 - 🔴 **«Hecho» cierra por número de job, no por lo último que sonó.** La pastilla y el
   colegio suenan con minutos de diferencia; marcar el primero no puede depender del orden.
@@ -95,9 +96,9 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   cinco, diez, quince, veinte y veinticinco minutos. Al llegar deja de sonar y escribe
   una sola vez «⏰ Dejé de sonar: «…», nadie la apagó» a los chats del aviso; si era de una
   persona, a todos.
-- **Cada repetición escribe al chat** «⏰ Sigue sonando», solo con «🔕 Apagar». En descanso no
+- **Cada repetición escribe al chat** «⏰ Sigue sonando», solo con «🔕 Apagar alarma». En descanso no
   se habla, así que ese texto es todo lo que sale, y sale igual en cada repetición.
-- 🔴 **«🔕 Apagar» manda `callar <id>`** y apaga desde cualquier chat. Corta el audio en curso
+- 🔴 **«🔕 Apagar alarma» manda `callar <id>`** y apaga desde cualquier chat. Corta el audio en curso
   (`Announcer.stop()`), olvida en `FiredStore` solo los chats del aviso cuyo último disparo fue
   esa alarma, cierra el historial como `off` con quién y avisa a los demás chats del aviso
   «🔕 <nombre> apagó la alarma». El segundo toque contesta que ya estaba apagada. El
@@ -113,7 +114,7 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
 - **Posponer conserva el tipo**: `FiredStore` guarda `kind`, y un recordatorio pospuesto
   vuelve a sonar como recordatorio.
 - **En vacaciones una alarma no suena: se escribe una sola vez**, no repite y sale sin
-  «🔕 Apagar». Activarlas corta las que estaban sonando. Ver **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`.
+  «🔕 Apagar alarma». Activarlas corta las que estaban sonando. Ver **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`.
 - **Una alarma en un equipo con pantalla prende su vista en la tele** durante un minuto
   después de cada sonido, pasa al kiosco hasta la próxima repetición y cierra la tele a los
   quince minutos de que deja de sonar. Solo `kind=alarm`; un recordatorio o un timer no. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md`.
@@ -272,7 +273,7 @@ salteado por feriado (`holiday`), con `closed_at`. `Reminders` es el único que 
   empezar.
 - **Cualquier chat permitido ata cualquier job**, a diferencia de `/cancelar`: un remedio es de
   la casa, no de quien creó el recordatorio.
-- **`/pastillas` no está en el menú**, sí en `HELP`. Ver **Comandos y alias**, en `.claude/rules/router-y-conversacion.md`.
+- **`/pastillas` no está en el menú**, sí en `HELP` y en el tema Avisos. Ver **Comandos y alias**, en `.claude/rules/router-y-conversacion.md`.
 
 ## Tareas por turno
 
@@ -309,7 +310,7 @@ basura». `schedule/rota.py` es la lógica; los nombres viven en dos columnas de
 - `/turnos 7 off` lo corta y `/turnos` lista lo que se turna en toda la casa, con a quién le
   toca la próxima. `/lista` lo muestra como « · turnos Cin, Die».
 - **No hay cambio de turno a mano ni salteo de una semana.** Quedaron fuera de alcance.
-- **`/turnos` no está en el menú**, sí en `HELP`. Ver **Comandos y alias**, en `.claude/rules/router-y-conversacion.md`.
+- **`/turnos` no está en el menú**, sí en `HELP` y en el tema Avisos. Ver **Comandos y alias**, en `.claude/rules/router-y-conversacion.md`.
 
 ## Nombre entre corchetes
 
