@@ -30,6 +30,27 @@ class ProtocolTest {
     }
 
     @Test
+    fun readsTheNamesOfTheTeles() {
+        val setup = Protocol.parseSetup("""{"devices": ["recamara"], "names": {"recamara": "Recámara"}}""")
+
+        assertEquals(mapOf("recamara" to "Recámara"), setup.names)
+        assertEquals("Recámara", setup.label("recamara"))
+    }
+
+    @Test
+    fun withoutANameTheLabelIsTheAlias() {
+        val setup = Protocol.parseSetup("""{"devices": ["comedor", "living"], "names": {"living": ""}}""")
+
+        assertEquals("comedor", setup.label("comedor"))
+        assertEquals("living", setup.label("living"))
+    }
+
+    @Test
+    fun setupWithoutNamesHasNone() {
+        assertEquals(emptyMap<String, String>(), Protocol.parseSetup("{}").names)
+    }
+
+    @Test
     fun parsesTheRosterWithAndWithoutChat() {
         val body = """
             {"devices": ["comedor"],

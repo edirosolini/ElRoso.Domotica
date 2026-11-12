@@ -15,8 +15,8 @@ interface Transport {
     fun postJson(url: String, body: String): HttpReply
 }
 
-/** El pedido no se pudo completar, con el motivo. */
-class TeleFailure(message: String) : Exception(message)
+/** El pedido no se pudo completar: el motivo para el log y la falla para mostrar. */
+class TeleFailure(message: String, val trouble: Trouble) : Exception(message)
 
 /** Cómo terminó un `hello`. */
 sealed interface HelloResult {
@@ -46,7 +46,7 @@ sealed interface AckResult {
 /** Cómo terminó un comando: la respuesta del CT, o por qué no. */
 sealed interface CommandResult {
     data class Replied(val text: String) : CommandResult
-    data class Failed(val reason: String) : CommandResult
+    data class Failed(val reason: String, val trouble: Trouble) : CommandResult
 }
 
 /** Cómo terminó la consulta de `tele.json`. */
@@ -61,9 +61,9 @@ class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
 
     /** Lo necesario para el primer uso; lanza TeleFailure si no se pudo. */
     fun setup(): Setup {
-        val reply = send({ transport.get(urls.setup) }) { throw TeleFailure(it) }
-        if (reply.status != 200) throw TeleFailure(describe(reply))
-        return parse({ Protocol.parseSetup(reply.body) }) { throw TeleFailure(it) }
+        val reply = send({ transport.get(urls.setup) }) { throw TeleFailure(it, Trouble.NO_HOUSE) }
+        if (reply.status != 200) throw TeleFailure(describe(reply), Trouble.HOUSE_FAILED)
+        return parse({ Protocol.parseSetup(reply.body) }) { throw TeleFailure(it, Trouble.HOUSE_FAILED) }
     }
 
     fun hello(hello: Hello): HelloResult {
@@ -100,10 +100,12 @@ class TeleApi(private val transport: Transport, private val urls: TeleUrls) {
     /** Corre un comando de botón (`data`) a nombre de esa persona o ese chat, como la pantalla de control. */
     fun command(caller: Caller, data: String): CommandResult {
         val reply = send({ transport.postJson(urls.command, Protocol.encodeCommand(caller, data)) }) {
-            return CommandResult.Failed(it)
+            return CommandResult.Failed(it, Trouble.NO_HOUSE)
         }
-        if (reply.status != 200) return CommandResult.Failed(describe(reply))
-        return CommandResult.Replied(parse({ Protocol.parseCommand(reply.body) }) { return CommandResult.Failed(it) })
+        if (reply.status != 200) return CommandResult.Failed(describe(reply), Trouble.HOUSE_FAILED)
+        return CommandResult.Replied(
+            parse({ Protocol.parseCommand(reply.body) }) { return CommandResult.Failed(it, Trouble.HOUSE_FAILED) },
+        )
     }
 
     /** La versión de la app publicada en el CT. */
