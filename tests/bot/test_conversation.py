@@ -10,7 +10,7 @@ import pytest
 
 from homeauto import slots
 from homeauto.ask import Answer
-from homeauto.bot.commands import Commands
+from homeauto.bot.commands import NOT_UNDERSTOOD, Commands
 from homeauto.pending import Conversation, PendingStore
 from homeauto.people import Household, PersonStore
 from homeauto.route import Decision, RouteError
@@ -271,7 +271,7 @@ def test_a_model_that_falls_over_mid_conversation_does_not_web_search(tmp_path):
 
     reply = cmd.free_text(OWNER, "a las 7")
 
-    assert "/ayuda" in reply
+    assert reply == NOT_UNDERSTOOD
     assert cmd.asker.asked == []
     assert talk.get(OWNER).command == "alarma"
 
@@ -281,7 +281,7 @@ def test_a_model_that_falls_over_with_nothing_pending_says_so(tmp_path):
 
     reply = cmd.free_text(OWNER, "apagá la tele")
 
-    assert "/ayuda" in reply
+    assert reply == NOT_UNDERSTOOD
     assert cmd.asker.asked == []
 
 

@@ -151,7 +151,8 @@ log = logging.getLogger("homeauto")
 
 # Telegram solo acepta a-z, 0-9 y guion bajo en los nombres de comando: sin
 # acentos. Los alias en español valen mientras no los lleven.
-START_COMMANDS = ("start", "help", "ayuda")
+HOME_COMMANDS = ("inicio", "start")
+HELP_COMMANDS = ("ayuda", "help")
 SAY_COMMANDS = ("decir",)
 CALL_COMMANDS = ("llamar", "llama")
 VOLUME_COMMANDS = ("volumen", "volume")
@@ -185,7 +186,8 @@ TURNS_COMMANDS = ("turnos",)
 MENU_COMMANDS = ("menu",)
 PURGE_COMMANDS = ("depurar",)
 ALL_COMMANDS = (
-    START_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS + WHERE_COMMANDS
+    HOME_COMMANDS + HELP_COMMANDS + SAY_COMMANDS + CALL_COMMANDS + VOLUME_COMMANDS + STOP_COMMANDS
+    + WHERE_COMMANDS
     + TIMER_COMMANDS + ALARM_COMMANDS + REMIND_COMMANDS + LIST_COMMANDS + CANCEL_COMMANDS
     + DEVICES_COMMANDS + USE_COMMANDS + OFF_COMMANDS + SCREEN_COMMANDS + WEATHER_COMMANDS
     + AGENDA_COMMANDS + STATUS_COMMANDS + SILENCE_COMMANDS + SPEAK_COMMANDS
@@ -786,7 +788,8 @@ def register(
         return callback
 
     routes = (
-        (START_COMMANDS, lambda chat_id, _text: commands.start(chat_id)),
+        (HOME_COMMANDS, commands.home),
+        (HELP_COMMANDS, commands.help),
         (SAY_COMMANDS, commands.say),
         (CALL_COMMANDS, commands.call),
         (VOLUME_COMMANDS, commands.volume),

@@ -5,7 +5,7 @@ Si erró, se deshace a mano — para eso está /cancelar.
 """
 
 from homeauto.ask import Answer
-from homeauto.bot.commands import Commands
+from homeauto.bot.commands import NO_ROUTER, NOT_UNDERSTOOD, Commands
 from homeauto.route import Decision, RouteError
 
 from tests.conftest import FakeSpeaker, StubRegistry, make_config
@@ -108,7 +108,7 @@ def test_a_router_failure_does_not_become_a_web_search():
     reply = cmd.free_text(OWNER, "apagá la tele")
 
     assert asker.asked == [], "no se cae en la pregunta cuando el router falla"
-    assert "/ayuda" in reply
+    assert reply == NOT_UNDERSTOOD
 
 
 def test_someone_not_on_the_list_gets_nowhere():
@@ -121,13 +121,13 @@ def test_someone_not_on_the_list_gets_nowhere():
     assert "lista" in reply.lower()
 
 
-def test_without_a_router_it_points_at_the_help():
+def test_without_a_router_it_points_at_the_topics():
     cmd, spk = build(router=None, asker=None)
     cmd.router = None
 
     reply = cmd.free_text(OWNER, "cómo viene el tiempo")
 
-    assert "/ayuda" in reply
+    assert reply == NO_ROUTER
     assert spk["parlante"].said == []
 
 
