@@ -13,13 +13,13 @@ paths:
 ## Quién puede usar el bot
 
 `ALLOWED_CHAT_IDS` es la lista blanca. `ALERT_CHAT_IDS`, un subconjunto, dice quién recibe
-los avisos del monitor y de Seq; ver **A quién le llega cada aviso**. Un chat que no está recibe su ID y nada más, sea
+los avisos del monitor, de Seq y de los desconocidos; ver **A quién le llega cada aviso**. Un chat que no está recibe su ID y nada más, sea
 por `/start`, cualquier comando, texto suelto, nota de voz o un botón.
 
 - **El ID va solo en el último renglón**: un toque largo en Telegram copia el renglón
   entero, y así sale el número sin el texto.
-- 🔴 **Los dueños se enteran solos.** `strangers.Strangers` les manda nombre, @usuario e ID
-  de quien escribió, con la línea `ALLOWED_CHAT_IDS=…` ya armada para pegar. La persona no
+- 🔴 **Los dueños se enteran solos.** `strangers.Strangers` les manda a los chats de alertas
+  (`Config.alert_recipients`) nombre, @usuario e ID de quien escribió, con la línea `ALLOWED_CHAT_IDS=…` ya armada para pegar. La persona no
   tiene que mandar el número por otro lado.
 - **Una sola vez por chat**, guardado en `StrangerStore`: un desconocido insistente no puede
   llenar el chat del dueño. Un aviso que no llegó a ningún dueño no se marca y se reintenta
@@ -37,10 +37,10 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 
 | Aviso | Llega a |
 | --- | --- |
-| monitor y Seq, dichos o en descanso | `ALERT_CHAT_IDS` |
-| re-aviso de una caída sin confirmar | `ALERT_CHAT_IDS`, con «✅ Confirmar»; en descanso o silencio, solo escrito |
+| monitor y Seq | `ALERT_CHAT_IDS`, solo escrito con «⚠️»; lo `urgent` además suena y se escribe con «🚨» |
+| re-aviso de una caída sin confirmar | `ALERT_CHAT_IDS`, solo escrito, con «✅ Confirmar» y «Ver estado» |
 | caída confirmada | los otros chats de alertas: «✅ <nombre> confirmó: X no responde» |
-| resumen y cierre | todos; la línea de caídos y los errores de la noche, solo a alertas |
+| resumen y cierre | todos; la línea de caídos y los errores de la noche, solo escritos a alertas y nunca dichos. Un cierre con solo caídos se escribe a alertas y al resto no le llega |
 | resumen semanal | todos, solo escrito |
 | alarmas, recordatorios y timers | los chats del aviso según su asignación: todos, o solo el de la persona asignada con Telegram; con posponer, la alarma también con «🔕 Apagar», recordatorios y timers con «Hecho» |
 | repetición de una alarma sin apagar | los chats del aviso, en cada repetición y solo con «🔕 Apagar», también en descanso; «Dejé de sonar» al tope, a todos si era de una persona |
@@ -48,7 +48,7 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | re-aviso de un recordatorio o timer sin «Hecho» | los chats del aviso, solo con «Hecho»; el último, a todos si era de una persona. Además se dice en los equipos del aviso, salvo en descanso, silencio o vacaciones |
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
 | algo programado que un feriado saltea | los chats del aviso, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
-| corte de internet | solo el parlante, sin chat; al volver, todos: «🌐 Internet se cortó de … a …» |
+| corte de internet | solo el parlante, sin chat; al volver, el parlante lo dice y a alertas se escribe «🌐 Internet se cortó de … a …» |
 | aviso antes de cada comida (`MENU_LUNCH_AT`, `MENU_DINNER_AT`) | todos, solo escrito, con «🛒 Pasar a compras» y «🔄 Otra idea»; en vacaciones, nada |
 | plato del menú cambiado con `/menu otra` | los demás chats, solo escrito: «🍽 <nombre> cambió la cena del miércoles 21/10: …» |
 | vacaciones activadas o cortadas | los demás chats: «🧳 <nombre> activó vacaciones hasta el …» / «… cortó las vacaciones» |
@@ -59,10 +59,13 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | lo hecho desde `/control` | lo mismo que el botón o el comando en Telegram: los demás chats, con «<nombre> (pantalla)» |
 | alarma apagada o «Hecho» desde `/control` por una persona sin Telegram | todos los chats del aviso, con «<nombre> (pantalla)» |
 | respuesta de un comando | el chat que lo escribió |
-| aviso de un desconocido | todos (`Strangers`) |
+| aviso de un desconocido | `ALERT_CHAT_IDS` (`Strangers`) |
 
 - **`ALERT_CHAT_IDS` vacía es todos**, que es como se comportaba antes de existir. Un
   despliegue viejo no cambia nada.
+- ⚠️ **Con el bot abierto, lo técnico que no es urgente no le llega a nadie.** Sin
+  `ALERT_CHAT_IDS` ni `ALLOWED_CHAT_IDS` no hay chat de alertas, y el monitor, Seq y la
+  vuelta de internet solo escriben.
 - 🔴 **Un ID de alertas fuera de `ALLOWED_CHAT_IDS` hace fallar el arranque.** El aviso le
   llegaría con botones que el bot le rechaza.
 - **`HouseVoice.tell(text, others)`** es la única puerta: `text` va a los chats de alertas y

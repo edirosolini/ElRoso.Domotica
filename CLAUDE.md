@@ -85,7 +85,7 @@ Todo lo que la casa dice pasa por el mismo lugar, venga de donde venga:
 ```
 mensaje suelto → route.Router → slots.missing() → falta un dato: pregunta y espera
                     ↓
-/decir · /preguntar · API HTTP · alarma · evento de agenda · monitor
+/decir · /preguntar · API HTTP · alarma · evento de agenda · monitor urgente
                     ↓
         HouseVoice.announce()      ← horario de descanso + a qué equipos
                     ↓

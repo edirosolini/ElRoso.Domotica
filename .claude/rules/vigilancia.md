@@ -22,9 +22,10 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
 - **Un Seq por VPS**, con una clave de config por instancia (`SEQ_URL_<ALIAS>` /
   `SEQ_API_KEY_<ALIAS>`), igual que los calendarios y por el mismo motivo: una lista separada
   por comas sería ambigua porque las URLs traen `:` y `/` propios.
-- 🔴 **El alias de un Seq se dice en voz alta.** Va dentro de "hay dos errores nuevos en Seq
-  de hosting externo", que se sintetiza. Por eso `SEQ_ALIAS_SHAPE` prohíbe dígitos y guiones
-  medios: es la única config del proyecto cuyo *nombre* llega al parlante.
+- 🔴 **El alias de un Seq va en la frase del aviso.** "hay dos errores nuevos en Seq de
+  hosting externo" se arma y se pule como texto hablado, aunque hoy solo se escribe: Seq
+  nunca es urgente. Por eso `SEQ_ALIAS_SHAPE` prohíbe dígitos y guiones medios: con un dígito,
+  el pulidor descarta cada reescritura.
 - **El guion bajo separa palabras y al hablar se dice como espacio.** La primera versión
   exigía una sola palabra y el primer VPS real que se cargó ya no entraba
   (`SEQ_URL_HOSTING_EXTERNO`): la config quedó sin poder leerse y el servicio no hubiera
@@ -54,14 +55,12 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   La única insistencia es la de una caída que nadie confirmó.
 - 🔴 **Una caída sin confirmar se re-avisa** a los cinco, diez y quince minutos
   (`REMIND_DELAYS`) y después cada media hora (`REMIND_EVERY`), hasta que alguien toca
-  «✅ Confirmar» o el servicio vuelve. Hablado, «Atención: X sigue sin responder.», pulido
-  como el resto; escrito, «🚨 Sigue caído: X» con el detalle, solo a alertas y con los mismos
-  botones que la caída.
-- 🔴 **Lo urgente despierta una vez; insistir no despierta.** El primer aviso conserva
-  `urgent`. Los re-avisos van con `urgent=False` y `chime=chime.ALARM`: suenan con los tres
-  beeps, pero en descanso o con «Silenciar 1 h» solo se escriben. Para eso
-  `HouseVoice.announce()` acepta `chime`; sin él, suena solo lo urgente. **Silenciar no
-  confirma**: pasado el silencio, vuelve a sonar.
+  «✅ Confirmar» o el servicio vuelve. **Solo escrito**: «🚨 Sigue caído: X» con el detalle,
+  a alertas y con los mismos botones que la caída (`main._still_down()`, por
+  `HouseVoice.tell()`). Sin parlante ni beeps, también fuera del descanso.
+- 🔴 **Lo urgente despierta una vez; insistir no despierta.** Solo el primer aviso de una caída
+  `urgent` suena, con los tres beeps. Lo demás del monitor y de Seq va escrito a alertas con
+  «⚠️» y nunca pasa por el parlante (`main._alert()`).
 - ⚠️ **Los re-avisos cuelgan de la vuelta del monitor**, no de un timer propio: salen en la
   primera vuelta pasada su hora, así que se atrasan hasta un `CHECK_INTERVAL_SECONDS`.
 - **Se confirma por chequeo y solo desde `ALERT_CHAT_IDS`.** El botón manda
@@ -86,19 +85,18 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
 - ⚠️ **La fila vieja no se borra, se deja de mostrar.** Si algún día se vuelve a usar ese
   nombre, resucita con su `alerted` de entonces: en `alerted=1` se cree que ya avisó y no
   vuelve a avisar de la caída. Borrarla a mano en `service_status` es el arreglo.
-- ⚠️ **El `name` de un chequeo también se dice en voz alta** ("atención, hosting externo no
-  responde") y ahí **no hay validación** que lo frene, a diferencia del alias de Seq. Un
+- ⚠️ **El `name` de un chequeo también se dice en voz alta** si el chequeo es `urgent`
+  ("atención, hosting externo no responde"), y ahí **no hay validación** que lo frene, a diferencia del alias de Seq. Un
   nombre con dígitos o guiones se va a escuchar mal.
-- **La recuperación nunca es urgente.** Nadie se despierta por una buena noticia.
-- **Los avisos traen botones**: el del monitor, «Ver estado» y «Silenciar 1 h», y la caída
-  y sus re-avisos además «✅ Confirmar» adelante —la recuperación no—; el de Seq,
-  solo «Silenciar 1 h», porque `/estado` muestra los chequeos y no Seq. `HouseVoice` los pasa
-  también cuando el aviso cae en descanso y solo se escribe.
-- 🔴 **«Silenciar 1 h» no calla lo urgente; las vacaciones sí**, decisión del dueño. Es
-  `/silencio 1h`, y lo urgente pasa por encima de cualquier silencio, fijo o pedido: la
-  próxima caída urgente suena igual. Lo que calla es lo demás —la recuperación, Seq, la
-  lluvia, la agenda—. La única excepción es el **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`: ahí una caída urgente
-  solo se escribe, con sus botones.
+- **La recuperación nunca es urgente**, así que solo se escribe. Nadie se despierta por una
+  buena noticia.
+- **Los avisos del monitor traen «Ver estado»**, y la caída y sus re-avisos además
+  «✅ Confirmar» adelante —la recuperación no—. **Los de Seq no traen botones**: `/estado`
+  muestra los chequeos y no Seq.
+- 🔴 **`/silencio` no calla lo urgente; las vacaciones sí**, decisión del dueño. Lo urgente
+  pasa por encima de cualquier silencio, fijo o pedido: la próxima caída urgente suena igual.
+  La única excepción es el **Modo vacaciones**, en `.claude/rules/descanso-y-feriados.md`:
+  ahí una caída urgente solo se escribe, con sus botones.
 - Un campo desconocido en `checks.json` **hace fallar el arranque**. Un typo silencioso en
   `urgent` significaría que nunca te despierta.
 - 🔴 **El aviso dice el ambiente y la aplicación, y salen del evento.** "Hay dos errores en Seq
@@ -114,8 +112,8 @@ mejor que un ping desde afuera: **Seq dice por qué se rompió algo**, no solo q
   el mapa está en `SPOKEN_ENVIRONMENTS` y lo que no figura se dice tal cual.
 - **Un evento sin esas propiedades no se pinta como staging**: sale como `❔ sin identificar`.
   Decir "pruebas" de algo que no sabemos sería mentir hacia el lado tranquilo.
-- 🔴 **Ningún error de Seq despierta.** Decisión del dueño: en horario de descanso van solo al
-  chat, y el resumen de la mañana los recuerda. Ver **Resumen de la mañana**, en `.claude/rules/resumenes.md`.
+- 🔴 **Ningún error de Seq suena.** Decisión del dueño: van solo escritos a alertas, a
+  cualquier hora, y el resumen de la mañana los recuerda por escrito. Ver **Resumen de la mañana**, en `.claude/rules/resumenes.md`.
 - ⚠️ Los nombres de campo que devuelve la API de Seq se verificaron contra la instancia real
   recién al cargar la clave; el parser acepta variantes igual, por las dudas.
 
@@ -151,7 +149,7 @@ tiene una ruta estática al CT 202, que hace MASQUERADE sobre `wg0`. El túnel d
   no llega. No es urgente: en descanso, con `/silencio` o de vacaciones no se dice y **se pierde**, no se
   repite al terminar el descanso. No hay re-aviso.
 - **Al volver, si se había declarado**, se dice «Volvió internet. Estuvo cortado …» y se
-  escribe a todos «🌐 Internet se cortó de HH:MM a HH:MM (N min)». La duración cuenta desde
+  escribe solo a los chats de alertas «🌐 Internet se cortó de HH:MM a HH:MM (N min)». La duración cuenta desde
   la primera ronda fallida; hablada sale de `verbalize.duration()` —«una hora y un
   minuto»— y pasado un día es «más de un día». Se escribe aunque el «Se cortó» se haya
   perdido en el descanso.
