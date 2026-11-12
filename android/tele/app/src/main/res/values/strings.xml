@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Domótica</string>
-    <string name="ok_to_silence">OK para apagar</string>
-    <string name="change_tele">Cambiar tele o persona</string>
+    <string name="ok_to_silence">OK = 🔕 Apagar alarma</string>
+    <string name="alarm_silenced">🔕 Alarma apagada</string>
     <string name="reminder_for">Para %1$s</string>
-    <string name="reminder_ok">OK para marcar hecho</string>
+    <string name="reminder_ok">OK = Hecho · Atrás = más tarde</string>
+    <string name="reminder_close">OK o Atrás = cerrar</string>
     <string name="reminder_waiting">⏳</string>
     <string name="reminder_done">✅ Hecho</string>
-    <string name="reminder_failed">No se pudo marcar: %1$s</string>
     <string name="dream_label">Kiosco de la casa</string>
     <string name="dream_offline">Sin conexión con la casa</string>
 </resources>

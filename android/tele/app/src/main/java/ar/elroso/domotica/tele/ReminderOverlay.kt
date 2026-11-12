@@ -22,6 +22,7 @@ import ar.elroso.domotica.tele.core.CommandResult
 import ar.elroso.domotica.tele.core.Reminder
 import ar.elroso.domotica.tele.core.ReminderBoard
 import ar.elroso.domotica.tele.core.ReminderKey
+import ar.elroso.domotica.tele.core.Remote
 import ar.elroso.domotica.tele.core.TeleApi
 import kotlin.concurrent.thread
 
@@ -116,8 +117,9 @@ class ReminderOverlay(
             typeface = Typeface.DEFAULT_BOLD
         })
         card.forName?.let { content.addView(text(context.getString(R.string.reminder_for, it), 28f, MUTED_COLOR), spaced(density)) }
-        val line = if (who == null) null else text(context.getString(R.string.reminder_ok), 26f, MUTED_COLOR)
-        line?.let { content.addView(it, spaced(density)) }
+        val legend = if (who == null) R.string.reminder_close else R.string.reminder_ok
+        val line = text(context.getString(legend), 26f, MUTED_COLOR)
+        content.addView(line, spaced(density))
         val frame = object : FrameLayout(context) {
             override fun dispatchKeyEvent(event: KeyEvent): Boolean = onKey(event)
         }.apply {
@@ -164,30 +166,31 @@ class ReminderOverlay(
         ViewGroup.LayoutParams.WRAP_CONTENT,
     ).apply { topMargin = (16 * density).toInt() }
 
-    /** El OK marca hecho; cualquier otra tecla que llegue cierra el cartel hasta el próximo re-aviso. */
+    /** OK y Atrás según `ReminderKey`; cualquier otra tecla se consume sin hacer nada. */
     private fun onKey(event: KeyEvent): Boolean {
         val card = shown ?: return false
         if (closing || event.action != KeyEvent.ACTION_UP || event.repeatCount != 0) return true
-        if (event.keyCode in OK_KEYS) {
-            ok(card)
-        } else {
-            Tele.log("recordatorio ${card.id} cerrado con la tecla ${KeyEvent.keyCodeToString(event.keyCode)}")
-            board.dismiss(card)
-            render()
+        val key = when (event.keyCode) {
+            in OK_KEYS -> Remote.OK
+            KeyEvent.KEYCODE_BACK -> Remote.BACK
+            else -> Remote.OTHER
+        }
+        when (ReminderKey.action(key, caller())) {
+            ReminderKey.Action.DONE -> ok(card)
+            ReminderKey.Action.LATER, ReminderKey.Action.CLOSE -> {
+                Tele.log("recordatorio ${card.id} cerrado con la tecla ${KeyEvent.keyCodeToString(event.keyCode)}")
+                board.dismiss(card)
+                render()
+            }
+            ReminderKey.Action.NONE -> Unit
         }
         return true
     }
 
     private fun ok(card: Reminder) {
         if (sending) return
-        val who = caller()
-        val command = ReminderKey.doneCommand(card, who)
-        if (who == null || command == null) {
-            Tele.log("recordatorio ${card.id} sin persona elegida: el OK solo cierra")
-            board.dismiss(card)
-            render()
-            return
-        }
+        val who = caller() ?: return
+        val command = ReminderKey.doneCommand(card, who) ?: return
         Tele.log("OK del control: $command")
         sending = true
         status?.text = context.getString(R.string.reminder_waiting)
@@ -214,7 +217,7 @@ class ReminderOverlay(
             }
             is CommandResult.Failed -> {
                 Tele.log("el hecho ${card.id} no llegó al CT: ${result.reason}")
-                if (here) status?.text = context.getString(R.string.reminder_failed, result.reason)
+                if (here) status?.text = result.trouble.text
             }
         }
     }

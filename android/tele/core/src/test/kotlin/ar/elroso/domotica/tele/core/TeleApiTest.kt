@@ -47,6 +47,7 @@ class TeleApiTest {
         val error = assertThrows(TeleFailure::class.java) { api.setup() }
 
         assertEquals("HTTP 404: no existe", error.message)
+        assertEquals(Trouble.HOUSE_FAILED, error.trouble)
     }
 
     @Test
@@ -56,6 +57,7 @@ class TeleApiTest {
         val error = assertThrows(TeleFailure::class.java) { api.setup() }
 
         assertEquals("sin red", error.message)
+        assertEquals(Trouble.NO_HOUSE, error.trouble)
     }
 
     @Test
@@ -167,8 +169,30 @@ class TeleApiTest {
         transport.reply(400, """{"error": "Ese chat no es de la casa."}""")
         transport.fail()
 
-        assertEquals(CommandResult.Failed("HTTP 400: Ese chat no es de la casa."), api.command(Caller.Chat(1), "callar 7"))
-        assertEquals(CommandResult.Failed("sin red"), api.command(Caller.Chat(1), "callar 7"))
+        assertEquals(
+            CommandResult.Failed("HTTP 400: Ese chat no es de la casa.", Trouble.HOUSE_FAILED),
+            api.command(Caller.Chat(1), "callar 7"),
+        )
+        assertEquals(CommandResult.Failed("sin red", Trouble.NO_HOUSE), api.command(Caller.Chat(1), "callar 7"))
+    }
+
+    @Test
+    fun commandWithAServerErrorOrAnUnreadableReplyIsTheHouseFailing() {
+        transport.reply(500, "")
+        transport.reply(200, "no es json")
+
+        assertEquals(CommandResult.Failed("HTTP 500", Trouble.HOUSE_FAILED), api.command(Caller.Chat(1), "callar 7"))
+        assertEquals(CommandResult.Failed("respuesta ilegible del CT", Trouble.HOUSE_FAILED), api.command(Caller.Chat(1), "callar 7"))
+    }
+
+    @Test
+    fun setupWithAnUnreadableReplyIsTheHouseFailing() {
+        transport.reply(200, "no es json")
+
+        val error = assertThrows(TeleFailure::class.java) { api.setup() }
+
+        assertEquals("respuesta ilegible del CT", error.message)
+        assertEquals(Trouble.HOUSE_FAILED, error.trouble)
     }
 
     @Test

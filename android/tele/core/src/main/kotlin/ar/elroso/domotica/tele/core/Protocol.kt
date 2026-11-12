@@ -23,13 +23,17 @@ data class Person(@SerialName("chat_id") val chatId: Long, val name: String)
 @Serializable
 data class Resident(val id: Long, val name: String, @SerialName("chat_id") val chatId: Long? = null)
 
-/** Con qué se configura la app: las teles con pantalla, los chats y el padrón de la casa. */
+/** Con qué se configura la app: las teles con pantalla, su nombre visible, los chats y el padrón de la casa. */
 @Serializable
 data class Setup(
     val devices: List<String> = emptyList(),
     val people: List<Person> = emptyList(),
     val persons: List<Resident> = emptyList(),
-)
+    val names: Map<String, String> = emptyMap(),
+) {
+    /** El nombre visible de la tele, o el alias si no tiene. */
+    fun label(alias: String): String = names[alias]?.takeIf { it.isNotBlank() } ?: alias
+}
 
 /** El registro de la tele que se manda en `hello`. */
 @Serializable

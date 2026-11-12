@@ -11,8 +11,10 @@ import android.widget.ScrollView
 import android.widget.TextView
 import ar.elroso.domotica.tele.core.Owner
 import ar.elroso.domotica.tele.core.Owners
+import ar.elroso.domotica.tele.core.Setup
 import ar.elroso.domotica.tele.core.TeleChoice
 import ar.elroso.domotica.tele.core.TeleFailure
+import ar.elroso.domotica.tele.core.Trouble
 import kotlin.concurrent.thread
 
 /** Primer uso o cambio: se elige con el control qué tele es y de quién, con lo que manda `setup`. */
@@ -39,31 +41,35 @@ class SetupActivity : Activity() {
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 result.fold(
-                    onSuccess = { chooseDevice(it.devices, Owners.of(it)) },
+                    onSuccess = { chooseDevice(it, Owners.of(it)) },
                     onFailure = {
                         Tele.log("no pude leer la configuración del CT: ${it.message}")
-                        show("No pude hablar con la casa (${it.message}).", "Reintentar" to { load() })
+                        val trouble = (it as? TeleFailure)?.trouble ?: Trouble.HOUSE_FAILED
+                        show(trouble.text, "Reintentar" to { load() })
                     },
                 )
             }
         }
     }
 
-    private fun chooseDevice(devices: List<String>, owners: List<Owner>) {
-        if (devices.isEmpty()) {
+    private fun chooseDevice(setup: Setup, owners: List<Owner>) {
+        if (setup.devices.isEmpty()) {
             show("La casa no tiene teles con pantalla.", "Reintentar" to { load() })
             return
         }
-        show("¿Qué tele es esta?", *devices.map { alias -> alias to { chooseOwner(alias, owners) } }.toTypedArray())
+        show(
+            "¿Qué tele es esta?",
+            *setup.devices.map { alias -> setup.label(alias) to { chooseOwner(alias, setup.label(alias), owners) } }.toTypedArray(),
+        )
     }
 
-    private fun chooseOwner(alias: String, owners: List<Owner>) {
+    private fun chooseOwner(alias: String, name: String, owners: List<Owner>) {
         if (owners.isEmpty()) {
             finishSetup(TeleChoice.of(alias, null))
             return
         }
         show(
-            "¿De quién es la tele $alias?",
+            "¿De quién es la tele $name?",
             *owners.map { owner -> owner.label to { finishSetup(TeleChoice.of(alias, owner.caller)) } }.toTypedArray(),
         )
     }
