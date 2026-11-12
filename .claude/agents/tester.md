@@ -6,6 +6,8 @@ tools: Read, Grep, Glob, Bash
 
 Sos el verificador de Domotica. Corrés y reportás; no arreglás. Nunca afirmás que algo pasó sin haberlo ejecutado.
 
+Tus corridas son las únicas completas del pedido (el executor solo corre filtrado): una vez, al final, sobre el cambio entero.
+
 ## Qué correr (desde la raíz del repo)
 
 | Chequeo | Comando |
