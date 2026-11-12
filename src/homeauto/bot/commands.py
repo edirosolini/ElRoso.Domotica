@@ -110,6 +110,10 @@ _CLOCK = re.compile(r"\d{1,2}[:.]\d{2}")
 _LIST_SUFFIX = re.compile(r"\s+(?:de|en)\s+(.+)$", re.IGNORECASE)
 ALL_ITEMS = "todo"
 SNOOZE_DEFAULT = "10m"
+
+# Cómo arranca la confirmación de un aviso agendado, después de «Listo:».
+TIMER_LEAD = "te aviso"
+ALARM_LEAD = "la alarma suena"
 # Un botón que contesta la pregunta pendiente en vez de correr un comando.
 ANSWER_MARK = "»"
 # Un ítem de lista referido por id, como lo manda un botón: «id:17».
@@ -292,6 +296,9 @@ _ALOUD = contextvars.ContextVar("aloud", default=False)
 # La respuesta sin el «Entendí: /clima», que grabado era el eco del pedido.
 _SPOKEN = contextvars.ContextVar("spoken", default="")
 
+# El comando en curso agendó algo y su «Listo:» reemplaza al «Entendí:».
+_CONFIRMED = contextvars.ContextVar("confirmed", default=False)
+
 # Los botones que ofrece la respuesta en curso.
 _ACTIONS = contextvars.ContextVar("actions", default=())
 
@@ -471,6 +478,24 @@ def format_when(when: datetime, now: datetime) -> str:
     if days == 1:
         return f"mañana {clock}"
     return f"{when.strftime('%d/%m')} {clock}"
+
+
+def _at(when: datetime) -> str:
+    """La hora de un aviso: «a las 7:30», «a la 1:00»."""
+    article = "la" if when.hour == 1 else "las"
+    return f"a {article} {when.hour}:{when.minute:02d}"
+
+
+def _confirm_when(when: datetime, now: datetime, cadence: str = "") -> str:
+    """Cuándo suena un aviso recién agendado: «hoy a las 10:20», «todos los días a las 7:30»."""
+    if cadence:
+        return f"{cadence} {_at(when)}"
+    days = (when.date() - now.date()).days
+    if days == 0:
+        return f"hoy {_at(when)}"
+    if days == 1:
+        return f"mañana {_at(when)}"
+    return f"el {when.strftime('%d/%m')} {_at(when)}"
 
 
 class Commands:
@@ -1777,9 +1802,16 @@ class Commands:
         if self.conversation:
             self.conversation.forget(chat_id)
         understood = f"/{decision.command} {decision.argument}".strip()
-        answer = run(chat_id, decision.argument)
+        token = _CONFIRMED.set(False)
+        try:
+            answer = run(chat_id, decision.argument)
+            confirmed = _CONFIRMED.get()
+        finally:
+            _CONFIRMED.reset(token)
         if not _SPOKEN.get():
             _SPOKEN.set(answer)
+        if confirmed:
+            return f"{note}{answer}"
         return f"{note}Entendí: {understood}\n\n{answer}"
 
     def _run_arranged(self, chat_id: int, command: str, text: str) -> str:
@@ -2101,7 +2133,8 @@ class Commands:
         chat_id: int,
         text: str,
         repeat: str,
-        label: str,
+        lead: str,
+        cadence: str = "",
         days: tuple[int, ...] | None = None,
         kind: str = ALARM,
         monthday: int | None = None,
@@ -2141,9 +2174,10 @@ class Commands:
             author_id=self._author(chat_id),
         )
         offer(_undo_button(job.id))
+        _CONFIRMED.set(True)
         reply = (
-            f"{label} en {_labels(aliases)} "
-            f"para {format_when(when, now)}: «{message}»"
+            f"Listo: {lead} {_confirm_when(when, now, cadence)} "
+            f"en {_labels(aliases)}: «{message}»"
         )
         if assignment.label:
             reply += f" · {assignment.label}"
@@ -2151,7 +2185,7 @@ class Commands:
         return f"{reply}\n{note}" if note else reply
 
     def timer(self, chat_id: int, text: str) -> str:
-        return self._schedule(chat_id, text, ONCE, "Programado", kind=REMINDER)
+        return self._schedule(chat_id, text, ONCE, TIMER_LEAD, kind=REMINDER)
 
     def alarm(self, chat_id: int, text: str) -> str:
         return self._repeating(chat_id, text, ALARM)
@@ -2171,10 +2205,10 @@ class Commands:
         except UnknownPerson as exc:
             return str(exc)
 
-        noun, example = (
-            ("Recordatorio", "/recordar lun-vie 7:30 salir al colegio")
+        lead, example = (
+            (TIMER_LEAD, "/recordar lun-vie 7:30 salir al colegio")
             if kind == REMINDER
-            else ("Alarma", "/alarma lun-vie 5:30 arriba")
+            else (ALARM_LEAD, "/alarma lun-vie 5:30 arriba")
         )
         head, _, tail = rest.strip().partition(" ")
         prefix = f"{TARGET_WORD} {','.join(aliases)} "
@@ -2189,13 +2223,13 @@ class Commands:
                 command = "recordar" if kind == REMINDER else "alarma"
                 return f"Con mensual necesito una hora. Ej: /{command} mensual 10 9:00 pagar la luz"
             return self._schedule(
-                chat_id, prefix + after_day, MONTHLY, f"{noun} {monthly_label(monthday)}",
+                chat_id, prefix + after_day, MONTHLY, lead, monthly_label(monthday),
                 kind=kind, monthday=monthday, assignment=assignment,
             )
 
         if head.lower() in slots.DAILY_WORDS:
             return self._schedule(
-                chat_id, prefix + tail, DAILY, f"{noun} todos los días", kind=kind,
+                chat_id, prefix + tail, DAILY, lead, "todos los días", kind=kind,
                 assignment=assignment,
             )
 
@@ -2207,7 +2241,7 @@ class Commands:
                 return f"Con días de la semana necesito una hora. Ej: {example}"
             skip = skips_holidays(head)
             return self._schedule(
-                chat_id, prefix + tail, WEEKLY, f"{noun} {weekdays_label(days, skip)}",
+                chat_id, prefix + tail, WEEKLY, lead, weekdays_label(days, skip),
                 days=days, kind=kind, skip_holidays=skip, assignment=assignment,
             )
 
@@ -2217,7 +2251,7 @@ class Commands:
                 f" o {example}. Para una sola vez, /timer mañana 10:00 llamar al médico"
             )
         return self._schedule(
-            chat_id, prefix + rest, ONCE, noun, kind=kind, assignment=assignment
+            chat_id, prefix + rest, ONCE, lead, kind=kind, assignment=assignment
         )
 
     def postpone(self, chat_id: int, text: str = "") -> str:
@@ -2235,7 +2269,8 @@ class Commands:
         if job is None:
             return "No sonó nada en la última media hora: no hay nada que posponer."
         offer(_undo_button(job.id))
-        return f"Pospuesto para {format_when(job.when, self.clock())}: «{job.message}»"
+        _CONFIRMED.set(True)
+        return f"Listo: te vuelvo a avisar {_confirm_when(job.when, self.clock())}: «{job.message}»"
 
     def list(self, chat_id: int) -> str:
         denial = self._denial(chat_id)

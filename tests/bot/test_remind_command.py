@@ -65,7 +65,7 @@ def test_a_daily_reminder(cmd):
     assert job.repeat == "daily"
     assert job.when == NOW.replace(hour=8)
     assert job.message == "tomar la pastilla"
-    assert reply.startswith("Recordatorio todos los días en ")
+    assert reply.startswith("Listo: te aviso todos los días a las 8:00 en ")
 
 
 def test_a_reminder_on_some_days(cmd):
@@ -75,7 +75,7 @@ def test_a_reminder_on_some_days(cmd):
     assert job.kind == REMINDER
     assert job.repeat == "weekly"
     assert job.weekdays == [1, 2, 3, 4, 5]
-    assert "Recordatorio lun, mar, mié, jue, vie" in reply
+    assert "te aviso lun, mar, mié, jue, vie a las 7:30" in reply
 
 
 def test_lun_vie_rings_on_holidays(cmd):
@@ -91,7 +91,7 @@ def test_working_days_do_not_ring_on_holidays(cmd):
     [job] = cmd.reminders.list(OWNER)
     assert (job.kind, job.repeat, job.weekdays) == (REMINDER, "weekly", [1, 2, 3, 4, 5])
     assert job.skip_holidays is True
-    assert "Recordatorio días hábiles" in reply
+    assert "te aviso días hábiles a las 7:00" in reply
     assert "días hábiles" in cmd.list(OWNER)
 
 
@@ -111,7 +111,7 @@ def test_a_monthly_reminder(cmd):
     assert job.repeat == "monthly"
     assert job.monthday == 10
     assert job.when == datetime(2026, 10, 10, 9, 0)
-    assert reply.startswith("Recordatorio el 10 de cada mes en ")
+    assert reply.startswith("Listo: te aviso el 10 de cada mes a las 9:00 en ")
 
 
 def test_a_monthly_reminder_on_the_thirty_first_warns_about_short_months(cmd):

@@ -218,7 +218,7 @@ def test_monthly_alarm_lands_on_its_day_this_month(cmd):
     assert job.monthday == 10
     assert job.when == datetime(2026, 9, 10, 9, 0)  # NOW es 29 de agosto
     assert job.message == "pagar la luz"
-    assert reply.startswith("Alarma el 10 de cada mes en ")
+    assert reply.startswith("Listo: la alarma suena el 10 de cada mes a las 9:00 en ")
 
 
 def test_monthly_alarm_later_today_stays_today(cmd):
@@ -276,7 +276,7 @@ def test_a_working_days_alarm_does_not_ring_on_holidays(cmd):
 
     [job] = cmd.reminders.list(OWNER)
     assert (job.repeat, job.weekdays, job.skip_holidays) == ("weekly", [1, 2, 3, 4, 5], True)
-    assert "Alarma días hábiles" in reply
+    assert "la alarma suena días hábiles a las 6:30" in reply
 
 
 def test_a_lun_vie_alarm_rings_on_holidays(cmd):
@@ -522,3 +522,54 @@ def test_a_time_after_para_is_not_blamed_on_the_roster(cmd, command, text):
 
     assert cmd.reminders.list(OWNER) == []
     assert "padrón" not in reply
+
+
+# --- «Listo:» en castellano ---
+
+
+def test_a_timer_confirms_in_plain_words(cmd):
+    assert cmd.timer(OWNER, "10m sacá la pizza") == (
+        "Listo: te aviso hoy a las 21:10 en Parlante: «sacá la pizza»"
+    )
+
+
+def test_an_alarm_tomorrow_says_when_it_rings(cmd):
+    assert cmd.alarm(OWNER, "7:30 arriba") == (
+        "Listo: la alarma suena mañana a las 7:30 en Parlante: «arriba»"
+    )
+
+
+def test_a_daily_alarm_says_every_day(cmd):
+    assert cmd.alarm(OWNER, "diaria 7:30 arriba") == (
+        "Listo: la alarma suena todos los días a las 7:30 en Parlante: «arriba»"
+    )
+
+
+def test_a_timer_further_away_says_the_date(cmd):
+    reply = cmd.timer(OWNER, "48h turno")
+
+    assert reply == "Listo: te aviso el 31/08 a las 21:00 en Parlante: «turno»"
+
+
+def test_one_oclock_is_singular(cmd):
+    assert "mañana a la 1:00 " in cmd.alarm(OWNER, "1:00 arriba")
+
+
+def test_a_reminder_for_someone_says_for_whom(cmd):
+    cmd.household.add("China")
+
+    reply = cmd.remind(OWNER, "para China lun-vie 7:30 salir al colegio")
+
+    assert reply == (
+        "Listo: te aviso lun, mar, mié, jue, vie a las 7:30 en Parlante: "
+        "«salir al colegio» · para China"
+    )
+
+
+def test_a_monthly_alarm_keeps_the_short_month_note(cmd):
+    reply = cmd.alarm(OWNER, "mensual 31 9:00 pagar el alquiler")
+
+    assert reply == (
+        "Listo: la alarma suena el 31 de cada mes a las 9:00 en Parlante: «pagar el alquiler»\n"
+        "Los meses que no tienen 31, el último día."
+    )
