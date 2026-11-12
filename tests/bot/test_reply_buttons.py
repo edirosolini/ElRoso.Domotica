@@ -100,7 +100,7 @@ def test_a_postponed_alarm_offers_to_cancel_it(cmd):
 
     job = cmd.reminders.list(OWNER)[0]
     assert reply.actions == (("🗑 Borrar este aviso", f"cancelar {job.id}"),)
-    assert reply.text.startswith("Pospuesto para ")
+    assert reply.text == "Listo: te vuelvo a avisar hoy a las 10:10: «arriba»"
 
 
 # --- #6 cancelar desde la lista ----------------------------------------------
@@ -252,7 +252,7 @@ def test_what_was_understood_also_offers_to_undo_it(cmd):
 
     reply = with_actions(cmd.free_text, OWNER, "avisame en diez minutos lo de la pizza")
 
-    assert reply.text.startswith("Entendí:")
+    assert reply.text.startswith("Listo:")
     assert data(reply) == [f"cancelar {cmd.reminders.list(OWNER)[0].id}"]
 
 

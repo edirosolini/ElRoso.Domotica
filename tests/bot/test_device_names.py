@@ -117,7 +117,7 @@ def test_timer_answers_with_the_name_and_stores_the_alias(tmp_path):
 
     reply = cmd.timer(OWNER, "en Recámara 10m sacá la pizza")
 
-    assert " en Recámara " in reply
+    assert " en Recámara: " in reply
     assert [job.device for job in store.pending(OWNER)] == ["recamara"]
 
 
@@ -126,7 +126,7 @@ def test_alarm_answers_with_the_name(tmp_path):
 
     reply = cmd.alarm(OWNER, "en habitacion diaria 7:30 arriba")
 
-    assert " en Habitación " in reply
+    assert " en Habitación: " in reply
 
 
 def test_list_shows_the_name(tmp_path):

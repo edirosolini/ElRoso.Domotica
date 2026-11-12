@@ -57,7 +57,7 @@ def test_without_a_duration_it_postpones_ten_minutes(cmd):
     jobs = cmd.reminders.list(OWNER)
     assert [job.when for job in jobs] == [NOW + timedelta(minutes=10)]
     assert jobs[0].message == "arriba"
-    assert "07:41" in reply
+    assert "a las 7:41" in reply
     assert "arriba" in reply
 
 

@@ -128,7 +128,7 @@ def test_a_finished_conversation_runs_the_command(tmp_path):
 
     reply = cmd.free_text(OWNER, "todos los días")
 
-    assert "/alarma diaria 7:00 arriba" in reply
+    assert reply == "Listo: la alarma suena todos los días a las 7:00 en Parlante: «arriba»"
     assert [a[2] for a in cmd.reminders.added] == ["arriba"]
     assert talk.get(OWNER) is None
 
@@ -304,7 +304,7 @@ def test_a_complete_reminder_for_someone_runs_without_asking(tmp_path, argument)
 
     reply = cmd.free_text(OWNER, "recordale a China tomar la pastilla todos los días a las ocho")
 
-    assert reply.startswith("Entendí: /recordar")
+    assert reply.startswith("Listo: te aviso todos los días a las 8:00 en Parlante")
     assert cmd.reminders.assigned == [("person", china.id)]
     assert talk.get(OWNER) is None
 
@@ -356,3 +356,47 @@ def test_a_name_outside_the_roster_is_answered_not_asked(tmp_path):
     assert "«Pedro» no está en el padrón" in reply
     assert cmd.reminders.added == []
     assert talk.get(OWNER) is None
+
+
+# --- «Listo:» en vez de «Entendí:» ---
+
+
+@pytest.mark.parametrize(
+    "decision",
+    [
+        Decision("timer", "10m sacá la pizza"),
+        Decision("alarma", "diaria 7:30 arriba"),
+        Decision("recordar", "lun-vie 7:30 salir al colegio"),
+    ],
+)
+def test_what_got_scheduled_says_done_instead_of_understood(tmp_path, decision):
+    cmd, _, _ = build(tmp_path, ScriptedRouter(decision))
+
+    reply = cmd.free_text(OWNER, "lo que sea")
+
+    assert reply.startswith("Listo: ")
+    assert "Entendí" not in reply
+
+
+def test_what_could_not_be_scheduled_keeps_what_was_understood(tmp_path):
+    cmd, _, _ = build(tmp_path, ScriptedRouter(Decision("timer", "25:99 sacá la pizza")))
+
+    reply = cmd.free_text(OWNER, "avisame cuando pueda lo de la pizza")
+
+    assert reply.startswith("Entendí: /timer 25:99 sacá la pizza\n\n")
+    assert cmd.reminders.added == []
+
+
+def test_other_commands_keep_what_was_understood(tmp_path):
+    cmd, _, _ = build(tmp_path, ScriptedRouter(Decision("clima", "")))
+
+    assert cmd.free_text(OWNER, "cómo está el día").startswith("Entendí: /clima\n\n")
+
+
+def test_done_is_only_for_the_message_that_scheduled(tmp_path):
+    cmd, _, _ = build(
+        tmp_path, ScriptedRouter(Decision("timer", "10m sacá la pizza"), Decision("clima", ""))
+    )
+    cmd.free_text(OWNER, "avisame en diez minutos lo de la pizza")
+
+    assert cmd.free_text(OWNER, "cómo está el día").startswith("Entendí: /clima")
