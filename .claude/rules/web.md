@@ -60,7 +60,7 @@ separada del transporte HTTP y se prueba sin red.
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
 | `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje, para quién (`for`) y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima, `meal` y listas como `[{id, text}]` |
-| `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre, los equipos, el padrón (`persons`) y los chats con el nombre visto en Telegram (`chats`, `seen`) |
+| `GET /api/people` | si la pantalla escribe, los chats de la casa con su nombre, los equipos (`devices`, y `names` con el nombre visible de cada alias), el padrón (`persons`) y los chats con el nombre visto en Telegram (`chats`, `seen`) |
 | `POST /api/persons` | suma una persona al padrón. Ver **Padrón de la casa** |
 | `PUT`/`DELETE /api/persons/<id>` | cambia el nombre o el chat de una persona, o la saca del padrón |
 | `POST /api/jobs` | crea un aviso de la casa |
@@ -72,7 +72,7 @@ separada del transporte HTTP y se prueba sin red.
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 | `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader o con un explorador de archivos con acceso a la red. Ver **App de la tele** |
 | `GET /app/tele.json` | la versión del APK publicado, para que la app de la tele sepa si hay una nueva. Ver **App de la tele** |
-| `GET /api/tele/setup` | las teles con pantalla, el padrón (`persons`) y los chats de la casa (`people`), para configurar la app de la tele |
+| `GET /api/tele/setup` | las teles con pantalla y su nombre visible (`names`), el padrón (`persons`) y los chats de la casa (`people`), para configurar la app de la tele |
 | `POST /api/tele/hello` | registra una tele con su versión y capacidades |
 | `GET /api/tele/<alias>/poll` | el latido de una tele, la alarma que suena en ella, los recordatorios que esperan «Hecho», sus órdenes pendientes y si la casa calla. Ver **Registro en el CT**, en `.claude/rules/app-tele.md` |
 | `POST /api/tele/<alias>/ack` | lo que la app dice de una orden: recibida, hecha o fallida. Ver **Órdenes**, en `.claude/rules/app-tele.md` |
@@ -307,7 +307,7 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
 - ⚠️ **Una persona sin Telegram deja el aviso en el chat `NO_CHAT`** (cero, que ningún chat
   real es) con su `author_id`. Suena igual, porque los destinatarios salen de
   `ALLOWED_CHAT_IDS` y de la asignación, pero no está en el `/lista` de nadie ni se cancela
-  escribiendo: se borra desde la pantalla o con el «Cancelar #N» del aviso.
+  escribiendo: se borra desde la pantalla o con el «Cancelar este aviso» del aviso.
 - **«Para» asigna el aviso**: «Nadie», «Todos» y cada persona del padrón; nuevo, arranca en
   «Nadie». Viaja como `assignee` (`none`, `all`, `person`) y `assignee_id`
   (`JobsService._assignee()`): un valor que no existe, un id con algo que no sea `person` o
@@ -334,11 +334,11 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
   aviso en una línea, que suma «· para <nombre>» si es de alguien o de todos; el alta lleva
   el nombre del autor. Va en un hilo aparte: un chat que
   falla no frena a los otros ni a la respuesta.
-- 🔴 **El «Cancelar #N» de ese aviso manda `borrar <id>`, no `cancelar`.** `borrar` es solo un
-  botón, en `Commands.press()` y no en `_dispatch()`, así el router no lo nombra. Borra
-  desde **cualquier** chat, porque el aviso le llegó a todos, y avisa a los demás «🗑 <nombre>
-  borró #N». `/cancelar` escrito y el «Cancelar #N» de `/timer` y `/alarma` siguen siendo
-  del dueño.
+- 🔴 **El «Cancelar este aviso» de ese aviso manda `borrar <id>`, no `cancelar`.** `borrar` es
+  solo un botón, en `Commands.press()` y no en `_dispatch()`, así el router no lo nombra.
+  Borra desde **cualquier** chat, porque el aviso le llegó a todos, y avisa a los demás
+  «🗑 <nombre> borró «<mensaje>»». `/cancelar` escrito y el «Cancelar este aviso» de `/timer`
+  y `/alarma` siguen siendo del dueño. Ni el aviso ni la baja muestran el número.
 - 🔴 **Una escritura exige `application/json` y, si trae `Origin`, que coincida con `Host`**
   (`_refuse_write`); si no, 415 o 403. Ese content-type obliga al navegador a un preflight
   CORS, y la casa no contesta CORS: un sitio externo abierto en un navegador de la casa no
@@ -465,9 +465,9 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **Comparte el estado con Telegram por `chat_id`**: el `PendingStore` —una pregunta hecha en
   el chat se puede contestar desde la web y al revés— y el equipo de `usar`. Una persona sin
   chat no tiene ninguno de los dos.
-- 🔴 **Un error del comando se contesta con el motivo**, como en Telegram:
-  «🔴 No pude procesar la solicitud: <qué pasó>», con 200 y sin botones. Un error de la
-  pantalla misma es un 500 genérico.
+- 🔴 **Un error del comando se contesta**, como en Telegram y con el mismo `broken()`: el
+  motivo solo si el chat elegido es de alertas, si no «No me salió. Probá de nuevo en un
+  rato.», con 200 y sin botones. Un error de la pantalla misma es un 500 genérico.
 - 🔴 **El `fetch` de `/api/command` no se corta por tiempo.** Un comando puede tardar un minuto
   —una pregunta con búsqueda, un anuncio largo—, y cortarlo antes mostraría un error de algo
   que sí corrió. Mientras espera muestra «⏳ Procesando…» y deshabilita los botones.
@@ -512,7 +512,9 @@ sabe de HTTP; `WebApp._control()` la rutea.
   Dentro de cada tipo, lo que es para la persona elegida va primero (`mineFirst()`, por el
   `for`); el orden de los tipos no cambia.
 - **Los equipos de «A mano» son chips con estado**: el tildado se marca con la clase `on`, y
-  valen para todo comando con `data-target`, también los de «Casa» y «Más».
+  valen para todo comando con `data-target`, también los de «Casa» y «Más». Muestran el
+  nombre de `names` y mandan el alias; sin `names`, el alias (`deviceLabel()`, igual que el
+  desplegable de equipo del editor de la agenda).
 - **En «👪 Personas», un chat que todavía no le escribió al bot se lista «Todavía no escribió
   (·NNNN)»**, con los últimos cuatro dígitos (`chatLabel()`). Borrar es un botón de peligro.
 - **«⚙️ Ajustes de la casa» tiene «🧹 Depurar»**: corre `depurar`, el mismo comando, con sus

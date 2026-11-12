@@ -32,7 +32,7 @@ Se cablea en `main()` **solo con la API**, o sea con `API_TOKEN`, igual que el r
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`; `persons`, el padrón como `{id, name, chat_id}`, y `people`, los chats como `{chat_id, name}` |
+| `GET /api/tele/setup` | con qué configurar la app: `devices`, las teles de `SCREEN_DEVICES`; `names`, el nombre visible de cada una (`{alias: nombre}`, ver **Nombre de los equipos** en `.claude/rules/voz.md`), que la app todavía no lee; `persons`, el padrón como `{id, name, chat_id}`, y `people`, los chats como `{chat_id, name}` |
 | `POST /api/tele/hello` | registra la tele, o la actualiza, y cuenta como latido. Devuelve `{alias, caps}` |
 | `GET /api/tele/<alias>/poll` | cuenta como latido y devuelve `{"alarm": id o null, "reminders": [...], "orders": [...], "quiet": bool}` |
 | `POST /api/tele/<alias>/ack` | lo que la app dice de una orden, `{seq, state}`. Devuelve `{"accepted": bool}` |

@@ -36,6 +36,10 @@ colegio sonaban con los tres beeps de despertador y decían "(alarma de todos lo
   opción «Una sola vez».
 - **`/recordar` dejó de ser alias de `/timer`.** Es su propio comando, con la misma forma que
   `/alarma` (`Commands._repeating`).
+- **El alta y `/posponer` no muestran el número**: «Programado en Comedor para …: «…»»,
+  «Pospuesto para …», con «Cancelar este aviso» (`_undo_button()`), que manda el mismo
+  `cancelar <id>`. El número se ve en `/lista` y se escribe en `/cancelar`, `/pastillas` y
+  `/turnos`. La baja que se avisa a los demás chats tampoco lo lleva: «🗑 <nombre> borró «…»».
 - 🔴 **«Hecho» cierra por número de job, no por lo último que sonó.** La pastilla y el
   colegio suenan con minutos de diferencia; marcar el primero no puede depender del orden.
   El aviso manda `hecho <id>` y `AwaitingStore` guarda el mensaje de cada job que sonó hasta
@@ -141,6 +145,10 @@ misma numeración que `datetime.isoweekday()`; la mensual, el día del mes en `m
   nunca sus días. Si algún día se hablan, hay que verbalizarlos.
 - El reloj acepta `5.30` además de `5:30`. Es como la gente escribe la hora; no cambia nada
   más del parser.
+- **Un error del parser dice qué no entendió y cómo se escribe, sin repetir lo escrito**:
+  «No entendí la hora/la fecha/cuánto tiempo/cuándo. Probá así: …» (`timespec.CLOCK_HINT`,
+  `DATE_HINT`, `DURATION_HINT`, `WHEN_HINT`). Lo que no es hora ni duración en `parse_schedule`
+  es «cuándo»; `parse_duration` suelto, «cuánto tiempo».
 - 🔴 **`hábiles` no es `lun-vie`.** Los dos son de lunes a viernes, pero `hábiles` (o
   `habiles`, también dentro de una lista con comas) además prende `skip_holidays` y no suena
   en feriados. `lun-vie` y `semana` no lo prenden. Ver **Feriados**, en `.claude/rules/descanso-y-feriados.md`.

@@ -54,11 +54,11 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | vacaciones activadas o cortadas | los demás chats: «🧳 <nombre> activó vacaciones hasta el …» / «… cortó las vacaciones» |
 | fin de las vacaciones | todos: «🧳 Terminó el modo vacaciones, vuelvo a hablar.» |
 | agenda, clima, lluvia, API | todos |
-| alta, cambio o baja desde la pantalla | todos; el alta y el cambio, con «Cancelar #N» |
-| borrado con ese «Cancelar #N» | los demás chats: «🗑 <nombre> borró #N» |
+| alta, cambio o baja desde la pantalla | todos, sin número; el alta y el cambio, con «Cancelar este aviso» |
+| borrado con ese «Cancelar este aviso» | los demás chats: «🗑 <nombre> borró «<mensaje>»» |
 | lo hecho desde `/control` | lo mismo que el botón o el comando en Telegram: los demás chats, con «<nombre> (pantalla)» |
 | alarma apagada o «Hecho» desde `/control` por una persona sin Telegram | todos los chats del aviso, con «<nombre> (pantalla)» |
-| respuesta de un comando | el chat que lo escribió |
+| respuesta de un comando | el chat que lo escribió; el motivo de una falla, solo si es de alertas |
 | aviso de un desconocido | `ALERT_CHAT_IDS` (`Strangers`) |
 
 - **`ALERT_CHAT_IDS` vacía es todos**, que es como se comportaba antes de existir. Un
@@ -71,10 +71,13 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 - **`HouseVoice.tell(text, others)`** es la única puerta: `text` va a los chats de alertas y
   `others` al resto. `SAME` repite el texto, `None` o vacío no escribe nada.
   `tell_everyone()` es `tell(text, SAME)`.
+- 🔴 **El motivo técnico de una falla solo lo leen los chats de alertas.** La familia lee una
+  frase llana y el motivo queda en el log; lo que falta configurar le dice a quién avisarle.
+  Ver **Un error se contesta, no se calla**, en `.claude/rules/router-y-conversacion.md`.
 - **El parlante no sabe de chats.** Lo que suena, suena en toda la casa: separar los chats no
   hace privado un aviso dicho en voz alta.
 - `/lista` y `/cancelar` siguen siendo de quien creó la alarma, aunque el aviso le llegue a
-  todos. El «Cancelar #N» de un aviso de la pantalla no: borra desde cualquier chat. Ver
+  todos. El «Cancelar este aviso» de un aviso de la pantalla no: borra desde cualquier chat. Ver
   **Pantalla de la casa**, en `.claude/rules/web.md`.
 - **`/control` no tiene destinatarios propios.** Corre el comando a nombre del chat elegido,
   así que ese chat queda como «el que lo tocó» y no recibe el aviso a los demás. Ver

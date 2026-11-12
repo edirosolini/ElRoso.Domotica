@@ -193,7 +193,9 @@ cambia el que se usa cuando no decís nada, y queda guardado por chat. Un timer 
 qué equipo iba, así que se puede programar en uno y seguir hablando por otro.
 
 `en` solo se interpreta como destino si la palabra siguiente es un equipo conocido:
-`/decir en casa hace frío` dice la frase entera, no se come nada.
+`/decir en casa hace frío` dice la frase entera, no se come nada. El equipo se escribe por su
+alias o por su nombre, con o sin tilde: `en recamara` y `en Recámara` son lo mismo. Las
+respuestas lo nombran «Recámara». Un nombre de más de una palabra se escribe por su alias.
 
 **Alarma, recordatorio y timer suenan distinto.** La alarma es para despertarse: un despertador
 de ráfagas que suben de volumen, el parlante a 90 como mínimo, «🔕 Apagar» y «Posponer». Si
@@ -703,7 +705,7 @@ tildes. Si alguno no es de la casa, el evento queda de todos con el título como
 agenda. El parlante y los resúmenes todavía leen el título como está, con los corchetes.
 
 Cada alta, cambio o baja se avisa en todos los chats. El de un alta o un cambio trae
-«Cancelar #N», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
+«Cancelar este aviso», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
 borró.
 
 «Para» elige de quién es el aviso: «Nadie» (como siempre), «Todos» o una persona de la casa.
@@ -1048,8 +1050,10 @@ Con más de una persona en la lista, las alarmas, los recordatorios, los timers,
 todas. Los avisos del monitor y de Seq, la vuelta de internet y el aviso de que escribió
 alguien fuera de la lista, a `ALERT_CHAT_IDS`, que tiene que ser parte de
 `ALLOWED_CHAT_IDS`. Esos chats también son los únicos que leen los servicios caídos y los
-errores de la noche en el resumen y el cierre, que el parlante no dice. Con el bot abierto no
-hay chats de alertas: lo técnico que no es urgente no le llega a nadie.
+errores de la noche en el resumen y el cierre, que el parlante no dice, y el motivo técnico
+cuando un comando falla: los demás leen «No me salió. Probá de nuevo en un rato.», y si falta
+configurar algo, a quién de esos chats avisarle. Con el bot abierto no hay chats de alertas:
+lo técnico que no es urgente no le llega a nadie.
 
 **Cómo habla.** Piper no deja pausa entre oraciones si no se le pide, y eso hace que un
 aviso de dos frases suene apurado. Se ajusta por entorno, sin tocar código:
