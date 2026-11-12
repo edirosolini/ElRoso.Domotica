@@ -69,7 +69,7 @@ DAYS = Slot(
         ("De lunes a viernes", "de lunes a viernes"),
     ),
 )
-NUMBER = Slot("numero", "¿Cuál cancelo? El número sale en /lista.")
+NUMBER = Slot("numero", "¿Cuál borro? El número sale en /lista, Mis avisos.")
 VOLUME = Slot("volumen", "¿Qué volumen? De cero a cien.")
 DEVICE = Slot("equipo", "¿En qué equipo?")
 CALCULATION = Slot("cuenta", "¿Qué cuenta querés que haga?")

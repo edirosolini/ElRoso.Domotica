@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Callable, Iterable
 
-from homeauto.bot.commands import CHATLESS_BUTTONS, broken, with_actions
+from homeauto.bot.commands import BACK_ACTION, CHATLESS_BUTTONS, TALK_ACTION, broken, with_actions
 from homeauto.people import display_name
 from homeauto.schedule.awaiting import KEEP
 from homeauto.schedule.reminders import SNOOZE_WINDOW
@@ -17,13 +17,13 @@ log = logging.getLogger(__name__)
 
 MAX_TEXT = 500
 
-OFF = ("🔕 Apagar", "callar {job}")
+OFF = ("🔕 Apagar alarma", "callar {job}")
 DONE = ("✅ Hecho", "hecho {job}")
 SNOOZE = (("Posponer 10 min", "posponer 10m"), ("Posponer 30 min", "posponer 30m"))
 CONFIRM = ("✅ Confirmar", "confirmar {name}")
 HUSH = ("Silenciar 1 h", "silencio 1h")
-TALK = ("Hablar ya", "hablar")
-BACK = ("Cortar vacaciones", "vacaciones off")
+TALK = TALK_ACTION
+BACK = BACK_ACTION
 
 
 def _actions(pairs: Iterable[tuple[str, str]]) -> list[dict]:

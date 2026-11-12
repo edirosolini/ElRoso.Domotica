@@ -364,13 +364,18 @@ class Assignment:
         return ""
 
 
-def _cancel_button(job_id: int) -> tuple[str, str]:
-    return (f"Cancelar #{job_id}", f"cancelar {job_id}")
+TALK_ACTION = ("Volver a hablar", "hablar")
+BACK_ACTION = ("Volví de vacaciones", "vacaciones off")
+
+
+def _cancel_button(job, now: datetime) -> tuple[str, str]:
+    """El botón de Mis avisos que borra uno: cuándo suena y qué dice."""
+    return (_label(f"🗑 {format_when(job.when, now)} {job.message}"), f"cancelar {job.id}")
 
 
 def _undo_button(job_id: int) -> tuple[str, str]:
-    """El botón que cancela el aviso de una respuesta, sin mostrar su número."""
-    return ("Cancelar este aviso", f"cancelar {job_id}")
+    """El botón que borra el aviso de una respuesta, sin mostrar su número."""
+    return ("🗑 Borrar este aviso", f"cancelar {job_id}")
 
 
 def format_when(when: datetime, now: datetime) -> str:
@@ -475,10 +480,9 @@ class Commands:
         now = self.clock()
         if self.quiet is None or not self.quiet.is_quiet(now):
             return None
-        answer = f"{reason_of(self.quiet, now)}: no lo dije en voz alta."
         if away_of(self.quiet, now):
-            answer += " /vacaciones off las corta."
-        return answer
+            offer(BACK_ACTION)
+        return f"{reason_of(self.quiet, now)}: no lo dije en voz alta."
 
     def _default_aliases(self, chat_id: int) -> list[str]:
         stored = self.preferences.default_device(chat_id) if self.preferences else None
@@ -1788,7 +1792,7 @@ class Commands:
             if off:
                 return f"No veo la tele {_of(alias)}."
             return f"No veo la tele {_of(alias)}: prendela y probá de nuevo."
-        label = f"Apagar pantalla ({device_label(alias)})" if several else "Apagar pantalla"
+        label = f"Sacar la pantalla ({device_label(alias)})" if several else "Sacar la pantalla"
         offer((label, f"pantalla apagar en {alias}"))
         return f"📺 Puse la pantalla en la tele {_of(alias)}."
 
@@ -1803,7 +1807,7 @@ class Commands:
             for alias in self.speakers.aliases
         ]
         return (
-            "Equipos:\n" + "\n".join(lines)
+            "Parlantes y teles:\n" + "\n".join(lines)
             + "\n\nCambialo con /usar <equipo>, o /usar todos."
             + "\nTambién podés mandar uno suelto: /decir en comedor,recamara hola"
         )
@@ -1850,7 +1854,8 @@ class Commands:
             return str(exc)
 
         ends = self.quiet.start(duration)
-        return f"Listo, no hablo hasta las {ends.strftime('%H:%M')}. /hablar lo cancela."
+        offer(TALK_ACTION)
+        return f"Listo, no hablo hasta las {ends.strftime('%H:%M')}."
 
     def speak(self, chat_id: int, text: str = "") -> str:
         denial = self._denial(chat_id)
@@ -1865,10 +1870,12 @@ class Commands:
 
     def _silence_status(self) -> str:
         if self.quiet.is_away():
-            return f"{self.quiet.reason()}. /vacaciones off las corta."
+            offer(BACK_ACTION)
+            return f"{self.quiet.reason()}."
         ends = self.quiet.until()
         if ends is not None:
-            return f"En silencio hasta las {ends.strftime('%H:%M')}. /hablar lo cancela."
+            offer(TALK_ACTION)
+            return f"En silencio hasta las {ends.strftime('%H:%M')}."
         return (
             f"Estoy hablando. El horario de descanso va de {self.quiet.hours.label}. "
             "Para callarme un rato: /silencio 2h"
@@ -1904,9 +1911,10 @@ class Commands:
             self.vacation_notice.begin(until, chat_id, who)
         else:
             self.quiet.start_away(until)
+        offer(BACK_ACTION)
         return (
             f"🧳 Listo, de vacaciones hasta el {away_label(until)}. No hablo por los parlantes, "
-            "ni lo urgente: todo llega por acá. /vacaciones off las corta."
+            "ni lo urgente: todo llega por acá."
         )
 
     def _end_vacation(self, chat_id: int, who: str) -> str:
@@ -1920,7 +1928,8 @@ class Commands:
 
     def _vacation_status(self) -> str:
         if self.quiet.is_away():
-            return f"🧳 {self.quiet.reason()}. /vacaciones off las corta."
+            offer(BACK_ACTION)
+            return f"🧳 {self.quiet.reason()}."
         return "No estoy de vacaciones. Para activarlo: /vacaciones hasta 25/10"
 
     # --- programados -------------------------------------------------------
@@ -2075,14 +2084,14 @@ class Commands:
         if not jobs:
             return "No hay nada programado"
 
-        offer(*(_cancel_button(job.id) for job in jobs[:MAX_BUTTONS]))
         now = self.clock()
-        lines = [
+        offer(*(_cancel_button(job, now) for job in jobs[:MAX_BUTTONS]))
+        lines = ["Mis avisos"] + [
             f"{'🔔' if job.is_reminder else '⏰'} #{job.id} · {format_when(job.when, now)} · {_labels(job.devices or [self.config.default_device])}"
             f"{self._repetition(job)}{self._for_whom(job)} — {job.message}"
             for job in jobs
         ]
-        lines.append("\nCancelá con /cancelar <número>")
+        lines.append("\nTocá uno para borrarlo.")
         return "\n".join(lines)
 
     @staticmethod
@@ -2112,6 +2121,7 @@ class Commands:
         except ValueError:
             return "Decime el número. Ej: /cancelar 3 (lo ves con /lista)"
 
-        if not self.reminders.cancel(chat_id, job_id):
+        job = self.reminders.get(job_id)
+        if job is None or not self.reminders.cancel(chat_id, job_id):
             return "No encontré ese aviso. Fijate con /lista"
-        return f"Cancelado #{job_id}"
+        return f"🗑 Borrado: «{job.message}»"

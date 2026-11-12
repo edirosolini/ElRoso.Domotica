@@ -296,7 +296,7 @@ def test_create_tells_every_chat_with_a_cancel_button(parts):
         assert "sacar la basura" in text
         assert "Eze" in text
         assert f"#{created['id']}" not in text
-        assert actions == (("Cancelar este aviso", f"borrar {created['id']}"),)
+        assert actions == (("🗑 Borrar este aviso", f"borrar {created['id']}"),)
 
 
 def test_the_notice_names_the_device(parts):
@@ -548,7 +548,7 @@ def test_update_edits_the_series_and_keeps_the_author(parts):
     assert [chat for chat, _, _ in parts["told"]] == [DIEGO, EZE]
     assert all("la pastilla" in text for _, text, _ in parts["told"])
     assert all(f"#{job.id}" not in text for _, text, _ in parts["told"])
-    assert all(actions == (("Cancelar este aviso", f"borrar {job.id}"),)
+    assert all(actions == (("🗑 Borrar este aviso", f"borrar {job.id}"),)
                for _, _, actions in parts["told"])
 
 

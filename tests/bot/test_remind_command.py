@@ -141,7 +141,7 @@ def test_a_reminder_offers_to_cancel_it(cmd):
     reply = with_actions(cmd.remind, OWNER, "diaria 8:00 la pastilla")
 
     [job] = cmd.reminders.list(OWNER)
-    assert reply.actions == (("Cancelar este aviso", f"cancelar {job.id}"),)
+    assert reply.actions == (("🗑 Borrar este aviso", f"cancelar {job.id}"),)
     assert f"#{job.id}" not in reply.text
 
 
@@ -164,7 +164,7 @@ def test_the_list_tells_them_apart(cmd):
     cmd.alarm(OWNER, "diaria 7:30 arriba")
     cmd.remind(OWNER, "diaria 8:00 la pastilla")
 
-    lines = cmd.list(OWNER).splitlines()
+    lines = cmd.list(OWNER).splitlines()[1:]
 
     assert lines[0].startswith("⏰") and "arriba" in lines[0]
     assert lines[1].startswith("🔔") and "la pastilla" in lines[1]

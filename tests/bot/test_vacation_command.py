@@ -77,10 +77,11 @@ def house(tmp_path):
 
 
 def test_activating_says_until_when_and_arms_the_end(house):
-    reply = house["cmd"].vacation(OWNER, "hasta 25/10", who="Eze")
+    reply = with_actions(house["cmd"].vacation, OWNER, "hasta 25/10", who="Eze")
 
-    assert "25/10" in reply
-    assert "/vacaciones off" in reply
+    assert "25/10" in reply.text
+    assert "/vacaciones off" not in reply.text
+    assert reply.actions == (("Volví de vacaciones", "vacaciones off"),)
     assert house["hush"].is_away(NOON) is True
     assert house["timer"].armed[AWAY_END_KEY][0] == BACK
 
@@ -135,9 +136,10 @@ def test_without_argument_it_answers_the_state(house):
 
     house["cmd"].vacation(OWNER, "hasta 25/10", who="Eze")
 
-    reply = house["cmd"].vacation(OWNER, "")
-    assert "De vacaciones hasta el 25/10" in reply
-    assert "/vacaciones off" in reply
+    reply = with_actions(house["cmd"].vacation, OWNER, "")
+    assert "De vacaciones hasta el 25/10" in reply.text
+    assert "/vacaciones off" not in reply.text
+    assert reply.actions == (("Volví de vacaciones", "vacaciones off"),)
 
 
 def test_without_a_date_it_answers_the_state_and_how_and_asks_nothing(house):
@@ -206,11 +208,12 @@ def test_without_the_notice_it_still_starts_and_stops(tmp_path):
 def test_saying_and_calling_refuse_with_the_reason_and_the_way_out(house, run, text):
     house["cmd"].vacation(OWNER, "hasta 25/10", who="Eze")
 
-    reply = getattr(house["cmd"], run)(OWNER, text)
+    reply = with_actions(getattr(house["cmd"], run), OWNER, text)
 
     assert house["speaker"].said == []
-    assert "De vacaciones hasta el 25/10" in reply
-    assert "/vacaciones off" in reply
+    assert "De vacaciones hasta el 25/10" in reply.text
+    assert "/vacaciones off" not in reply.text
+    assert reply.actions == (("Volví de vacaciones", "vacaciones off"),)
 
 
 def test_the_volume_stop_and_turn_off_keep_working(house):
@@ -225,7 +228,10 @@ def test_the_volume_stop_and_turn_off_keep_working(house):
 def test_the_silence_status_tells_the_vacations(house):
     house["cmd"].vacation(OWNER, "hasta 25/10", who="Eze")
 
-    assert "De vacaciones hasta el 25/10" in house["cmd"].silence(OWNER, "")
+    reply = with_actions(house["cmd"].silence, OWNER, "")
+
+    assert reply.text == "De vacaciones hasta el 25/10."
+    assert reply.actions == (("Volví de vacaciones", "vacaciones off"),)
 
 
 def test_the_silence_status_without_vacations_is_as_always(house):

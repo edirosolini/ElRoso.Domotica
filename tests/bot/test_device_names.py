@@ -75,6 +75,7 @@ def test_devices_lists_the_spanish_names_and_marks_the_active_one(tmp_path):
 
     reply = cmd.devices(OWNER)
 
+    assert reply.startswith("Parlantes y teles:\n")
     assert "Recámara  ◀ activo" in reply
     assert "Habitación" in reply
     assert "Comedor" in reply

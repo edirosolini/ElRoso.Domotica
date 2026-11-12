@@ -101,7 +101,7 @@ def test_a_ringing_alarm_comes_with_its_off_button(db):
 
     assert live["ringing"] == [{
         "job_id": 17, "message": "arriba", "since": "2026-10-19T11:58:00", "rings": 0,
-        "for": None, "actions": [{"label": "🔕 Apagar", "data": "callar 17"}],
+        "for": None, "actions": [{"label": "🔕 Apagar alarma", "data": "callar 17"}],
     }]
 
 
@@ -190,7 +190,7 @@ def test_a_hush_asked_by_hand_offers_to_talk_again(db):
     assert quiet["quiet"] is True
     assert quiet["hush_until"] == "2026-10-19T13:00:00"
     assert quiet["reason"].startswith("Horario de descanso")
-    assert quiet["actions"] == [{"label": "Hablar ya", "data": "hablar"}]
+    assert quiet["actions"] == [{"label": "Volver a hablar", "data": "hablar"}]
 
 
 def test_the_vacations_offer_to_end_them(db):
@@ -201,7 +201,7 @@ def test_the_vacations_offer_to_end_them(db):
 
     assert quiet["away_until"] == "2026-10-25T00:00:00"
     assert quiet["reason"] == "De vacaciones hasta el 25/10"
-    assert quiet["actions"] == [{"label": "Cortar vacaciones", "data": "vacaciones off"}]
+    assert quiet["actions"] == [{"label": "Volví de vacaciones", "data": "vacaciones off"}]
 
 
 def test_live_carries_the_house_hour(db):
@@ -446,7 +446,7 @@ def test_live_for_a_person_without_a_chat_only_offers_off_and_done(db, house):
 
     live = control.live(person_id=abuela.id)
 
-    assert live["ringing"][0]["actions"] == [{"label": "🔕 Apagar", "data": "callar 17"}]
+    assert live["ringing"][0]["actions"] == [{"label": "🔕 Apagar alarma", "data": "callar 17"}]
     assert live["awaiting"][0]["actions"] == [{"label": "✅ Hecho", "data": "hecho 9"}]
     assert live["snooze"] is None
     assert live["outages"][0]["actions"] == []

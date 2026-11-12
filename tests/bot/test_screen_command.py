@@ -92,7 +92,7 @@ def test_without_argument_it_shows_in_the_dining_room(house):
 
     assert house.tvs["comedor"].page == KIOSK
     assert "Comedor" in reply.text
-    assert reply.actions == (("Apagar pantalla", "pantalla apagar en comedor"),)
+    assert reply.actions == (("Sacar la pantalla", "pantalla apagar en comedor"),)
 
 
 def test_another_tv_is_named_as_always(house):
@@ -100,7 +100,7 @@ def test_another_tv_is_named_as_always(house):
 
     assert house.tvs["recamara"].page == KIOSK
     assert house.tvs["comedor"].page is None
-    assert reply.actions == (("Apagar pantalla", "pantalla apagar en recamara"),)
+    assert reply.actions == (("Sacar la pantalla", "pantalla apagar en recamara"),)
 
 
 def test_the_button_fits_in_telegram():
@@ -210,7 +210,7 @@ def test_the_replies_and_buttons_use_the_device_name(house):
 
     assert "📺 Puse la pantalla en la tele de la Recámara." in reply.text
     assert "📺 Puse la pantalla en la tele del Comedor." in reply.text
-    assert ("Apagar pantalla (Recámara)", "pantalla apagar en recamara") in reply.actions
+    assert ("Sacar la pantalla (Recámara)", "pantalla apagar en recamara") in reply.actions
 
 
 def test_a_device_without_screen_is_named_with_its_capital(house):
