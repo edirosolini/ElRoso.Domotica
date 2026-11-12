@@ -44,10 +44,10 @@ la manda a otra tele y `apagar`, adelante o atrás, la saca.
 - **Con la app de la tele viva y la capacidad `show`, `apagar` también cierra su vista**: la
   app vuelve al kiosco y se va atrás. Ver `hide` en **Órdenes**, en `.claude/rules/app-tele.md`.
 - **Un equipo fuera de `SCREEN_DEVICES` contesta que no tiene pantalla**, sin castear nada.
-- **Trae «Apagar pantalla»**, que manda `pantalla apagar en <equipo>`.
+- **Trae «Sacar la pantalla»**, que manda `pantalla apagar en <equipo>`.
 - 🔴 **Respeta las vacaciones pero no el descanso.** Mostrar no hace ruido: a las once de la
   noche alguien puede querer ver la agenda. En vacaciones contesta que no prende la tele.
-- **No está en el menú, sí en `HELP`.** Ver **Comandos y alias**, en `.claude/rules/router-y-conversacion.md`.
+- **No está en el menú, sí en `HELP` y en «Ajustes».** Ver **Comandos y alias**, en `.claude/rules/router-y-conversacion.md`.
 
 **Después de un anuncio.** Hablarle a una tele cierra DashCast: el receptor de audio lo
 desaloja.

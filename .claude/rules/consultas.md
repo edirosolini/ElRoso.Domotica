@@ -65,8 +65,8 @@ con el mismo patrón que las otras siete.
 - 🔴 **La lista se lee, no se escucha.** `/compras` y `/pendientes` contestan al chat como
   `/lista`: números y cantidades son de leer. Lo único hablado es el conteo del cierre del
   día, y ese va en palabras.
-- **`/compras` nombra a `/sacar`**, como `/lista` nombra a `/cancelar`: es la única entrada
-  del menú que deja a otro comando sin puerta.
+- **`/compras` nombra a `/sacar`**: quien ve la lista lee ahí mismo cómo sacar de ella.
+  `/lista` no nombra a `/cancelar`: borra con sus botones.
 
 ## Menú semanal
 
@@ -130,7 +130,7 @@ arma el texto y `HouseVoice.tell_everyone()` lo manda a todos, **solo escrito**:
   Las horas por defecto (11:00 y 17:30) quedan lejos del descanso del CT.
 - **Ocho semanas de historia** (`KEEP_WEEKS`): `save_week()` poda lo anterior. `replace()`
   conserva el pedido de la semana del plato.
-- **Fuera del menú de Telegram y en `HELP`**; entra también por el router. Ver **Comandos y
+- **Fuera del menú de Telegram, en `HELP` y en el tema Compras y comida**; entra también por el router. Ver **Comandos y
   alias**, en `.claude/rules/router-y-conversacion.md`.
 
 ## Traducir

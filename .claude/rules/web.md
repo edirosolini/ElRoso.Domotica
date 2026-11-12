@@ -307,7 +307,7 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
 - ⚠️ **Una persona sin Telegram deja el aviso en el chat `NO_CHAT`** (cero, que ningún chat
   real es) con su `author_id`. Suena igual, porque los destinatarios salen de
   `ALLOWED_CHAT_IDS` y de la asignación, pero no está en el `/lista` de nadie ni se cancela
-  escribiendo: se borra desde la pantalla o con el «Cancelar este aviso» del aviso.
+  escribiendo: se borra desde la pantalla o con el «🗑 Borrar este aviso» del aviso.
 - **«Para» asigna el aviso**: «Nadie», «Todos» y cada persona del padrón; nuevo, arranca en
   «Nadie». Viaja como `assignee` (`none`, `all`, `person`) y `assignee_id`
   (`JobsService._assignee()`): un valor que no existe, un id con algo que no sea `person` o
@@ -334,11 +334,12 @@ formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
   aviso en una línea, que suma «· para <nombre>» si es de alguien o de todos; el alta lleva
   el nombre del autor. Va en un hilo aparte: un chat que
   falla no frena a los otros ni a la respuesta.
-- 🔴 **El «Cancelar este aviso» de ese aviso manda `borrar <id>`, no `cancelar`.** `borrar` es
+- 🔴 **El «🗑 Borrar este aviso» de ese aviso manda `borrar <id>`, no `cancelar`.** `borrar` es
   solo un botón, en `Commands.press()` y no en `_dispatch()`, así el router no lo nombra.
   Borra desde **cualquier** chat, porque el aviso le llegó a todos, y avisa a los demás
-  «🗑 <nombre> borró «<mensaje>»». `/cancelar` escrito y el «Cancelar este aviso» de `/timer`
-  y `/alarma` siguen siendo del dueño. Ni el aviso ni la baja muestran el número.
+  «🗑 <nombre> borró «<mensaje>»». `/cancelar` escrito y el «🗑 Borrar este aviso» de
+  `/timer` y `/alarma`, que tiene la misma etiqueta y manda `cancelar <id>`, siguen siendo del
+  dueño. Ni el aviso ni la baja muestran el número.
 - 🔴 **Una escritura exige `application/json` y, si trae `Origin`, que coincida con `Host`**
   (`_refuse_write`); si no, 415 o 403. Ese content-type obliga al navegador a un preflight
   CORS, y la casa no contesta CORS: un sitio externo abierto en un navegador de la casa no
@@ -430,7 +431,7 @@ sabe de HTTP; `WebApp._control()` la rutea.
   desde el día uno**, decisión del dueño. La respuesta vuelve con sus botones como
   `[{label, data}]`, y tocarlos vuelve a `/api/command`.
 - 🔴 **Un texto que arranca con «/» va a `press()` sin la barra solo si `Commands.typed()` lo
-  acepta**: `ayuda` o un comando de `_dispatch()`, con el nombre pasado a minúsculas
+  acepta**: `ayuda`, `inicio`, un tema o un comando de `_dispatch()`, con el nombre pasado a minúsculas
   (`ControlService._typed()`). Lo demás sigue en `free_text()`: los de solo-botón escritos
   (`/hecho 3`, `/callar`, `/borrar`, `/confirmar`), los nombres que no existen y los alias que
   viven en `main.py` y no en `_dispatch()` (`/tiempo`, `/llama`, `/siesta`, `/stop`,
@@ -520,8 +521,10 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **«⚙️ Ajustes de la casa» tiene «🧹 Depurar»**: corre `depurar`, el mismo comando, con sus
   botones. Se ve para todo el que tiene chat; quién puede usarlo lo decide `Commands`, no la
   página. Ver `.claude/rules/depurador.md`.
-- **Un solo botón de silencio, según el estado**: «Cortar vacaciones» en vacaciones, «Hablar
-  ya» con un silencio pedido y si no «Silenciar 1 h».
+- **Un solo botón de silencio, según el estado**: «Volví de vacaciones» en vacaciones,
+  «Volver a hablar» con un silencio pedido y si no «Silenciar 1 h». Los dos primeros son
+  `BACK_ACTION` y `TALK_ACTION` de `Commands`, los mismos que ofrecen `/vacaciones` y
+  `/silencio` en Telegram.
 - 🔴 **`/api/live` no manda el `detail` de los chequeos**, solo nombre y si está arriba: el
   detalle puede traer URLs. `estado` corrido por `/api/command` sí lo trae, como en Telegram.
 - ⚠️ **No hay chequeo de `Host` contra DNS rebinding**, decisión del dueño. Un sitio externo

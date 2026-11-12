@@ -236,7 +236,7 @@ Android es `AndroidDevice`. Contesta `received` antes de ejecutar.
   `show` que manda `Screens`. La vista de alarma vuelve sola al kiosco, igual que en DashCast.
 - 🔴 **El OK del control apaga la alarma a nombre de quien se eligió**: manda a
   `/api/command` `{person_id, data: "callar <id>"}`, o `{chat_id, ...}` con una elección de
-  chat, el mismo botón que «🔕 Apagar» (`AlarmKey`). Mientras hay alarma y alguien elegido,
+  chat, el mismo botón que «🔕 Apagar alarma» (`AlarmKey`). Mientras hay alarma y alguien elegido,
   abajo dice «OK para apagar». **Sin nadie elegido, el OK no hace nada** con la alarma y queda
   en el log.
 - **Con alarma, el OK apaga aunque el foco esté en «Cambiar tele o persona»**: no abre el

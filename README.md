@@ -6,6 +6,9 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 ## Comandos
 
 ```
+/inicio                         los temas de la casa, con botones
+/ayuda                          cómo se usa, con ejemplos
+/ayuda completa                 todos los comandos
 /decir buenas noches            habla ahora
 /decir en tv que bajen a comer  lo dice en ese equipo
 /llamar a cenar                 llama a toda la casa; sin nada, a lo que toque
@@ -33,8 +36,8 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /alarma hábiles 6:30 arriba     de lunes a viernes, salvo feriados
 /alarma mensual 10 9:00 luz     el 10 de cada mes
 /alarma en comedor para China 7:30 arriba  en ese equipo, para esa persona
-/lista                          lo que está programado
-/cancelar 3                     cancela por número
+/lista                          Mis avisos: lo programado, con un botón para borrar cada uno
+/cancelar 3                     borra por número
 /posponer                       repite en 10 minutos la alarma que acaba de sonar
 /silencio 2h                    no habla por un rato
 /hablar                         cancela el silencio
@@ -57,6 +60,16 @@ con voz sintetizada offline. Timers, alarmas y recordatorios incluidos.
 /depurar historial 6            deja seis meses de historial y propone borrar lo cerrado de antes
 ```
 
+**Inicio y temas.** `/inicio` (o `/start`) contesta con un botón por tema: ⏰ Avisos, 🗣 Hablar
+en la casa, 🛒 Compras y comida, 📅 Hoy, ❓ Preguntar, 🤫 Silencio y, solo en los chats de
+`ALERT_CHAT_IDS`, ⚙️ Ajustes. Cada tema trae sus botones y «⬅ Temas» para volver. Algunos
+corren el comando de una («Mis avisos», «Clima»); otros preguntan lo que falta («Avisame
+en…» pregunta cuándo, «Decir algo» qué decir) y la respuesta completa el pedido. El menú que
+abre Telegram al escribir `/` tiene un comando por tema más `/ayuda`, y los chats de alertas
+suman `/ajustes`; los demás comandos siguen andando escritos. `/ayuda` muestra ejemplos para
+escribir sin barra y los temas; `/ayuda completa`, la lista entera. Cuando no entiende un
+mensaje, contesta con los temas.
+
 **Horario de descanso.** De **23:00 a 07:00** por defecto, nada suena en voz alta: el aviso llega igual a
 Telegram, pero los parlantes se quedan callados. Vale para las alarmas y también para un
 `/decir` manual — la regla protege a los que duermen, no a quien está escribiendo. Se cambia
@@ -71,16 +84,16 @@ habla el bot.
 
 **Silencio a pedido.** Para una siesta o una reunión, `/silencio 2h` calla los parlantes por
 ese rato (acepta los mismos formatos que un timer: `30m`, `1h30m`). `/silencio` sin nada dice
-si está callado y hasta cuándo; `/hablar` lo cancela. Se guarda en SQLite, así que un
+si está callado y hasta cuándo; `/hablar` o el botón «Volver a hablar» lo cancelan. Se guarda en SQLite, así que un
 reinicio en medio de la siesta no devuelve la casa hablando.
 
 **Modo vacaciones.** `/vacaciones hasta 25/10` calla la casa hasta la vuelta; con hora,
 `/vacaciones hasta 25/10 18:00`, y sin hora es a las 00:00. `/vacaciones 25/10` también
 sirve. Una fecha que ya pasó este año se toma del siguiente; hoy o antes se rechaza.
-`/vacaciones off` las corta y `/vacaciones` sola dice cómo están. Mientras duran **nada sale
+`/vacaciones off` o el botón «Volví de vacaciones» las cortan y `/vacaciones` sola dice cómo están. Mientras duran **nada sale
 por los parlantes, ni lo urgente**: las alarmas, el monitor, la API, el resumen, el cierre,
 el clima y la agenda llegan solo al chat, con sus botones. Una alarma no repite y no trae
-«🔕 Apagar», y activarlas corta las que estén sonando. `/decir`, `/llamar` y lo que pidas
+«🔕 Apagar alarma», y activarlas corta las que estén sonando. `/decir`, `/llamar` y lo que pidas
 «por el parlante» contestan por qué no suena; `/apagar`, `/parar` y `/volumen` siguen
 andando. Activarlas o cortarlas les avisa a los otros chats quién fue, y al terminar se
 escribe a todos «🧳 Terminó el modo vacaciones, vuelvo a hablar.». `/hablar` no las corta.
@@ -125,7 +138,7 @@ repite. Los ingredientes van sin cantidades, y la sal, el aceite, la pimienta y 
 pasan; otro condimento con nombre propio, como el orégano, puede llegar a compras. Si lo que arma el modelo no sirve, no se guarda nada. Se lee y nunca
 suena: pedido «por el parlante», contesta escrito y avisa por qué. `MENU_LUNCH_AT=off` o
 `MENU_DINNER_AT=off` saca esa comida del menú. No está en el menú de Telegram: se escribe, se
-pide sin barra o se toca «Menú» en el control. El kiosco muestra la próxima comida en «🍽 Idea
+pide sin barra, se toca «Menú de la semana» en el tema Compras y comida o «Menú» en el control. El kiosco muestra la próxima comida en «🍽 Idea
 para hoy» (ver **La pantalla de la casa**).
 
 **Aviso antes de cada comida.** A la hora de `MENU_LUNCH_AT` (11:00) y de `MENU_DINNER_AT`
@@ -176,7 +189,7 @@ que habilitar a mano en cada equipo Android TV.
 
 **La pantalla en la tele.** `/pantalla` pone el kiosco de la casa en la tele de
 `SCREEN_DEVICE` (por defecto, el comedor), con `en <equipo>` en otra, y `/pantalla apagar`
-la saca; la respuesta trae el botón «Apagar pantalla». En la tele va **solo para mirar**: sin
+la saca; la respuesta trae el botón «Sacar la pantalla». En la tele va **solo para mirar**: sin
 campos para agregar ni círculos para tachar. Apagar solo cierra la pantalla si sigue puesta:
 si alguien abrió otra app, no la toca. Si la casa habla por esa tele, la pantalla vuelve sola
 al terminar el anuncio. Funciona en horario de descanso, porque no hace ruido, pero no de
@@ -198,7 +211,7 @@ alias o por su nombre, con o sin tilde: `en recamara` y `en Recámara` son lo mi
 respuestas lo nombran «Recámara». Un nombre de más de una palabra se escribe por su alias.
 
 **Alarma, recordatorio y timer suenan distinto.** La alarma es para despertarse: un despertador
-de ráfagas que suben de volumen, el parlante a 90 como mínimo, «🔕 Apagar» y «Posponer». Si
+de ráfagas que suben de volumen, el parlante a 90 como mínimo, «🔕 Apagar alarma» y «Posponer». Si
 nadie la apaga, vuelve a sonar cinco minutos después de terminar, con un despertador más largo, durante
 media hora: cinco repeticiones más. Cada una escribe «Sigue sonando» al chat, también en
 horario de descanso, y al final avisa «Dejé de sonar».
@@ -307,8 +320,10 @@ limpiá las teles viejas                   →  /depurar teles
 ```
 
 **Ejecuta y te dice qué entendió**, no pregunta antes. La respuesta arranca con
-`Entendí: /timer 10m sacar la pizza`, así que si leyó mal se ve en el acto y se deshace con
-`/cancelar`. Tarda alrededor de un segundo más que escribir el comando a mano.
+`Entendí: /clima`, así que si leyó mal se ve en el acto. Lo que se agenda lo dice en
+castellano: «Listo: te aviso hoy a las 21:10 en Parlante: «sacar la pizza»», con el botón
+«🗑 Borrar este aviso» para deshacerlo. Si el pedido no se pudo agendar, vuelve el
+`Entendí:` con el motivo. Tarda alrededor de un segundo más que escribir el comando a mano.
 
 ⚠️ **Lo que la casa dice en voz alta siempre sale de tu mensaje.** El intérprete puede elegir
 el comando y el equipo, pero no puede reescribir el texto de un `/decir`: si lo que quedaría
@@ -326,8 +341,7 @@ bot:  ¿Qué querés que diga?
 vos:  arriba
 bot:  ¿Una sola vez, todos los días, o algunos días?
 vos:  de lunes a viernes
-bot:  Entendí: /alarma lun-vie 7:00 arriba
-      Alarma lun, mar, mié, jue, vie #3 en parlante para mañana 07:00: «arriba»
+bot:  Listo: la alarma suena lun, mar, mié, jue, vie a las 7:00 en Parlante: «arriba»
 ```
 
 Solo pregunta lo que **falta**: `dame el clima` se ejecuta de una, como siempre. Un comando
@@ -705,7 +719,7 @@ tildes. Si alguno no es de la casa, el evento queda de todos con el título como
 agenda. El parlante y los resúmenes todavía leen el título como está, con los corchetes.
 
 Cada alta, cambio o baja se avisa en todos los chats. El de un alta o un cambio trae
-«Cancelar este aviso», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
+«🗑 Borrar este aviso», que cualquiera puede tocar para borrarlo, y a los demás les llega quién lo
 borró.
 
 «Para» elige de quién es el aviso: «Nadie» (como siempre), «Todos» o una persona de la casa.
@@ -768,10 +782,10 @@ kiosco de solo lectura, `?ver=1`, no lo muestra).
 2. Alguien **sin Telegram** ve solo «Ahora» y el aviso «Desde acá podés apagar una alarma y
    marcar «Hecho». Para lo demás, pedíselo a Papá o Mamá.». Lo que apague o marque les llega
    a todos los chats.
-3. **Ahora** muestra lo que pide atención, con sus botones: la alarma que suena («🔕 Apagar»),
+3. **Ahora** muestra lo que pide atención, con sus botones: la alarma que suena («🔕 Apagar alarma»),
    lo que espera su «Hecho», lo último que sonó en tu chat si todavía se puede posponer, las
    caídas sin confirmar («✅ Confirmar», solo si tu chat recibe las alertas) y un botón para
-   silenciar la casa, hacerla hablar ya o cortar las vacaciones. Lo que es para vos va
+   silenciar la casa, «Volver a hablar» o «Volví de vacaciones». Lo que es para vos va
    primero. Sin nada pendiente dice «Todo en orden». El estado de cada chequeo está plegado
    en «Chequeos de la casa». Se actualiza cada cinco segundos.
 4. El campo de texto acepta lo mismo que un mensaje sin barra en Telegram: se escribe como se
