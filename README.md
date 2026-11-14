@@ -753,8 +753,8 @@ puede editar, borrar, agregar ni tachar.
   muestra.
 - **Compras y Pendientes**, con cuántos hay. Arriba de cada una hay un campo para agregar:
   «leche y pan, yerba» son tres ítems, como en el chat, y lo que ya estaba no se repite.
-  Cada ítem trae un círculo para tacharlo desde ahí. Ni agregar ni tachar avisan en los
-  chats.
+  Cada ítem trae un círculo para tacharlo desde ahí: queda tachado con «Deshacer» y se saca
+  recién a los cinco segundos. Ni agregar ni tachar avisan en los chats.
 
 Se ve claro u oscuro según el tema del dispositivo; en el horario de descanso, o con
 `/silencio` o de vacaciones, se pone oscuro y apagado aunque el dispositivo esté en claro.
@@ -769,8 +769,10 @@ Para dejarlo fijo en una tablet o un teléfono viejo:
 
 **El control** hace desde el navegador lo mismo que Telegram, y es por donde maneja la casa
 quien no tiene Telegram o cuando Telegram no anda. Se llega con `http://192.168.68.10:8099`
-a secas, que lleva a `/control`, o desde el enlace «Control» de la agenda y del kiosco (el
-kiosco de solo lectura, `?ver=1`, no lo muestra).
+a secas, que lleva a `/control`, o con «Inicio» del menú. El control, la agenda y el kiosco
+comparten arriba (en el kiosco, abajo a la derecha) el mismo menú, Inicio · Agenda ·
+Pantalla, con la página en la que estás resaltada; el kiosco de solo lectura (`?ver=1`) y la
+alarma de la tele no lo muestran.
 
 1. La primera vez pregunta **«¿Quién sos?»**, con un botón por persona de la casa o, si
    todavía no se cargó ninguna, por chat de Telegram. Hasta elegir no se ve nada más. El
@@ -780,8 +782,8 @@ kiosco de solo lectura, `?ver=1`, no lo muestra).
    (`persons`). Todo lo que hagas va a tu nombre, y a los demás chats
    les llega como «<tu nombre> (pantalla)», igual que si hubieras tocado el botón en Telegram.
 2. Alguien **sin Telegram** ve solo «Ahora» y el aviso «Desde acá podés apagar una alarma y
-   marcar «Hecho». Para lo demás, pedíselo a Papá o Mamá.». Lo que apague o marque les llega
-   a todos los chats.
+   marcar «Hecho». Para lo demás, pedíselo a …», con los nombres de quienes reciben las
+   alertas (o «quien maneja la casa»). Lo que apague o marque les llega a todos los chats.
 3. **Ahora** muestra lo que pide atención, con sus botones: la alarma que suena («🔕 Apagar alarma»),
    lo que espera su «Hecho», lo último que sonó en tu chat si todavía se puede posponer, las
    caídas sin confirmar («✅ Confirmar», solo si tu chat recibe las alertas) y un botón para
@@ -793,23 +795,32 @@ kiosco de solo lectura, `?ver=1`, no lo muestra).
    al campo para cambiarlo, sin mandarlo. La respuesta aparece arriba del campo y la página
    se mueve hasta ella. Si falta un dato, pregunta como en el chat, y la pregunta se puede
    contestar desde acá o desde Telegram.
-5. **A mano** tiene lo de todos los días: «🛒 Compras», «➕ Nuevo aviso» (abre la agenda con
-   el formulario), un timer con minutos y para qué, «Agregar a compras», «🤫 Silencio» (vacío
-   dice si la casa está callada) y «Decir» con los equipos. Los equipos tildados van como
-   `en <equipo>`; sin tildar, habla el equipo de siempre.
-6. Abajo siguen los paneles (Casa, Programado, Consultas, Listas) y, plegados, **Más**
-   (equipo de siempre, equipos, volumen, pantalla en la tele, pastillas, turnos, cuentas y
-   traducir) y **⚙️ Ajustes de la casa** (depurar y las personas). Cada campo dice abajo qué
-   espera. «Pastillas» y «Turnos» tienen un solo botón cada uno: con el campo vacío muestran
-   lo que hay; con texto («7 enalapril 30»), lo cargan.
-7. Un comando que tarda —una pregunta con búsqueda— muestra «⏳ Procesando…» hasta que
+5. Abajo están **los temas de Telegram** como tarjetas: ⏰ Avisos, 🗣 Hablar en la casa,
+   🛒 Compras y comida, 📅 Hoy, ❓ Preguntar, 🤫 Silencio y, solo para los chats de alertas,
+   ⚙️ Ajustes. Tocar uno abre sus botones, los mismos que en Telegram; tocarlo de nuevo o
+   «Volver a los temas» lo cierra. Lo que en Telegram pregunta un dato, acá es un campo:
+   «Avisame en…» pide los minutos y para qué, «Decir algo» qué decir, y así. «Alarma» y
+   «Recordatorio» son un solo «➕ Nuevo aviso», que abre la agenda con el formulario. Cada
+   campo dice abajo qué espera.
+6. En **Hablar en la casa** (y en Ajustes, para sacar la pantalla de la tele) aparecen los
+   equipos para tildar: los tildados van como `en <equipo>`; sin tildar, habla el equipo de
+   siempre. En **Avisos**, «Pastillas» y «Turnos» muestran lo que hay, y sus campos («7
+   enalapril 30», «7 Cin, Die») lo cargan. **Ajustes** tiene además depurar, el equipo de
+   siempre y las personas.
+7. Tocar un «✓ ítem» de compras o pendientes lo tacha con un «Deshacer» al lado: recién a los
+   cinco segundos se saca de la lista. Si recargás la página antes, no se saca.
+8. Un comando que tarda —una pregunta con búsqueda— muestra «⏳ Procesando…» hasta que
    contesta, aunque tarde un minuto.
+9. Borrar a una persona, cambiarle el Telegram o el nombre se hace en un cuadro propio, con
+   letra grande, igual que borrar un aviso en la agenda: «No», la tecla Escape o un toque
+   afuera lo cancelan.
 
-**Las personas de la casa** se cargan en «👪 Personas», dentro de «⚙️ Ajustes de la casa», al pie del control: nombre
+**Las personas de la casa** se cargan en «👪 Personas», dentro del tema ⚙️ Ajustes del control: nombre
 y, si tiene, su Telegram, elegido de los chats de `ALLOWED_CHAT_IDS` que no son de nadie, o
 «Sin Telegram». Un chat que todavía no le escribió al bot aparece como «Todavía no escribió
 (·1234)», con los últimos cuatro números. El nombre es el que dice la casa: letras y espacios, sin números ni guiones,
-sin repetir y sin «todos» ni «nadie». Cada fila se renombra, cambia de Telegram o se borra.
+sin repetir y sin «todos» ni «nadie». Cada fila se renombra, cambia de Telegram o se borra;
+cambiar el Telegram y borrar piden confirmación.
 Sumar o sacar a alguien no avisa a nadie.
 
 En el teléfono, el menú del navegador ofrece **«Agregar a pantalla de inicio»** (⋮ → Agregar
@@ -989,7 +1000,8 @@ Los argumentos son la URL base, la carpeta de salida (por defecto `capturas`) y,
 opcional, el número de una alarma para sacar también `/alarma?job=<n>`. Saca `/control`,
 `/agenda`, `/pantalla` y `/pantalla?ver=1` en celular (412×915), tablet (1024×768), PC
 (1440×900), tele 1080p y tele 720p; además, cada una en tema oscuro en celular y PC, y
-control y agenda enteras en una ventana alta. Cada captura usa un perfil vacío, así no
+control y agenda enteras en una ventana alta. Sin `CAPTURE_SOY`, el control sale en «¿Quién
+sos?»; con el id de una persona, también sale `/control?soy=<id>`, con los temas. Cada captura usa un perfil vacío, así no
 arrastra lo guardado en el navegador. Solo hace GET: no escribe nada en la casa.
 
 | Variable | Para qué | Por defecto |
@@ -998,6 +1010,7 @@ arrastra lo guardado en el navegador. Solo hace GET: no escribe nada en la casa.
 | `CAPTURE_FLAGS` | banderas de más, como `--no-sandbox` donde no hay sandbox de usuario | ninguna |
 | `CAPTURE_WAIT_MS` | cuánto tiempo virtual espera a que la página cargue | `6000` |
 | `CAPTURE_TIMEOUT_S` | tope de cada captura, en segundos | `60` |
+| `CAPTURE_SOY` | id de una persona del padrón: suma el control a su nombre | ninguno |
 
 ## Configuración
 

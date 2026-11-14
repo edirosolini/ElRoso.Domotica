@@ -340,6 +340,11 @@ pregunta la otra mitad y se acuerda de lo que ya le dijeron. `slots.py` dice qu�
   🤫 Silencio y ⚙️ Ajustes. **«Ajustes» solo lo ven los chats de `alert_recipients`**
   (`_topics()`); a otro chat, `tema ajustes` contesta «No conozco ese tema.». ⚠️ Con el bot
   abierto `alert_recipients` está vacía y nadie ve «Ajustes».
+- 🔴 **`Commands.topics_for(chat_id)` son los mismos temas para `/control`**: la web los
+  muestra como tarjetas con estos botones, así que un botón que se suma o se saca de `TOPICS`
+  cambia los dos transportes. Ver **Control desde la web**, en `.claude/rules/web.md`.
+- **«🗣 Hablar en la casa» tiene «Apagar la tele o el parlante»** (`apagar`), al lado de
+  «Callar el parlante» (`parar`): callar corta lo que suena, apagar cierra la app y deja el equipo en reposo.
 - **Un botón de tema corre un comando o lo deja armado.** «Mis avisos» manda `lista`; «Avisame
   en…» manda `armar timer`. `arrange()` guarda el pendiente con la pregunta del dato que falta
   (`slots.missing()`, o `slots.QUESTION` para `preguntar`, que escrito no tiene dato

@@ -49,6 +49,18 @@ separada del transporte HTTP y se prueba sin red.
   (`casa`, `alarm`, `reminder`, `timer`, `past`, `google`, `feriado`, `ev`): el `.alarm` de la
   vista de alarma estiraba cada alarma del calendario a `100vh` y la agenda las escondía detrás
   de «+N más». `tests/web/test_app.py` lo sostiene.
+- **Un solo menú, `nav.site-nav`, en `/control`, `/agenda` y `/pantalla`**: Inicio
+  (`/control`), Agenda y Pantalla, en ese orden y con la página actual en
+  `aria-current="page"`, resaltada. No hay otros enlaces sueltos entre páginas. `/alarma` no
+  lleva menú, y el kiosco con `?ver=1` lo esconde. Hay test de las tres cosas.
+- **Confirmar y pedir un dato van por `dialog.js`**, nunca por `confirm()` ni `prompt()` del
+  navegador: `HouseDialog.confirm(texto, {yes, no}, callback)` le pasa `true` o `false`, y
+  `HouseDialog.ask(texto, inicial, {yes, no, max}, callback)` lo escrito o `null`; `max` es el
+  tope opcional del campo. Letra de veinte píxeles, encima de todo. Escape o un toque afuera
+  es «No», el foco queda atrapado adentro con Tab y al cerrar vuelve a donde estaba. Lo cargan
+  `/agenda` y `/control` antes de su script. Hay test de que ningún script propio llama a
+  `window.confirm(` ni `window.prompt(`. ⚠️ **Con un diálogo abierto, otro no se abre** y su
+  callback no se llama nunca.
 
 | Ruta | Qué es |
 | --- | --- |
@@ -56,7 +68,7 @@ separada del transporte HTTP y se prueba sin red.
 | `/pantalla` | el kiosco en tarjetas: reloj, clima, lo próximo, lo de hoy, la idea del menú y las dos listas. `?ver=1` es solo lectura |
 | `/alarma?job=<id>` | la vista de una alarma que suena, para la tele. Ver **Pantalla en la TV**, en `.claude/rules/pantalla-tv.md` |
 | `/` | un 302 a `/control`; otro método es 405 |
-| `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre, «A mano» y los comandos en paneles. `?soy=<id>` elige a esa persona del padrón y la guarda. Ver **Control desde la web** |
+| `/control` | manejar la casa sin Telegram: lo urgente arriba, texto libre y los temas de Telegram como tarjetas. `?soy=<id>` elige a esa persona del padrón y la guarda. Ver **Control desde la web** |
 | `/api/events?start=…&end=…` | lo de un rango, como `{events, calendars, problems}` |
 | `/api/ringing/<id>` | si esa alarma sigue sonando, su mensaje, para quién (`for`), a qué hora sonó (`at`, «H:MM» de `fired_at`, o null) y la hora del servidor |
 | `/api/board` | el estado del kiosco: hora, descanso, vacaciones, hoy, lo próximo, clima, `meal` y listas como `[{id, text}]` |
@@ -67,7 +79,7 @@ separada del transporte HTTP y se prueba sin red.
 | `GET`/`PUT`/`DELETE /api/jobs/<id>` | lee, edita o borra un aviso |
 | `POST /api/lists/<lista>` | suma a compras o pendientes lo escrito, partido como en el chat |
 | `POST /api/lists/<lista>/<id>/done` | tacha un ítem de compras o pendientes |
-| `GET /api/live?chat=<id>` o `?person=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat o esa persona, y si puede mandar comandos (`can_command`) |
+| `GET /api/live?chat=<id>` o `?person=<id>` | lo que pide atención ahora, con los botones que le tocan a ese chat o esa persona, si puede mandar comandos (`can_command`), sus temas (`topics`) y, sin chat, a quién pedirle lo demás (`ask`) |
 | `POST /api/command` | corre un botón (`data`) o un mensaje suelto (`text`) a nombre de `chat_id` o de `person_id` |
 | `/static/manifest.webmanifest`, `/static/icon-192.png`, `/static/icon-512.png` | el manifest y los íconos del acceso directo a `/control` |
 | `GET /app/tele.apk` | el APK de la app de la tele, para bajarlo con Downloader o con un explorador de archivos con acceso a la red. Ver **App de la tele** |
@@ -160,15 +172,17 @@ conoce `http.server`, que solo traduce en `api._Handler`. Es la regla de **Arqui
   atado a `CALENDAR_TTL`, así que un evento nuevo ahí tarda hasta cinco minutos más.
 
 **Cómo se ve la agenda.** Barra propia (`headerToolbar: false`): título del período,
-anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y enlaces a `/pantalla` y
-`/control`.
+anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y el menú común.
 
 - **La vista con que abre la decide `startView()`**: con `?m=` siempre el mes; si no, la
   última que se tocó en ese dispositivo (`localStorage`, `casa.agenda.vista`); sin guardada,
   mes en ancho (≥720 px) y «Lista» en angosto.
-- **En el celular (≤640 px) la barra va en grilla**: título y enlaces, después flechas y
-  vistas, y «Ver» en una tercera fila si hay padrón. En tablet (641 a 1100 px), una fila con
-  el título más chico.
+- ⚠️ **El mes en el celular no se lee**: eventos de catorce píxeles en columnas de unos
+  cincuenta y ocho. En angosto abre en «Lista», pero quien elige «Mes» lo ve así, y queda
+  guardado como su vista.
+- **En el celular (≤640 px) la barra va en grilla**: el menú arriba a lo ancho, después el
+  título con las flechas, las vistas a lo ancho y «Ver» en otra fila si hay padrón. En tablet
+  (641 a 1100 px), una fila con el título más chico.
 - **En el celular «Nuevo aviso» queda en un círculo con el «+»**: el texto se esconde y el
   botón conserva el nombre por `aria-label`.
 - **Un calendario que no se pudo leer queda marcado en la leyenda** con «⚠» y fondo de
@@ -182,8 +196,8 @@ anterior, «Hoy», siguiente, Mes/Semana/Día/Lista (`listWeek`) y enlaces a `/p
 - **«Nuevo aviso» es un botón flotante**, que aparece solo si la pantalla escribe. El
   formulario y el detalle abren en un panel desde abajo (centrado en pantalla ancha) y se
   cierran tocando afuera.
-- **Lo que pasó se avisa con un toast** que se va solo, no con `alert()`. ⚠️ **Borrar sigue
-  pidiendo `confirm()`**: es un toque sin deshacer y borra la serie entera.
+- **Lo que pasó se avisa con un toast** que se va solo, no con `alert()`. **Borrar pregunta
+  antes con `HouseDialog.confirm()`**: es un toque sin deshacer y borra la serie entera.
 
 **Temas.** Los colores son variables en `:root` de `app.css`, una sola hoja para todas las
 páginas. Los tres temas —claro, oscuro y noche— declaran los mismos tokens, y `test_app.py`
@@ -191,8 +205,9 @@ lo sostiene.
 
 - **Tokens compartidos**: `--space-1` a `--space-5` (cuatro a veinticuatro píxeles), `--tap`
   (44 px, el mínimo táctil de botones, campos y selects), `--on-accent` (el texto sobre el
-  acento lleno), `--accent-ink` (el texto sobre el acento suave), `--faint` (lo vacío y lo
-  tachado) y `--danger`.
+  acento lleno), `--accent-ink` (el texto sobre el acento suave), `--faint` y `--danger`.
+- 🔴 **`--faint` es solo para lo tachado** (una regla con `.done`). Lo vacío, los días de otro
+  mes y el borde de los círculos de tachar van en `--muted`. Hay test que lo sostiene.
 - 🔴 **Contraste medido**: en claro y oscuro, `--on-accent` sobre `--accent` y `--accent-ink`
   sobre `--accent-soft` dan al menos 4,5; en los tres temas, `--faint` sobre `--card` da al
   menos 3. Hay test que lo calcula. ⚠️ En el tema noche `--on-accent` sobre `--accent` da 3,9:
@@ -207,6 +222,10 @@ lo sostiene.
 - **El kiosco y la alarma miden en `vh`; el control y la agenda, en píxeles.** Lo primero se
   mira de lejos y escala con la pantalla; lo segundo se lee de cerca y no cambia de tamaño
   con el alto de la ventana. Hay test de las dos cosas.
+- 🔴 **El control y la agenda leen a dieciocho píxeles** de base (`.control`, `.agenda`). En el
+  control, las ayudas (`.hint`) y los datos de lo urgente (`.urgent-meta`) van a dieciséis y en
+  `--text`, no en `--muted`; en la agenda nada baja de catorce, tampoco lo de FullCalendar
+  (`.fc`). Hay test de las tres cosas.
 - ⚠️ **Sin `:has()`, `aspect-ratio`, `subgrid` ni container queries**: no andan en el
   navegador viejo de un dispositivo reciclado ni en el receptor de Cast. `min()` se usa solo
   con un valor de respaldo antes, como la hora de la alarma.
@@ -227,7 +246,10 @@ columnas; vertical, en dos.
   dos listas van lado a lado debajo de la fila de arriba, para que no se corten abajo. Las
   listas se reparten el alto que queda con `minmax(0, 1fr)`.
 - **Por debajo de 600 px el kiosco se desplaza** en una sola columna en vez de apretar las
-  tarjetas, y el enlace de la esquina deja de ser fijo.
+  tarjetas, y el menú deja de ser fijo.
+- **El menú del kiosco va fijo abajo a la derecha**, en `--text` y medido en `vh`. Sin
+  `?ver=1`, el tablero deja abajo el alto del menú para que no tape la última fila; por debajo
+  de 600 px, donde el menú ya no es fijo, no lo reserva.
 
 - 🔴 **El reloj corre con la hora del servidor.** Calcula el offset entre `now` y el punto
   medio de la ida y vuelta, así un dispositivo con la hora mal igual muestra la de la casa.
@@ -264,12 +286,14 @@ columnas; vertical, en dos.
     así que `?ver=1` la muestra igual.
   - ⚠️ **La grilla con la tarjeta se probó en Chromium headless**, apaisada y vertical, no en
     las teles.
-- ⚠️ **`app.js`, `kiosk.js`, `alarm.js` y `control.js` van en ES5** —`var` y `function`, sin flechas, `const`,
-  template strings ni `?.`— para andar en el navegador viejo de un dispositivo reciclado. Sí
-  necesitan `fetch`. Hay test que busca esa sintaxis, y `innerHTML`, en los cuatro.
+- ⚠️ **`app.js`, `kiosk.js`, `alarm.js`, `control.js` y `dialog.js` van en ES5** —`var` y
+  `function`, sin flechas, `const`, template strings ni `?.`— para andar en el navegador viejo
+  de un dispositivo reciclado. Sí necesitan `fetch`. Hay test que busca esa sintaxis, y
+  `innerHTML`, en los cinco.
 - **La lógica pura de los scripts se prueba con node.** Cada uno exporta sus funciones
   sin DOM por `module.exports` cuando corre fuera del navegador; `tests/web/agenda_logic.js`,
-  `kiosk_logic.js`, `alarm_logic.js` y `control_logic.js` las ejercitan y `test_agenda_js.py` los corre. ⚠️ **Sin `node` en la
+  `kiosk_logic.js`, `alarm_logic.js`, `control_logic.js` y `dialog_logic.js` las ejercitan y
+  `test_agenda_js.py` los corre. ⚠️ **Sin `node` en la
   máquina, ese test se saltea**: no falla.
 - **Pantalla completa al primer toque**: el navegador solo la concede desde un gesto. Que la
   pantalla no se apague y el cargador son cosa del dispositivo.
@@ -277,13 +301,18 @@ columnas; vertical, en dos.
 - **Cada ítem de las listas trae un círculo para tacharlo**, solo si `/api/people` dice que la
   pantalla escribe. Tacha por id, como el botón del chat, así que un toque no se lleva otro
   ítem. Tachar no avisa a los chats.
+- 🔴 **Tachar espera cinco segundos con «Deshacer»** (`UNDO_MS`, `pendingCross()`): el ítem
+  queda tachado, fuera del contador y con el foco en «Deshacer», y recién al vencer se manda
+  el `done`. «Deshacer» lo devuelve sin mandar nada. Lo pendiente vive en la memoria de la
+  página: **recargar antes de que venza no borra**. Si el `done` falla, el ítem vuelve y lo
+  dice en los problemas.
 - **Cada tarjeta de lista trae un campo para agregar**, con la misma condición. Se parte por
   comas y por «y», como `/agregar`, y un repetido no entra. Agregar tampoco avisa a los
   chats, decisión del dueño: es una lista, no un aviso. ⚠️ El campo lleva el teclado del
   dispositivo: en uno sin teclado en pantalla no sirve.
 - 🔴 **Con `?ver=1` el kiosco es solo lectura**: `kiosk.js` le pone la clase `read-only` al
-  `body`, que esconde los campos, los círculos y el enlace a `/control` de la esquina, y no
-  consulta `/api/people`. Es lo único que se castea: en la tele no hay con qué tocar.
+  `body`, que esconde los campos, los círculos y el menú, y no consulta `/api/people`. Es lo
+  único que se castea: en la tele no hay con qué tocar.
 
 **Escribir desde la pantalla.** `/agenda` crea, edita y borra avisos de la casa con un
 formulario; `JobsService` (`web/jobs.py`) es la lógica y no sabe de HTTP.
@@ -447,10 +476,11 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **`?soy=<id>` elige a esa persona y la guarda** (`whoFromQuery()`), y pisa lo guardado: es
   el enlace de cada persona. Un id que no está en el padrón, o un chat, no elige nada.
 - **`/api/live` trae `can_command`**: si quien llama tiene chat. Con `false` la página esconde
-  todo lo `.needs-chat` —texto libre, ejemplos, «A mano», paneles, «Más» y «Ajustes»— y
-  muestra «Ahora» con «Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás,
-  pedíselo a Papá o Mamá.». 🔴 **Esconder no es la defensa**: el 403 de `/api/command` sigue
-  siéndolo.
+  todo lo `.needs-chat` —texto libre, ejemplos, temas y su panel— y muestra «Ahora» con «Desde
+  acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a <ask>.». `ask` lo
+  trae `/api/live` solo sin chat, de `Commands.alert_names()`: los nombres del padrón de los
+  chats de alertas, o «quien maneja la casa», el mismo texto que `unconfigured()`.
+  🔴 **Esconder no es la defensa**: el 403 de `/api/command` sigue siéndolo.
 - **`ControlService._caller()` resuelve a nombre de quién se corre.** `chat_id` y `person_id`
   juntos es un 400. Sin `ALLOWED_CHAT_IDS`, con un chat fuera de la lista o con una persona que
   no existe, `/api/live` y `/api/command` contestan 403 «Elegí quién sos.». Una persona con
@@ -485,25 +515,34 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **«Confirmar» solo si el chat elegido es de `ALERT_CHAT_IDS`**, que es a quien
   `Monitor.acknowledge()` deja confirmar. La caída se ve igual para todos.
 - **La respuesta se lleva a la vista** (`scrollIntoView`) al mandar y al contestar: en el
-  celular quedaba abajo de los paneles, fuera de la pantalla.
+  celular puede quedar fuera de la pantalla.
 - **El texto libre tiene ejemplos tocables** (`data-example`) y la ayuda «Escribilo como se lo
   dirías a alguien.». Tocar un ejemplo lo copia al campo **sin mandarlo**.
-- **«A mano» (`#quick`) junta lo de todos los días**: «Compras», «➕ Nuevo aviso» (un enlace
-  a `/agenda?nuevo=1`), Timer, «Agregar a compras», «🤫 Silencio» y «Decir» con los chips de
-  equipos. El timer arma `timer <N>m <qué>` (`timerCommand()`): sin minutos enteros mayores a
-  cero no se manda. «Silencio» vacío dice cómo está la casa.
-- **El panel «🛒 Listas» tiene «Menú»** al lado de «Compras» y «Pendientes»: corre `menu`
-  como `/menu` en Telegram, con sus botones. Ver **Menú semanal**, en `.claude/rules/consultas.md`.
-- **Los paneles van en tres columnas armadas a mano** (`.panel-col`): Casa y Programado;
-  Consultas; Listas. Cada columna apila sus tarjetas sin estirarlas al alto de la vecina. Cada
-  fila campo y botón es una grilla, y por debajo de 400 px el botón baja a lo ancho.
-- **Lo de menos uso va plegado en `<details>`**: «Más» —Equipo de siempre, Equipos, Volumen,
-  Pantalla, Turnos, Pastillas, Calcular y Traducir— y, al final, «⚙️ Ajustes de la casa» con
-  «🧹 Depurar» y «👪 Personas». Las etiquetas dicen qué hacen: «Cortar lo que suena»
-  (`parar`), «Apagar el equipo» (`apagar`), «Equipo de siempre» (`usar`).
-- 🔴 **«Pastillas» y «Turnos» son un solo formulario cada uno, sin `data-need`**: vacío
-  consulta (`pastillas`, `turnos`), con texto carga. `formCommand()` decide; sin dato
-  obligatorio vacío devuelve `null` y no se manda nada.
+- 🔴 **Los comandos son los temas de Telegram, no una lista propia.** `/api/live` trae
+  `topics`, `[{key, label, buttons}]`, de `Commands.topics_for(chat_id)`: los mismos temas,
+  etiquetas y botones que `/inicio`, con «Ajustes» solo para los chats de alertas. Cada tema
+  es una tarjeta (`#topics`, cuatro columnas desde 900 px); tocarla abre su panel
+  (`#topic-panel`) con sus botones, y tocarla de nuevo o «Volver a los temas» lo cierra
+  (`openTopic()`). Las tarjetas se rearman solo si los temas cambian, sin cerrar el abierto.
+  Un botón nuevo en `TOPICS` aparece en la web sin tocarla.
+- **Un formulario de la página reemplaza al botón `armar` de su tema** (`.part` con
+  `data-arm`): el panel esconde ese botón (`panelButtons()`) y muestra el formulario si el tema
+  lo arma (`armedIn()`). Así, «Avisame en…» es el formulario del timer, «Decir algo»,
+  «Volumen», «Agregar a compras», «Preguntar algo», «Calcular», «Traducir» y «Equipo de
+  siempre» son su campo, y «Alarma» y «Recordatorio que se repite» son un solo «➕ Nuevo
+  aviso», el único enlace a `/agenda?nuevo=1`. El timer arma `timer <N>m <qué>`
+  (`timerCommand()`): sin minutos enteros mayores a cero no se manda.
+- **Lo que solo tiene la web va con `data-extra="<tema>"`** y aparece en el panel de ese tema:
+  cargar pastillas y turnos en Avisos, «Llamar» con texto en Hablar en la casa, y «Sacar la
+  pantalla» (`pantalla apagar`) y «👪 Personas» en Ajustes. «🧹 Depurar» es el botón `depurar`
+  del tema Ajustes.
+- 🔴 **«Pastillas» y «Turnos» tienen dos caminos**: el botón del tema consulta (`pastillas`,
+  `turnos`) y el formulario, con `data-need`, solo carga; vacío no se manda (`formCommand()`
+  devuelve `null`).
+- ⚠️ **La familia no ve «Equipo de siempre» en la web**: es el `armar usar` de Ajustes, que
+  solo ven los chats de alertas. Escrito, `usar` sigue andando para todos.
+- **Cada fila campo y botón es una grilla**; por debajo de 400 px el botón baja a lo ancho, y
+  por debajo de 480 px el botón del timer va abajo de sus dos campos.
 - **Lo que explica un campo va en un `.hint` visible abajo**, no en `title`: en el celular y
   en la tele un `title` no se ve nunca. El placeholder queda corto.
 - **«Ahora» se compacta en calma** (`isCalm()`): si lo único es el silencio, la tarjeta pasa
@@ -512,15 +551,22 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **El orden de «Ahora» es por tipo**: sonando, espera «Hecho», posponer, caídas y silencio.
   Dentro de cada tipo, lo que es para la persona elegida va primero (`mineFirst()`, por el
   `for`); el orden de los tipos no cambia.
-- **Los equipos de «A mano» son chips con estado**: el tildado se marca con la clase `on`, y
-  valen para todo comando con `data-target`, también los de «Casa» y «Más». Muestran el
-  nombre de `names` y mandan el alias; sin `names`, el alias (`deviceLabel()`, igual que el
-  desplegable de equipo del editor de la agenda).
+- **Los equipos son chips con estado** (`data-chips`), y aparecen solo en el panel de un tema
+  con algún comando `data-target` a la vista: Hablar en la casa y Ajustes. El tildado se marca
+  con la clase `on` y se recuerda al cambiar de tema. Muestran el nombre de `names` y mandan el
+  alias; sin `names`, el alias (`deviceLabel()`, igual que el desplegable de equipo del editor
+  de la agenda).
 - **En «👪 Personas», un chat que todavía no le escribió al bot se lista «Todavía no escribió
   (·NNNN)»**, con los últimos cuatro dígitos (`chatLabel()`). Borrar es un botón de peligro.
-- **«⚙️ Ajustes de la casa» tiene «🧹 Depurar»**: corre `depurar`, el mismo comando, con sus
-  botones. Se ve para todo el que tiene chat; quién puede usarlo lo decide `Commands`, no la
-  página. Ver `.claude/rules/depurador.md`.
+- 🔴 **Lo que cambia el padrón pregunta con `HouseDialog`**: borrar a alguien y cambiarle el
+  Telegram confirman, y con «No» el desplegable vuelve al chat de antes; renombrar pide el
+  nombre con `HouseDialog.ask()` (tope de cuarenta), y vacío, igual o cancelado no manda nada.
+- 🔴 **Un botón `sacar id:<n>` espera cinco segundos con «Deshacer»** (`undoable()`,
+  `UNDO_MS`): queda tachado y deshabilitado, y recién al vencer se manda, cuando no hay otro
+  comando en curso. «Deshacer» lo cancela sin mandar nada, y **recargar antes no borra**: lo
+  pendiente vive en la memoria de la página. Es el «✓ ítem» de `compras` y `pendientes`.
+- **«🧹 Depurar» está en el tema Ajustes**, que solo ven los chats de alertas; quién puede
+  usarlo lo sigue decidiendo `Commands`. Ver `.claude/rules/depurador.md`.
 - **Un solo botón de silencio, según el estado**: «Volví de vacaciones» en vacaciones,
   «Volver a hablar» con un silencio pedido y si no «Silenciar 1 h». Los dos primeros son
   `BACK_ACTION` y `TALK_ACTION` de `Commands`, los mismos que ofrecen `/vacaciones` y
@@ -534,22 +580,26 @@ sabe de HTTP; `WebApp._control()` la rutea.
 - **Manifest e íconos para «Agregar a pantalla de inicio»**, sobre http y **sin service
   worker**: una PWA instalable de verdad y el micrófono piden HTTPS, y la casa sirve http.
   Después de elegir, al pie, la página dice cómo: «⋮ → Agregar a pantalla principal».
-- **Se llega desde `/agenda` y `/pantalla`, o por `/` a secas**, que redirige; el enlace del kiosco se esconde con `?ver=1`, y
-  lo que se castea sigue siendo `/pantalla?ver=1`.
+- **Se llega por «Inicio» del menú común o por `/` a secas**, que redirige. Lo que se castea
+  sigue siendo `/pantalla?ver=1`, sin menú.
 - ⚠️ **La parte DOM de `control.js` no tiene test automático.** `control_logic.js` cubre la
   lógica pura —el comando con los equipos, a quién elegir y `?soy=`, el timer, el cuerpo del
-  POST, el orden de lo urgente y su título—; lo demás se prueba a mano en el navegador, o con las capturas.
+  POST, el orden de lo urgente y su título, qué botones de un tema reemplaza un formulario, el
+  tema abierto, el texto sin chat y qué botón espera «Deshacer»—; lo demás se prueba a mano en
+  el navegador, o con las capturas.
 
 **Capturas de la web.** `deploy/capture-ui.sh` saca las páginas con un Chrome o Chromium
 headless, en cinco tamaños (celular, tablet, PC, tele 1080p y tele 720p), en tema claro y
-oscuro, y las largas enteras. Solo hace GET: no escribe nada en la casa. Uso y variables en
+oscuro, y las largas enteras. Con `CAPTURE_SOY=<id>` suma `/control?soy=<id>`, ya elegido a
+nombre de esa persona, que es el único modo de capturar los temas: sin elección, `/control`
+muestra solo «¿Quién sos?». Solo hace GET: no escribe nada en la casa. Uso y variables en
 **Desarrollo**, en el `README.md`.
 
 ## Padrón de la casa
 
 `people.Household` sobre `PersonStore` (tabla `persons`) es quién vive en la casa, tenga o no
 Telegram. `PeopleStore` (`people`) sigue siendo otra cosa: el nombre que el chat muestra en
-Telegram. Se carga desde la tarjeta «👪 Personas», en «⚙️ Ajustes de la casa» de `/control`.
+Telegram. Se carga desde «👪 Personas», en el tema Ajustes de `/control`.
 
 - **Escribir exige pantalla escribible**: `POST /api/persons` y `PUT`/`DELETE
   /api/persons/<id>` pasan por `_refuse_write` y sin `ALLOWED_CHAT_IDS` son 403. Otro método es
