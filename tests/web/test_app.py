@@ -243,7 +243,7 @@ def test_the_kiosk_crosses_items_out(app):
     assert "innerHTML" not in script
 
 
-@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js", "control.js"])
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js", "control.js", "dialog.js"])
 def test_our_scripts_stay_in_old_javascript(app, name):
     script = get(app, f"/static/{name}").body.decode("utf-8")
 
@@ -252,7 +252,7 @@ def test_our_scripts_stay_in_old_javascript(app, name):
     assert "innerHTML" not in script
 
 
-@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js", "control.js"])
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js", "control.js", "dialog.js"])
 def test_our_scripts_style_only_through_set_property(app, name):
     script = get(app, f"/static/{name}").body.decode("utf-8")
 
@@ -408,6 +408,7 @@ def test_the_board_feed_carries_the_meal_idea(tmp_path):
         ("kiosk.js", "text/javascript"),
         ("alarm.js", "text/javascript"),
         ("control.js", "text/javascript"),
+        ("dialog.js", "text/javascript"),
         ("manifest.webmanifest", "application/manifest+json"),
         ("icon-192.png", "image/png"),
         ("icon-512.png", "image/png"),
@@ -1207,7 +1208,57 @@ def test_the_control_manages_the_padron_and_asks_before_removing(app):
     assert "style=" not in page
     assert '"/api/persons"' in script and '"/api/persons/" + person.id' in script
     assert "/api/live?person=" in script
-    assert "window.confirm(" in script
+    assert "HouseDialog.confirm(" in script
+    assert "HouseDialog.ask(" in script
+
+
+@pytest.mark.parametrize(("path", "script"), [("/agenda", "app.js"), ("/control", "control.js")])
+def test_the_pages_load_the_dialog_before_their_script(app, path, script):
+    page = get(app, path).body.decode("utf-8")
+
+    assert '<script src="/static/dialog.js" defer></script>' in page
+    assert page.index('src="/static/dialog.js"') < page.index(f'src="/static/{script}"')
+
+
+@pytest.mark.parametrize("name", ["app.js", "kiosk.js", "alarm.js", "control.js", "dialog.js"])
+def test_no_script_of_ours_asks_with_the_browser_boxes(app, name):
+    script = get(app, f"/static/{name}").body.decode("utf-8")
+
+    assert "window.confirm(" not in script
+    assert "window.prompt(" not in script
+
+
+def test_the_agenda_asks_before_deleting_with_its_own_dialog(app):
+    script = get(app, "/static/app.js").body.decode("utf-8")
+
+    assert "HouseDialog.confirm(" in script
+
+
+def test_the_dialog_is_built_as_text_and_traps_the_focus(app):
+    script = get(app, "/static/dialog.js").body.decode("utf-8")
+
+    assert ".textContent = " in script
+    assert 'setAttribute("aria-modal", "true")' in script
+    assert '"keydown"' in script and '"focusin"' in script
+    assert "window.HouseDialog = " in script
+
+
+def test_changing_the_telegram_of_a_person_asks_first(app):
+    script = get(app, "/static/control.js").body.decode("utf-8")
+    change = script[script.index('select.addEventListener("change"'):]
+    change = change[:change.index("\n    });\n")]
+
+    assert "HouseDialog.confirm(" in change
+    assert "select.value = " in change
+
+
+def test_crossing_out_waits_for_undo_in_the_kiosk_and_the_control(app):
+    kiosk = get(app, "/static/kiosk.js").body.decode("utf-8")
+    control = get(app, "/static/control.js").body.decode("utf-8")
+
+    for script in (kiosk, control):
+        assert "Deshacer" in script
+        assert "setTimeout(" in script and "clearTimeout(" in script
 
 
 def test_the_answer_keeps_its_line_breaks(app):
@@ -1804,7 +1855,8 @@ def test_the_focus_is_always_visible(app):
 
 @pytest.mark.parametrize("selector", [".btn", ".ghost", ".round", ".control .action", ".control input",
                                       ".control select", ".agenda .segmented button",
-                                      ".agenda .days-row button", ".control .device"])
+                                      ".agenda .days-row button", ".control .device", ".dialog .btn",
+                                      ".dialog-input", ".kiosk .checklist .undo", ".control .undo"])
 def test_the_controls_are_big_enough_to_touch(app, selector):
     assert "min-height: var(--tap)" in rule(stylesheet(app), selector)
 
@@ -1871,3 +1923,21 @@ def test_the_kiosk_scrolls_on_a_narrow_phone(app):
 
 def test_the_alarm_hour_fits_a_portrait_phone(app):
     assert "min(32vh, 28vw)" in rule(stylesheet(app), ".alarm-view .alarm-time")
+
+
+def test_the_dialog_reads_big_above_everything(app):
+    css = stylesheet(app)
+    found = declarations(rule(css, ".dialog"))
+
+    assert float(re.fullmatch(r"([\d.]+)px", found["font-size"]).group(1)) >= 18
+    assert float(re.fullmatch(r"([\d.]+)px", declarations(rule(css, ".dialog .btn"))["font-size"]).group(1)) >= 18
+    assert "position: fixed" in rule(css, ".dialog-wrap")
+    assert int(declarations(rule(css, ".dialog-wrap"))["z-index"]) > 70
+    assert declarations(rule(css, ".dialog"))["background"] == "var(--card)"
+
+
+def test_the_undo_measures_like_its_page(app):
+    css = stylesheet(app)
+
+    assert "vh" in declarations(rule(css, ".kiosk .checklist .undo"))["font-size"]
+    assert declarations(rule(css, ".control .undo"))["font-size"].endswith("px")

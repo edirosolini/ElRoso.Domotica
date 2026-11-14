@@ -54,6 +54,7 @@ STATIC = {
     "kiosk.js": (JS, REVALIDATE),
     "alarm.js": (JS, REVALIDATE),
     "control.js": (JS, REVALIDATE),
+    "dialog.js": (JS, REVALIDATE),
     "manifest.webmanifest": (MANIFEST, REVALIDATE),
     "icon-192.png": (PNG, REVALIDATE),
     "icon-512.png": (PNG, REVALIDATE),

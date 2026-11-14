@@ -102,4 +102,22 @@ assert.strictEqual(kiosk.todayLabel({ label: "📌 la pastilla", title: "x", for
 assert.strictEqual(kiosk.todayLabel({ label: "⏰ arriba", title: "x", for: null }), "⏰ arriba");
 assert.strictEqual(kiosk.todayLabel({ title: "Dentista" }), "Dentista");
 
+// Lo tachado se ve tachado con «Deshacer» hasta que vence, aunque llegue el polling; después, no se ve.
+var items = [{ id: 3, text: "leche" }, { id: 4, text: "pan" }];
+var tapped = {};
+tapped["3"] = NOW + kiosk.UNDO_MS;
+assert.strictEqual(kiosk.UNDO_MS, 5000);
+assert.deepStrictEqual(kiosk.pendingCross(items, tapped, NOW + 1000), [
+  { id: 3, text: "leche", undo: true }, { id: 4, text: "pan", undo: false },
+]);
+assert.deepStrictEqual(kiosk.pendingCross(items, tapped, NOW + 4999)[0].undo, true);
+assert.deepStrictEqual(kiosk.pendingCross(items, tapped, NOW + 5000), [{ id: 4, text: "pan", undo: false }]);
+assert.deepStrictEqual(kiosk.pendingCross(items, {}, NOW), [
+  { id: 3, text: "leche", undo: false }, { id: 4, text: "pan", undo: false },
+]);
+assert.deepStrictEqual(kiosk.pendingCross(null, tapped, NOW), []);
+// Un pendiente que el polling ya no trae no aparece.
+assert.deepStrictEqual(kiosk.pendingCross([{ id: 4, text: "pan" }], tapped, NOW + 1000),
+  [{ id: 4, text: "pan", undo: false }]);
+
 console.log("ok");

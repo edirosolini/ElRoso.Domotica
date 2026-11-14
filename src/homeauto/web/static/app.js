@@ -447,17 +447,23 @@
 
   function deleteJob() {
     var job = state.detailJob;
-    if (job === null || !window.confirm("¿Borrar este aviso? Si repite, se borra la serie entera.")) {
+    if (job === null) {
       return;
     }
-    send("DELETE", "/api/jobs/" + job).then(function () {
-      closeDetail();
-      state.calendar.refetchEvents();
-      toast("Aviso borrado.");
-    }).catch(function (error) {
-      closeDetail();
-      toast(error.message);
-    });
+    HouseDialog.confirm("¿Borrar este aviso? Si repite, se borra la serie entera.",
+      { yes: "Sí, borrar", no: "No" }, function (yes) {
+        if (!yes) {
+          return;
+        }
+        send("DELETE", "/api/jobs/" + job).then(function () {
+          closeDetail();
+          state.calendar.refetchEvents();
+          toast("Aviso borrado.");
+        }).catch(function (error) {
+          closeDetail();
+          toast(error.message);
+        });
+      });
   }
 
   function editJob() {

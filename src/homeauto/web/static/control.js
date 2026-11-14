@@ -9,6 +9,8 @@
   var ARRANGED = /^armar (\S+)$/;
   var CHATLESS = "Desde acá podés apagar una alarma y marcar «Hecho». Para lo demás, pedíselo a ";
   var NOBODY = "quien maneja la casa";
+  var UNDO_MS = 5000;
+  var UNDOABLE = /^sacar id:\d+(?:\s|$)/;
 
   // El comando con los equipos tildados adelante: «decir en comedor,recamara hola».
   function targeted(verb, devices, text) {
@@ -285,6 +287,11 @@
     return current === key ? null : key;
   }
 
+  // Si el botón saca un ítem por id y espera «Deshacer» antes de mandarse.
+  function undoable(data) {
+    return UNDOABLE.test(String(data || ""));
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       targeted: targeted, whoOptions: whoOptions, pickWho: pickWho, commandBody: commandBody,
@@ -293,7 +300,8 @@
       statusText: statusText, formCommand: formCommand, isCalm: isCalm,
       whoFromQuery: whoFromQuery, timerCommand: timerCommand, calmTitle: calmTitle,
       mineFirst: mineFirst, deviceLabel: deviceLabel, panelButtons: panelButtons,
-      chatlessText: chatlessText, openTopic: openTopic, armedIn: armedIn,
+      chatlessText: chatlessText, openTopic: openTopic, armedIn: armedIn, undoable: undoable,
+      UNDO_MS: UNDO_MS,
     };
   }
   if (typeof document === "undefined") {
@@ -310,6 +318,8 @@
   var topicsSeen = "";
   var openKey = null;
   var picked = {};
+  // Los «sacar id:» tocados que esperan sus cinco segundos, por dato, con su timer.
+  var waiting = {};
 
   function byId(id) {
     return document.getElementById(id);
@@ -357,12 +367,62 @@
   }
 
   function actionButton(action) {
+    if (undoable(action.data)) {
+      return undoButton(action);
+    }
     var button = element("button", "action", action.label);
     button.type = "button";
     button.addEventListener("click", function () {
       send(action.data, false);
     });
     return button;
+  }
+
+  // El botón que saca un ítem: tachado con «Deshacer» cinco segundos y recién ahí se manda.
+  function undoButton(action) {
+    var box = element("span", "undo-box");
+    var button = element("button", "action", action.label);
+    button.type = "button";
+    var undo = element("button", "btn secondary undo", "Deshacer");
+    undo.type = "button";
+    box.appendChild(button);
+    box.appendChild(undo);
+    function paint() {
+      var on = waiting[action.data] !== undefined;
+      button.classList.toggle("done", on);
+      button.disabled = on;
+      undo.hidden = !on;
+    }
+    button.addEventListener("click", function () {
+      if (waiting[action.data] !== undefined) {
+        return;
+      }
+      waiting[action.data] = setTimeout(function () {
+        commitWhenFree(action.data);
+      }, UNDO_MS);
+      paint();
+      undo.focus();
+    });
+    undo.addEventListener("click", function () {
+      clearTimeout(waiting[action.data]);
+      delete waiting[action.data];
+      paint();
+      button.focus();
+    });
+    paint();
+    return box;
+  }
+
+  // Manda lo vencido apenas no hay otro comando en curso.
+  function commitWhenFree(data) {
+    if (busy) {
+      waiting[data] = setTimeout(function () {
+        commitWhenFree(data);
+      }, 250);
+      return;
+    }
+    delete waiting[data];
+    send(data, false);
   }
 
   function showProblem(text) {
@@ -791,26 +851,42 @@
     var select = document.createElement("select");
     select.setAttribute("aria-label", "Telegram de " + person.name);
     fillChats(select, data, person.id, person.chat_id);
+    var current = select.value;
     select.addEventListener("change", function () {
-      writePerson("PUT", path, { chat_id: select.value === "" ? null : parseInt(select.value, 10) });
+      var chosen = select.value;
+      var label = select.options[select.selectedIndex].textContent;
+      HouseDialog.confirm("¿Cambiar el Telegram de " + person.name + " a «" + label + "»?",
+        { yes: "Sí, cambiar", no: "No" }, function (yes) {
+          if (!yes) {
+            select.value = current;
+            return;
+          }
+          current = chosen;
+          writePerson("PUT", path, { chat_id: chosen === "" ? null : parseInt(chosen, 10) });
+        });
     });
     row.appendChild(select);
     var actions = element("div", "person-actions");
     var rename = element("button", "", "Renombrar");
     rename.type = "button";
     rename.addEventListener("click", function () {
-      var name = window.prompt("Nuevo nombre de " + person.name, person.name);
-      if (name !== null && name !== person.name) {
-        writePerson("PUT", path, { name: name });
-      }
+      HouseDialog.ask("Nuevo nombre de " + person.name, person.name,
+        { yes: "Guardar", no: "No", max: 40 }, function (name) {
+          if (name !== null && name.replace(/\s+/g, "") && name !== person.name) {
+            writePerson("PUT", path, { name: name });
+          }
+        });
     });
     actions.appendChild(rename);
     var remove = element("button", "danger", "Borrar");
     remove.type = "button";
     remove.addEventListener("click", function () {
-      if (window.confirm("¿Borrar a " + person.name + " del padrón?")) {
-        writePerson("DELETE", path, null);
-      }
+      HouseDialog.confirm("¿Borrar a " + person.name + " del padrón?", { yes: "Sí, borrar", no: "No" },
+        function (yes) {
+          if (yes) {
+            writePerson("DELETE", path, null);
+          }
+        });
     });
     actions.appendChild(remove);
     row.appendChild(actions);
