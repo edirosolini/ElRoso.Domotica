@@ -7,8 +7,9 @@ prueba sin esperar tiempo real.
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Callable, Iterable, Protocol
 
 from homeauto.lists import SHOPPING
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
     from homeauto.people import Person
     from homeauto.lists import ListStore
     from homeauto.schedule.stock import Stock, StockStore
+    from homeauto.watch.marks import Marks
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +47,9 @@ RING_LIMIT = timedelta(minutes=30)
 
 # Cómo llama la casa a un aviso para todos.
 EVERYONE_NAME = "Todos"
+
+# Marca del feriado ya contado y prefijo de la de cada aviso listado.
+HOLIDAY_TOLD = "holiday-told"
 
 
 @dataclass(frozen=True)
@@ -93,6 +98,7 @@ class Reminders:
         resolve: Callable[[int], Person | None] | None = None,
         find: Callable[[str], Person | None] | None = None,
         say_nag: Callable[[Job], None] | None = None,
+        marks: Marks | None = None,
     ):
         self.store = store
         self.timer = timer
@@ -123,6 +129,9 @@ class Reminders:
         self.chat_ids = list(chat_ids)
         # Botones del re-aviso; `{job}` se reemplaza por su número.
         self.nag_actions = nag_actions
+        # Qué feriado y qué avisos ya se contaron en el chat.
+        self.marks = marks
+        self._holiday_lock = threading.Lock()
 
     def start(self, now: datetime | None = None) -> None:
         """Rearma todo tras un reinicio, disparando lo que se haya perdido."""
@@ -195,6 +204,7 @@ class Reminders:
         )
         if job is None:
             return None
+        self._forget_told(job_id)
         self.timer.unschedule(str(job_id))
         self._arm(job)
         return job
@@ -538,16 +548,20 @@ class Reminders:
     def _arm(self, job: Job) -> None:
         self.timer.schedule(str(job.id), job.when, lambda: self._fire(job.id))
 
-    def _fire(self, job_id: int) -> None:
-        job = self.store.get(job_id)
-        if job is None:  # cancelled between the arming and the firing
-            return
+    def _due(self, job: Job) -> tuple[Job, dict]:
+        """El job como suena en su ocurrencia: con su turno, su audiencia y la foto de ella."""
         turn = turn_for(job, job.when)
         if turn is not None:
             job = replace(job, message=with_turn(job.message, turn))
         assignment = self._assignment(job, turn)
         job = replace(job, audience=assignment.audience, addressee=assignment.addressee)
-        photo = assignment.photo()
+        return job, assignment.photo()
+
+    def _fire(self, job_id: int) -> None:
+        job = self.store.get(job_id)
+        if job is None:  # cancelled between the arming and the firing
+            return
+        job, photo = self._due(job)
 
         holiday = self._holiday(job)
         if holiday is not None:
@@ -625,8 +639,66 @@ class Reminders:
         )
         self._write_history(lambda history: history.mark_closed(job.id, HOLIDAY, at))
         log.info("job %s skipped: holiday %s", job.id, holiday.day)
-        for chat in self._chats(job.audience, job.chat_id):
-            self._write(chat, f"🏖 Feriado ({holiday.name}): hoy no suena «{job.message}»")
+        texts = None
+        if self.marks is not None:
+            try:
+                with self._holiday_lock:
+                    texts = self._holiday_texts(job, holiday)
+            except Exception:
+                log.exception("no pude leer las marcas del feriado para el job %s", job.id)
+        if texts is None:
+            line = f"🏖 Feriado ({holiday.name}): hoy no suena «{job.message}»"
+            texts = {chat: line for chat in self._chats(job.audience, job.chat_id)}
+        for chat, text in texts.items():
+            self._write(chat, text)
+
+    def _holiday_texts(self, job: Job, holiday: Holiday) -> dict[int, str]:
+        """Qué escribir a cada chat por el salteo: el resumen del día, una línea o nada."""
+        day = datetime.combine(holiday.day, time())
+        mine = f"{HOLIDAY_TOLD}:{job.id}"
+        if self.marks.get(HOLIDAY_TOLD) == day:
+            if self.marks.get(mine) == job.when:
+                self.marks.clear(mine)
+                return {}
+            line = f"🏖 Hoy es feriado: tampoco suena «{job.message}»"
+            return {chat: line for chat in self._chats(job.audience, job.chat_id)}
+
+        lines: dict[int, list[str]] = {}
+        for other in self._skipped_on(holiday.day, job):
+            if other.id != job.id:
+                self.marks.set(f"{HOLIDAY_TOLD}:{other.id}", other.when)
+            for chat in self._chats(other.audience, other.chat_id):
+                lines.setdefault(chat, []).append(f"• {other.when:%H:%M} «{other.message}»")
+        self.marks.set(HOLIDAY_TOLD, day)
+        return {
+            chat: "\n".join([_holiday_heading(holiday.name, len(rows)), *rows])
+            for chat, rows in lines.items()
+        }
+
+    def _skipped_on(self, day: date, current: Job) -> list[Job]:
+        """Los avisos que ese día saltea, como sonarían, por hora; incluye al que está sonando."""
+        skipped = []
+        for job in self.store.pending():
+            if job.id == current.id:
+                skipped.append(current)
+            elif job.when.date() == day and self._holiday(job) is not None:
+                skipped.append(self._due(job)[0])
+        return sorted(skipped, key=lambda job: (job.when, job.id))
+
+    def _forget_told(self, job_id: int) -> None:
+        """Borra la marca de aviso ya contado, para que un aviso editado diga su línea."""
+        if self.marks is None:
+            return
+        try:
+            self.marks.clear(f"{HOLIDAY_TOLD}:{job_id}")
+        except Exception:
+            log.exception("no pude borrar la marca del feriado del job %s", job_id)
+
+
+def _holiday_heading(name: str, count: int) -> str:
+    """El encabezado del resumen del feriado, en singular o plural según cuántos saltea."""
+    verb = "suena" if count == 1 else "suenan"
+    return f"🏖 Hoy es feriado ({name}), no {verb}:"
 
 
 def _nag_text(message: str, addressee: str | None) -> str:
