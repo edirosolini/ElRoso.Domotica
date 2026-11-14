@@ -507,6 +507,13 @@ def _announce(house: HouseVoice, text: str, written: str | None = None, others=S
         house.tell(f"🔔 {written or text}", others)
 
 
+def _say_aloud(house: HouseVoice, text: str) -> None:
+    """Lo dice en voz alta; lo escribe a todos solo si ningún parlante lo dijo fuera del descanso."""
+    result = house.announce(text)
+    if not result["spoken"] and not result["notified"]:
+        house.tell(f"🔔 {text}\n\nNo pude decirlo en voz alta.")
+
+
 def build_model(config: Config, *, ask: bool = False, timeout: float = POLISH_TIMEOUT):
     """El modelo barato del proveedor de texto; con `ask`, el que busca, del de preguntas."""
     provider = config.ask_provider if ask else config.llm_provider
@@ -1177,7 +1184,7 @@ def main() -> None:
     if calendar is not None:
         watcher = EventWatcher(
             calendar=calendar,
-            announce=lambda text: _announce(house, text),
+            announce=lambda text: _say_aloud(house, text),
             seen=SeenStore(db_path),
             lead_minutes=config.event_lead_minutes,
             clock=lambda: datetime.now(local_timezone()),
@@ -1328,7 +1335,7 @@ def main() -> None:
     if "rain" in alerts:
         rain = RainWatcher(
             weather=weather,
-            announce=lambda text: _announce(house, text),
+            announce=lambda text: _say_aloud(house, text),
             marks=Marks(db_path),
             polish=polish,
         )
@@ -1343,7 +1350,7 @@ def main() -> None:
     if sky_alerts:
         sky = WeatherWatcher(
             weather=weather,
-            announce=lambda text: _announce(house, text),
+            announce=lambda text: _say_aloud(house, text),
             marks=Marks(db_path),
             polish=polish,
             air=AirClient(config.weather_lat, config.weather_lon) if "air" in sky_alerts else None,
