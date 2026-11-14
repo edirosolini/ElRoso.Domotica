@@ -5,6 +5,7 @@
   var POLL_MS = 60000;
   var MINUTE_MS = 60000;
   var KEEP_PAST = 2;
+  var UNDO_MS = 5000;
   var MEAL_CLASSES = { next: "on", past: "past" };
   var DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
   var MONTHS = [
@@ -123,10 +124,23 @@
     return /[?&]ver=1(?:&|$)/.test(search || "");
   }
 
+  // Los ítems de una lista con los tachados esperando «Deshacer»; los vencidos ya no se muestran.
+  function pendingCross(items, pending, now) {
+    var shown = [];
+    (items || []).forEach(function (entry) {
+      var until = pending[String(entry.id)];
+      if (until !== undefined && now >= until) {
+        return;
+      }
+      shown.push({ id: entry.id, text: entry.text, undo: until !== undefined });
+    });
+    return shown;
+  }
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { untilText: untilText, nextMeta: nextMeta, nowIndex: nowIndex, skyLine: skyLine,
       trimPast: trimPast, awayText: awayText, readOnly: readOnly, mealView: mealView,
-      todayLabel: todayLabel, leftToday: leftToday };
+      todayLabel: todayLabel, leftToday: leftToday, pendingCross: pendingCross, UNDO_MS: UNDO_MS };
   }
   if (typeof document === "undefined") {
     return;
@@ -135,6 +149,10 @@
   var offset = 0;
   var writable = false;
   var upcoming;
+  // Lo último que trajo el polling, y lo tachado de cada lista: id → hasta cuándo, con su timer.
+  var lastLists = {};
+  var pending = { compras: {}, pendientes: {} };
+  var timers = {};
 
   function byId(id) {
     return document.getElementById(id);
@@ -194,10 +212,41 @@
     showNext();
   }
 
+  // Tacha el ítem a la vista y lo saca recién cuando vence el «Deshacer».
+  function crossOut(name, entry) {
+    var key = name + "/" + entry.id;
+    if (pending[name][String(entry.id)] !== undefined) {
+      return;
+    }
+    pending[name][String(entry.id)] = Date.now() + UNDO_MS;
+    timers[key] = setTimeout(function () {
+      delete timers[key];
+      pending[name][String(entry.id)] = 0;
+      fillList(name, lastLists[name]);
+      commitCross(name, entry);
+    }, UNDO_MS);
+    fillList(name, lastLists[name]);
+    focusUndo(name, entry.id);
+  }
+
+  // Vuelve el ítem a la lista sin mandar nada.
+  function undoCross(name, entry) {
+    var key = name + "/" + entry.id;
+    clearTimeout(timers[key]);
+    delete timers[key];
+    delete pending[name][String(entry.id)];
+    fillList(name, lastLists[name]);
+  }
+
+  function focusUndo(name, id) {
+    var undo = byId("list-" + name).querySelector('[data-undo="' + id + '"]');
+    if (undo) {
+      undo.focus();
+    }
+  }
+
   // Saca un ítem de la lista y vuelve a pedir la pantalla.
-  function crossOut(name, entry, item, button) {
-    button.disabled = true;
-    item.classList.add("done");
+  function commitCross(name, entry) {
     fetch("/api/lists/" + encodeURIComponent(name) + "/" + entry.id + "/done", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -209,11 +258,12 @@
         if (!response.ok && response.status !== 404) {
           throw new Error(String(response.status));
         }
+        delete pending[name][String(entry.id)];
         poll();
       })
       .catch(function () {
-        button.disabled = false;
-        item.classList.remove("done");
+        delete pending[name][String(entry.id)];
+        fillList(name, lastLists[name]);
         byId("problems").textContent = "No pude tachar «" + entry.text + "».";
       });
   }
@@ -263,27 +313,48 @@
 
   function fillList(name, items) {
     var list = byId("list-" + name);
+    lastLists[name] = items;
+    var shown = pendingCross(items, pending[name], Date.now());
+    var left = shown.filter(function (entry) {
+      return !entry.undo;
+    }).length;
     clear(list);
-    byId("count-" + name).textContent = String(items ? items.length : 0);
-    if (!items || items.length === 0) {
+    byId("count-" + name).textContent = String(left);
+    if (shown.length === 0) {
       list.appendChild(emptyLine("Nada por ahora"));
       return;
     }
-    items.forEach(function (entry) {
+    shown.forEach(function (entry) {
       var item = document.createElement("li");
+      if (entry.undo) {
+        item.className = "done";
+      }
       if (writable) {
         var button = document.createElement("button");
         button.type = "button";
         button.className = "check";
+        button.disabled = entry.undo;
         button.title = "Tachar «" + entry.text + "»";
         button.setAttribute("aria-label", "Tachar «" + entry.text + "»");
         button.addEventListener("click", function (click) {
           click.stopPropagation();
-          crossOut(name, entry, item, button);
+          crossOut(name, entry);
         });
         item.appendChild(button);
       }
       item.appendChild(span("", entry.text));
+      if (entry.undo) {
+        var undo = document.createElement("button");
+        undo.type = "button";
+        undo.className = "undo";
+        undo.textContent = "Deshacer";
+        undo.setAttribute("data-undo", String(entry.id));
+        undo.addEventListener("click", function (click) {
+          click.stopPropagation();
+          undoCross(name, entry);
+        });
+        item.appendChild(undo);
+      }
       list.appendChild(item);
     });
   }

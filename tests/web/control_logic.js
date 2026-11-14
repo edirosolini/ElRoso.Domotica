@@ -188,4 +188,15 @@ assert.strictEqual(control.openTopic(null, "avisos"), "avisos");
 assert.strictEqual(control.openTopic("hoy", "avisos"), "avisos");
 assert.strictEqual(control.openTopic("avisos", "avisos"), null);
 
+// Sacar un ítem por id espera «Deshacer»; lo demás se manda al toque.
+assert.strictEqual(control.undoable("sacar id:3"), true);
+assert.strictEqual(control.undoable("sacar id:12 de pendientes"), true);
+assert.strictEqual(control.undoable("sacar todo"), false);
+assert.strictEqual(control.undoable("sacar 3"), false);
+assert.strictEqual(control.undoable("hecho 3"), false);
+assert.strictEqual(control.undoable("borrar 7"), false);
+assert.strictEqual(control.undoable(""), false);
+assert.strictEqual(control.undoable(null), false);
+assert.strictEqual(control.UNDO_MS, 5000);
+
 console.log("ok");

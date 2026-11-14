@@ -64,6 +64,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ghost { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 0 var(--space-4); border-radius: 999px; border: 0; background: var(--card); box-shadow: var(--shadow); color: var(--accent-ink); text-decoration: none; white-space: nowrap; cursor: pointer; }
 button.ghost { color: var(--text); }
 
+/* Diálogo propio de la agenda y del control: confirmar o pedir un dato, encima de todo. */
+.dialog-wrap { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: var(--space-4); background: rgba(0, 0, 0, .5); }
+.dialog { width: 100%; max-width: 440px; margin: 0; padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); background: var(--card); color: var(--text); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0, 0, 0, .3); font-size: 20px; }
+.dialog-text { margin: 0; line-height: 1.35; overflow-wrap: break-word; }
+.dialog-input { width: 100%; min-height: var(--tap); padding: 0 var(--space-3); font-size: 20px; color: var(--text); background: var(--card-2); border: 1px solid var(--line); border-radius: 12px; }
+.dialog-input:focus { border-color: var(--accent); }
+.dialog-actions { display: flex; gap: var(--space-3); }
+.dialog .btn { flex: 1 1 0; min-height: var(--tap); font-size: 18px; border-radius: 12px; }
+
 /* Barra de arriba de la agenda y del control */
 .topbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
 .topbar h1 { margin: 0; font-size: clamp(26px, 4vw, 40px); font-weight: 650; letter-spacing: -.03em; flex: 1 1 0; min-width: 6em; }
@@ -149,6 +158,7 @@ button.ghost { color: var(--text); }
 .kiosk .check:hover { border-color: var(--ok); }
 .kiosk .checklist li.done span { text-decoration: line-through; color: var(--faint); }
 .kiosk .checklist li.done .check { background: var(--ok); border-color: var(--ok); }
+.kiosk .checklist .undo { flex: none; margin-left: auto; min-height: var(--tap); padding: 0 1em; border: 0; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: clamp(14px, 2.2vh, 24px); font-weight: 600; cursor: pointer; }
 .kiosk .checklist li.done .check::after { content: "✓"; color: #fff; position: absolute; inset: 0; display: grid; place-items: center; font-size: .8em; }
 
 @media (orientation: portrait) {
@@ -314,6 +324,10 @@ button.ghost { color: var(--text); }
 .control .person-actions button.danger { background: transparent; color: var(--danger); }
 .control .action:disabled, .control .buttons button:disabled, .control .cmd.row button:disabled { opacity: .5; cursor: default; }
 .control .answer-card .actions { margin-top: var(--space-3); }
+/* Un «✓ ítem» tocado queda tachado con su «Deshacer» al lado hasta que se manda. */
+.control .undo-box { display: inline-flex; align-items: center; gap: var(--space-2); }
+.control .action.done { text-decoration: line-through; }
+.control .undo { min-height: var(--tap); padding: 0 var(--space-3); font-size: 16px; }
 .control .answer-text { white-space: pre-line; overflow-wrap: anywhere; }
 .control .free { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
 .control .free .btn { padding: 0 20px; }
