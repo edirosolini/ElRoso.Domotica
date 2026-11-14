@@ -1452,6 +1452,22 @@ def test_the_summaries_hand_over_the_copy_for_the_others(schedule, wired, tmp_pa
     assert announced == [("dicho", "completo", "sin servicios")]
 
 
+@pytest.mark.parametrize(
+    "cls", [main.RainWatcher, main.WeatherWatcher, main.EventWatcher], ids=["rain", "sky", "event"]
+)
+def test_rain_sky_and_events_are_said_without_a_copy(cls, wired, tmp_path, monkeypatch):
+    seen = _spy_init(monkeypatch, cls)
+    said, announced = [], []
+    monkeypatch.setattr(main, "_say_aloud", lambda house, text: said.append(text))
+    monkeypatch.setattr(main, "_announce", lambda *args: announced.append(args[1:]))
+
+    run_main(monkeypatch, config_file(tmp_path, "CALENDAR_URL_PERSONAL=https://ejemplo/a.ics\n"))
+    seen["announce"]("Se viene la lluvia.")
+
+    assert said == ["Se viene la lluvia."]
+    assert announced == []
+
+
 def _wired_web(monkeypatch, tmp_path, extra=""):
     seen = _spy_init(monkeypatch, main.ApiServer)
     run_main(

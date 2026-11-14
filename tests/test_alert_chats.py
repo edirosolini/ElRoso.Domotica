@@ -231,6 +231,42 @@ def test_an_empty_copy_for_the_others_stays_empty():
     assert house.told == [("🔔 vps caído", "")]
 
 
+# --- lluvia, cielo y evento: lo dicho no se copia ----------------------------------
+
+def test_a_spoken_notice_is_not_written_to_the_chat():
+    house, speaker, sent = build_house()
+
+    main._say_aloud(house, "Se viene la lluvia.")
+
+    assert speaker.said == ["Se viene la lluvia."]
+    assert sent == []
+
+
+def test_a_notice_at_rest_is_written_to_everyone_with_the_reason():
+    house, speaker, sent = build_house(
+        clock=lambda: NIGHT, quiet=QuietHours.parse("23:00", "07:00")
+    )
+
+    main._say_aloud(house, "Se viene la lluvia.")
+
+    assert speaker.said == []
+    assert sorted(chat for chat, _ in sent) == [OWNER, OTHER]
+    assert all(text.startswith("🔔 Se viene la lluvia.") for _, text in sent)
+    assert all("no se dijo en voz alta" in text for _, text in sent)
+
+
+def test_a_notice_no_speaker_could_say_is_written_to_everyone():
+    house, speaker, sent = build_house()
+    speaker.fail = OSError("sin red")
+
+    main._say_aloud(house, "Se viene la lluvia.")
+
+    assert sorted(chat for chat, _ in sent) == [OWNER, OTHER]
+    assert all(
+        text == "🔔 Se viene la lluvia.\n\nNo pude decirlo en voz alta." for _, text in sent
+    )
+
+
 # --- resumen y cierre --------------------------------------------------------------
 
 class FakeMonitor:
@@ -395,7 +431,7 @@ def test_on_vacation_an_urgent_outage_only_reaches_the_alert_chats_with_confirm(
     assert actions[0] == ("✅ Confirmar", "confirmar vps")
 
 
-def test_on_vacation_the_summaries_and_the_sky_are_still_written_to_everyone(tmp_path):
+def _house_on_vacation(tmp_path):
     from homeauto.quiet import AwayStore, Hush, HushStore
 
     path = tmp_path / "jobs.db"
@@ -406,14 +442,30 @@ def test_on_vacation_the_summaries_and_the_sky_are_still_written_to_everyone(tmp
         away=AwayStore(path),
     )
     hush.start_away(datetime(2026, 10, 1, 0, 0))
-    house, speaker, sent = build_house(quiet=hush)
+    return build_house(quiet=hush)
+
+
+def test_on_vacation_the_summaries_are_still_written_with_their_copy(tmp_path):
+    house, speaker, sent = _house_on_vacation(tmp_path)
 
     main._announce(house, "dicho", "completo", "sin servicios")
-    main._announce(house, "Se viene la lluvia.")
 
     assert speaker.said == []
-    copies = [(chat, text) for chat, text in sent]
-    assert "completo" in copies[0][1] and copies[0][0] == OWNER
-    assert "sin servicios" in copies[1][1] and copies[1][0] == OTHER
-    assert sorted(chat for chat, text in copies[2:]) == [OWNER, OTHER]
-    assert all("De vacaciones hasta el 01/10" in text for _, text in copies)
+    assert dict(sent)[OWNER].startswith("🔔 completo")
+    assert dict(sent)[OTHER].startswith("🔔 sin servicios")
+    assert all("De vacaciones hasta el 01/10" in text for _, text in sent)
+
+
+def test_on_vacation_the_rain_and_the_sky_are_still_written_to_everyone(tmp_path):
+    house, speaker, sent = _house_on_vacation(tmp_path)
+
+    main._say_aloud(house, "Se viene la lluvia.")
+    main._say_aloud(house, "Hace calor.")
+
+    assert speaker.said == []
+    assert sorted(chat for chat, _ in sent) == [OWNER, OWNER, OTHER, OTHER]
+    assert all("De vacaciones hasta el 01/10" in text for _, text in sent)
+    assert [text.split("\n")[0] for chat, text in sent if chat == OTHER] == [
+        "🔔 Se viene la lluvia.",
+        "🔔 Hace calor.",
+    ]
