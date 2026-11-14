@@ -198,3 +198,42 @@ def test_the_closing_can_be_moved_or_turned_off(tmp_path):
 def test_a_broken_closing_hour_is_rejected(tmp_path):
     with pytest.raises(ConfigError, match="CLOSING_AT"):
         Config.from_file(write_env(tmp_path, BASE + "CLOSING_AT=a la noche\n"))
+
+
+WEATHER_KEYS = {
+    "heat": "WEATHER_HEAT",
+    "cold": "WEATHER_COLD",
+    "uv": "WEATHER_UV",
+    "air": "WEATHER_AIR",
+    "wind": "WEATHER_WIND",
+    "storm": "WEATHER_STORM",
+    "rain": "WEATHER_RAIN",
+}
+
+
+def test_every_weather_alert_is_on_by_default(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE))
+
+    assert cfg.weather_alerts == frozenset(WEATHER_KEYS)
+
+
+@pytest.mark.parametrize("name", list(WEATHER_KEYS))
+def test_each_weather_key_turns_off_only_its_alert(tmp_path, name):
+    cfg = Config.from_file(write_env(tmp_path, BASE + f"{WEATHER_KEYS[name]}=off\n"))
+
+    assert cfg.weather_alerts == frozenset(WEATHER_KEYS) - {name}
+
+
+def test_the_weather_keys_read_like_the_economy(tmp_path):
+    cfg = Config.from_file(write_env(tmp_path, BASE + "WEATHER_UV=No\nWEATHER_AIR=0\nWEATHER_WIND=on\n"))
+
+    assert "uv" not in cfg.weather_alerts
+    assert "air" not in cfg.weather_alerts
+    assert "wind" in cfg.weather_alerts
+
+
+def test_the_sky_alerts_of_the_config_are_the_ones_the_watcher_knows():
+    from homeauto.config import WEATHER_ALERTS
+    from homeauto.weather import SKY_ALERTS
+
+    assert set(WEATHER_ALERTS) == set(SKY_ALERTS) | {"rain"}

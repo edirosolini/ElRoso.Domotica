@@ -1,7 +1,6 @@
-"""Los otros avisos del cielo: calor, frío, viento y tormenta.
+"""Los otros avisos del cielo: calor, frío, ultravioleta, aire, viento y tormenta.
 
-Uno por día cada uno, con su propia marca: el que avisa de calor no puede
-quedarse con el turno del que avisa de viento.
+Uno por día cada uno, con su propia marca, y todos los de una vuelta en un solo anuncio.
 """
 
 from datetime import datetime
@@ -11,9 +10,13 @@ import pytest
 from homeauto.watch.marks import Marks
 from homeauto.air import AirError
 from homeauto.weather import (
+    AIR_MARK,
     COLD_MARK,
     HEAT_MARK,
+    SKY_ALERTS,
+    STORM_MARK,
     UV_MARK,
+    WIND_MARK,
     WeatherClient,
     WeatherWatcher,
 )
@@ -187,7 +190,7 @@ def test_a_warning_that_could_not_be_said_is_retried(tmp_path):
     assert len(attempts) == 2
 
 
-def test_two_different_warnings_do_not_share_a_turn(tmp_path):
+def test_two_different_warnings_go_out_in_one_announcement(tmp_path):
     said = []
 
     watcher(
@@ -197,7 +200,9 @@ def test_two_different_warnings_do_not_share_a_turn(tmp_path):
         hours=[("2026-08-31T12:00", 70, 0)],
     ).check()
 
-    assert len(said) == 2, "el calor y el viento son dos avisos distintos"
+    assert len(said) == 1
+    assert "treinta y cinco grados" in said[0]
+    assert "setenta kilómetros por hora" in said[0]
 
 
 def test_a_forecast_that_fails_is_not_an_alert(tmp_path):
@@ -307,12 +312,14 @@ def test_an_air_that_fails_does_not_cost_the_uv(tmp_path):
     assert "ultravioleta" in said[0]
 
 
-def test_uv_air_heat_and_cold_each_keep_their_turn(tmp_path):
+def test_uv_air_and_heat_are_one_announcement_with_three_marks(tmp_path):
     said = []
+    marks = Marks(tmp_path / "jobs.db")
 
     watcher(tmp_path, said, maximum=35, uv=12, air=FakeAir(worst=150)).check()
 
-    assert len(said) == 3
+    assert len(said) == 1
+    assert all(marks.get(mark) == NOW for mark in (HEAT_MARK, UV_MARK, AIR_MARK))
 
 
 def test_an_air_warning_that_could_not_be_said_is_retried(tmp_path):
@@ -342,11 +349,11 @@ def test_no_digit_reaches_the_synthesizer_from_uv_or_air(tmp_path):
 
     watcher(tmp_path, said, uv=13.7, air=FakeAir(worst=212)).check()
 
-    assert len(said) == 2
+    assert len(said) == 1
     assert not any(character.isdigit() for text in said for character in text)
 
 
-def test_uv_and_air_are_polished(tmp_path):
+def test_uv_and_air_are_polished_once_together(tmp_path):
     seen = []
 
     def polish(text, must_keep=()):
@@ -365,20 +372,22 @@ def test_uv_and_air_are_polished(tmp_path):
         air=FakeAir(worst=150),
     ).check()
 
-    assert len(seen) == 2
-    assert said == [text.upper() for text in seen]
+    assert len(seen) == 1
+    assert said == [seen[0].upper()]
 
 
-def counting_watcher(tmp_path, calls, **kwargs):
+def counting_watcher(tmp_path, calls, alerts=SKY_ALERTS, air=None, said=None, **kwargs):
     def fetch(lat, lon):
         calls.append((lat, lon))
         return payload(**kwargs)
 
     return WeatherWatcher(
         weather=WeatherClient(latitude=-34.6, longitude=-58.4, fetch=fetch),
-        announce=lambda text: None,
+        announce=(lambda text: None) if said is None else said.append,
         marks=Marks(tmp_path / "jobs.db"),
         clock=lambda: NOW,
+        air=air,
+        alerts=alerts,
     )
 
 
@@ -387,7 +396,7 @@ def test_heat_cold_and_uv_share_one_daily_request(tmp_path):
 
     said = counting_watcher(tmp_path, calls, maximum=35, minimum=2, uv=12).check()
 
-    assert len(said) == 3
+    assert len(said) == 1
     assert len(calls) == 2, "un pedido para el día y otro para las próximas horas"
 
 
@@ -400,3 +409,215 @@ def test_the_day_is_not_asked_once_heat_cold_and_uv_are_marked(tmp_path):
     counting_watcher(tmp_path, calls, maximum=35, minimum=2, uv=12).check()
 
     assert len(calls) == 1, "solo el pedido de las próximas horas"
+
+
+# --- un solo anuncio por vuelta ----------------------------------------------
+
+GUST = [("2026-08-31T12:00", 70, 0)]
+
+
+def test_heat_and_uv_in_one_round_are_one_announcement_and_two_marks(tmp_path):
+    said = []
+    marks = Marks(tmp_path / "jobs.db")
+
+    watcher(tmp_path, said, maximum=35, uv=12).check()
+
+    assert len(said) == 1
+    assert "treinta y cinco grados" in said[0]
+    assert "ultravioleta" in said[0]
+    assert marks.get(HEAT_MARK) == NOW
+    assert marks.get(UV_MARK) == NOW
+
+
+def test_an_announcement_that_fails_leaves_no_mark_and_is_retried_whole(tmp_path):
+    attempts = []
+
+    def failing(text):
+        attempts.append(text)
+        raise RuntimeError("el parlante no contesta")
+
+    marks = Marks(tmp_path / "jobs.db")
+    watch = WeatherWatcher(
+        weather=WeatherClient(
+            latitude=-34.6, longitude=-58.4,
+            fetch=lambda lat, lon: payload(maximum=35, hours=GUST),
+        ),
+        announce=failing,
+        marks=marks,
+        clock=lambda: NOW,
+    )
+
+    assert watch.check() == []
+    watch.check()
+
+    assert marks.get(HEAT_MARK) is None
+    assert marks.get(WIND_MARK) is None
+    assert len(attempts) == 2
+    assert attempts[0] == attempts[1]
+
+
+def test_with_the_heat_already_said_only_the_wind_goes_out(tmp_path):
+    said = []
+    Marks(tmp_path / "jobs.db").set(HEAT_MARK, NOW)
+
+    watcher(tmp_path, said, maximum=35, hours=GUST).check()
+
+    assert said == [
+        "Ojo, se viene viento a eso de las doce del mediodía, "
+        "con ráfagas de setenta kilómetros por hora."
+    ]
+
+
+def test_a_single_warning_keeps_its_own_phrase(tmp_path):
+    said = []
+
+    watcher(tmp_path, said, maximum=35).check()
+
+    assert said == ["Ojo con el calor: hoy la máxima es de treinta y cinco grados."]
+
+
+def test_a_single_warning_is_polished_as_before(tmp_path):
+    seen = []
+
+    def polish(text, must_keep=()):
+        seen.append((text, tuple(must_keep)))
+        return text
+
+    WeatherWatcher(
+        weather=WeatherClient(
+            latitude=-34.6, longitude=-58.4, fetch=lambda lat, lon: payload(maximum=35)
+        ),
+        announce=lambda text: None,
+        marks=Marks(tmp_path / "jobs.db"),
+        clock=lambda: NOW,
+        polish=polish,
+    ).check()
+
+    assert seen == [("Ojo con el calor: hoy la máxima es de treinta y cinco grados.", ())]
+
+
+def test_the_combined_text_has_no_digits_and_is_polished_once_keeping_each_piece(tmp_path):
+    seen = []
+
+    def polish(text, must_keep=()):
+        seen.append((text, tuple(must_keep)))
+        return text
+
+    said = []
+    WeatherWatcher(
+        weather=WeatherClient(
+            latitude=-34.6, longitude=-58.4,
+            fetch=lambda lat, lon: payload(
+                maximum=35, uv=12, hours=[("2026-08-31T12:00", 70, 95)]
+            ),
+        ),
+        announce=said.append,
+        marks=Marks(tmp_path / "jobs.db"),
+        clock=lambda: NOW,
+        polish=polish,
+        air=FakeAir(worst=150),
+    ).check()
+
+    assert len(seen) == 1
+    text, keep = seen[0]
+    assert said == [text]
+    assert not any(character.isdigit() for character in text)
+    for term in ("treinta y cinco", "doce", "aire", "setenta", "las doce del mediodía", "tormenta"):
+        assert term in keep
+        assert term in text
+    for mark in (HEAT_MARK, UV_MARK, AIR_MARK, WIND_MARK, STORM_MARK):
+        assert Marks(tmp_path / "jobs.db").get(mark) == NOW
+
+
+# --- avisos apagados ----------------------------------------------------------
+
+
+def without(*names):
+    return tuple(name for name in SKY_ALERTS if name not in names)
+
+
+def test_the_heat_turned_off_is_not_said(tmp_path):
+    said = []
+    calls = []
+
+    counting_watcher(
+        tmp_path, calls, alerts=without("heat"), said=said, maximum=35, uv=12
+    ).check()
+
+    assert len(said) == 1
+    assert "calor" not in said[0] and "treinta y cinco" not in said[0]
+    assert "ultravioleta" in said[0]
+
+
+def test_the_cold_turned_off_is_not_said(tmp_path):
+    said = []
+
+    counting_watcher(tmp_path, [], alerts=without("cold"), said=said, minimum=1).check()
+
+    assert said == []
+
+
+def test_the_uv_turned_off_is_not_said(tmp_path):
+    said = []
+
+    counting_watcher(tmp_path, [], alerts=without("uv"), said=said, uv=12).check()
+
+    assert said == []
+
+
+def test_without_heat_cold_and_uv_the_day_is_not_asked(tmp_path):
+    calls = []
+
+    counting_watcher(
+        tmp_path, calls, alerts=without("heat", "cold", "uv"), maximum=35, minimum=1, uv=12
+    ).check()
+
+    assert len(calls) == 1, "solo el pedido de las próximas horas"
+
+
+def test_the_air_turned_off_is_not_asked(tmp_path):
+    said = []
+    air = FakeAir(worst=180)
+
+    counting_watcher(tmp_path, [], alerts=without("air"), air=air, said=said).check()
+
+    assert said == []
+    assert air.asked == 0
+
+
+def test_the_wind_turned_off_is_not_said(tmp_path):
+    said = []
+
+    counting_watcher(tmp_path, [], alerts=without("wind"), said=said, hours=GUST).check()
+
+    assert said == []
+
+
+def test_the_storm_turned_off_is_not_said(tmp_path):
+    said = []
+
+    counting_watcher(
+        tmp_path, [], alerts=without("storm"), said=said, hours=[("2026-08-31T13:00", 10, 95)]
+    ).check()
+
+    assert said == []
+
+
+def test_without_wind_and_storm_the_hours_are_not_asked(tmp_path):
+    calls = []
+
+    counting_watcher(
+        tmp_path, calls, alerts=without("wind", "storm"), hours=GUST
+    ).check()
+
+    assert len(calls) == 1, "solo el pedido del día"
+
+
+def test_with_everything_off_nothing_is_asked(tmp_path):
+    calls = []
+    air = FakeAir(worst=180)
+
+    counting_watcher(tmp_path, calls, alerts=(), air=air, maximum=35, hours=GUST).check()
+
+    assert calls == []
+    assert air.asked == 0
