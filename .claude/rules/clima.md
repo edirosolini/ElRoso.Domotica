@@ -39,6 +39,14 @@ marca— con una diferencia:
 - 🔴 **Cada aviso lleva su propia marca.** Con una compartida, un día de calor se comería el
   aviso de las ráfagas que voltean las plantas, y nadie se enteraría de por qué. Es el mismo
   motivo por el que cada Seq tiene las suyas.
+- 🔴 **Lo de una vuelta sale en un solo anuncio.** `check()` junta los avisos sin marca de
+  hoy y los dice juntos: uno solo, con su frase propia (`SkyWarning.alone`); varios, en
+  `combined()`: «Ojo con el clima de hoy.» y la parte corta de cada uno. Cuatro anuncios
+  seguidos son ruido, y el ruido es cómo un aviso deja de escucharse.
+- **Las marcas se ponen solo si el anuncio salió**, todas juntas. Si falla no se marca
+  ninguno y la vuelta siguiente lo reintenta entero.
+- **La frase compuesta pasa por el pulidor con el `must_keep` de todos** (`SkyWarning.keep`):
+  cifras, horas y palabras como «tormenta» o «aire» no se pueden perder al reescribir.
 - 🔴 **La lluvia sigue en su watcher aparte.** Su marca ya está en la base desplegada y su
   umbral tiene historia; absorberla sería reescribir estado que ya existe para no ganar nada.
   El precio es una consulta más por vuelta a una API gratuita y sin clave.
@@ -51,8 +59,8 @@ marca— con una diferencia:
   tormenta; pedir el pronóstico una vez por regla sería pegarle de más a un servicio que nos
   deja entrar gratis. La lluvia va por `RainWatcher`, con su propio pedido.
 - **El ultravioleta viaja en el pedido diario del calor y el frío**: `day_ahead()` devuelve
-  `DayAhead(maximum, minimum, uv)`. Con las tres marcas de hoy puestas no se pide nada. Sin
-  `uv_index_max` legible, `uv` es `None` y el calor y el frío siguen andando.
+  `DayAhead(maximum, minimum, uv)`. Con las marcas de hoy de los prendidos puestas no se
+  pide nada. Sin `uv_index_max` legible, `uv` es `None` y el calor y el frío siguen andando.
 - 🔴 **El aire es otro servicio y otro pedido** (`air.py`, `air-quality-api.open-meteo.com`):
   `AirClient.worst_today()` toma el peor `us_aqi` entre las 8 y las 20. Se saltea con su marca
   de hoy puesta, y si falla no cuesta el ultravioleta ni nada más.
@@ -60,3 +68,21 @@ marca— con una diferencia:
   Por eso el aviso no dice cifra, solo que se espera mala calidad.
 - Ninguno de los dos entra en el resumen de la mañana, y los umbrales (`UV_ALERT`,
   `AIR_ALERT`) son constantes del módulo, como los de la lluvia.
+
+## Apagar un aviso
+
+Cada aviso del cielo se apaga solo con `WEATHER_HEAT`, `WEATHER_COLD`, `WEATHER_UV`,
+`WEATHER_AIR`, `WEATHER_WIND`, `WEATHER_STORM` o `WEATHER_RAIN` en `off` (`no` o `0` también).
+Sin la clave, prendido. `Config.weather_alerts` es el conjunto de los prendidos.
+
+- **Lo apagado no se dice ni se pide.** Sin calor, frío ni ultravioleta no se consulta el
+  día; sin viento ni tormenta, las próximas horas; sin aire, no se arma `AirClient`.
+- **Sin ningún aviso del cielo prendido no se agenda `sky-watch`**, y sin la lluvia no se
+  arma `RainWatcher` ni `rain-watch`.
+- **`main()` loguea al arrancar lo apagado** («avisos del clima apagados: …»), para que un
+  aviso que no llega se explique en el journal.
+
+## Por dónde sale
+
+La lluvia y los otros avisos del cielo salen por `main._say_aloud()`: dichos, no dejan copia
+en el chat. Ver **A quién le llega cada aviso**, en `.claude/rules/avisos.md`.

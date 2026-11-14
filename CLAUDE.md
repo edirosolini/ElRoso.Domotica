@@ -99,8 +99,11 @@ mensaje. Un mensaje sin barra termina en el mismo lugar que el comando escrito a
 que le falte un dato: ahí sale una pregunta al chat y el hilo queda esperando la respuesta,
 sin que nada de esto se entere.
 
-`HouseVoice` decide si se habla o solo se escribe, y siempre deja el texto en el chat, salvo
-`speak_only()`, que es solo parlante (ver **Caída de internet**, en `.claude/rules/vigilancia.md`).
+`HouseVoice` decide si se habla o solo se escribe; en descanso escribe con el motivo.
+`speak_only()` es solo parlante (ver **Caída de internet**, en `.claude/rules/vigilancia.md`).
+Si lo dicho además queda escrito lo decide quien llama: `main._announce()` deja la copia y
+`main._say_aloud()` escribe solo lo que no se dijo (ver **A quién le llega cada aviso**, en
+`.claude/rules/avisos.md`).
 Las alarmas son la excepción: pasan por `Announcer`, que aplica la misma regla de descanso
 y escribe en los chats del aviso: todos los de `ALLOWED_CHAT_IDS`, o solo el de la persona
 asignada (ver **Para quién suena**, en `.claude/rules/programado.md`).
