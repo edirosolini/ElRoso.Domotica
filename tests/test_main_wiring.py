@@ -2617,3 +2617,17 @@ def test_the_commands_assign_with_the_people_of_the_house(wired, tmp_path, monke
 
     [job] = commands.reminders.list(42)
     assert (job.assignee, job.assignee_id, job.author_id) == ("person", china.id, eze.id)
+
+
+def test_the_holiday_marks_are_kept_in_the_one_database(wired, tmp_path, monkeypatch):
+    reminders = _spy_init(monkeypatch, main.Reminders)
+
+    run_main(monkeypatch, config_file(tmp_path))
+
+    marks = reminders["marks"]
+    assert marks.db_path == tmp_path / "jobs.db"
+    at = main.datetime(2026, 12, 8, 7, 0)
+    marks.set("holiday-told:17", at)
+    assert marks.get("holiday-told:17") == at
+    marks.clear("holiday-told:17")
+    assert marks.get("holiday-told:17") is None

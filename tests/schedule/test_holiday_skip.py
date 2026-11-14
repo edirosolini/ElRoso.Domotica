@@ -1,16 +1,20 @@
 """Lo que saltea feriados se decide al sonar: no anuncia, deja rastro y se reagenda."""
 
+import threading
+import time
 from datetime import date, datetime, timedelta
 
 import pytest
 
 from homeauto.holidays import BRIDGE, FIXED, MOVABLE, Holiday
+from homeauto.people import Household, PersonStore
 from homeauto.schedule.awaiting import AwaitingStore
 from homeauto.schedule.fired import FiredStore
 from homeauto.schedule.history import HOLIDAY, HistoryStore
 from homeauto.schedule.reminders import Reminders
 from homeauto.schedule.ringing import RingingStore
-from homeauto.schedule.store import ALARM, REMINDER, WEEKLY, Store
+from homeauto.schedule.store import ALARM, EVERYONE, PERSON, REMINDER, WEEKLY, Store
+from homeauto.watch.marks import Marks
 
 OWNER = 42
 OTHER = 99
@@ -60,8 +64,10 @@ def parts(tmp_path):
     timer = FakeTimer()
     said = []
     told = []
+    household = Household(PersonStore(path), (OWNER, OTHER))
+    people = {"cin": household.add("Cin", OWNER), "die": household.add("Die")}
 
-    def build(holidays=Calendar(COLUMBUS_DAY)):
+    def build(holidays=Calendar(COLUMBUS_DAY), marks=Marks(path)):
         return Reminders(
             store=Store(path),
             timer=timer,
@@ -74,10 +80,14 @@ def parts(tmp_path):
             clock=lambda: COLUMBUS,
             chat_ids=(OWNER, OTHER),
             holidays=holidays,
+            resolve=household.get,
+            find=household.by_name,
+            marks=marks,
         )
 
     return {
         "build": build, "timer": timer, "said": said, "told": told, "path": path,
+        "people": people,
     }
 
 
@@ -144,7 +154,7 @@ def test_on_a_holiday_every_chat_is_told_why_it_did_not_ring(parts):
 
     ring_on(reminders, parts["timer"])
 
-    expected = f"🏖 Feriado ({NAME}): hoy no suena «el colegio»"
+    expected = f"🏖 Hoy es feriado ({NAME}), no suena:\n• 07:00 «el colegio»"
     assert parts["told"] == [(OWNER, expected), (OTHER, expected)]
 
 
@@ -228,3 +238,204 @@ def test_add_and_update_keep_the_flag(parts):
 
     updated = reminders.update(job.id, TUESDAY, "el colegio", repeat=WEEKLY, days=WORKDAYS)
     assert updated.skip_holidays is False
+
+
+def plan(reminders, at, message, **kwargs):
+    """Agenda un aviso `hábiles` para hoy, sin dispararlo."""
+    job = reminders.store.add(
+        OWNER, at, message, repeat=WEEKLY, days=WORKDAYS, kind=kwargs.pop("kind", REMINDER),
+        skip_holidays=True, **kwargs,
+    )
+    reminders._arm(job)
+    return job
+
+
+def at(hour, minute=0):
+    return COLUMBUS.replace(hour=hour, minute=minute)
+
+
+def test_two_skipped_today_go_in_one_message_and_the_second_says_nothing(parts):
+    reminders = parts["build"]()
+    first = plan(reminders, at(7), "el colegio")
+    second = plan(reminders, at(9, 30), "la basura")
+
+    parts["timer"].fire(str(first.id))
+    parts["timer"].fire(str(second.id))
+
+    expected = (
+        f"🏖 Hoy es feriado ({NAME}), no suenan:\n"
+        "• 07:00 «el colegio»\n"
+        "• 09:30 «la basura»"
+    )
+    assert parts["told"] == [(OWNER, expected), (OTHER, expected)]
+
+
+def test_each_chat_only_lists_its_own(parts):
+    reminders = parts["build"]()
+    cin, die = parts["people"]["cin"], parts["people"]["die"]
+    mine = plan(reminders, at(7), "el colegio", assignee=PERSON, assignee_id=cin.id)
+    plan(reminders, at(8), "la basura")
+    plan(reminders, at(9), "las plantas", assignee=EVERYONE)
+    plan(reminders, at(10), "el perro", assignee=PERSON, assignee_id=die.id)
+
+    parts["timer"].fire(str(mine.id))
+
+    assert parts["told"] == [
+        (OWNER, f"🏖 Hoy es feriado ({NAME}), no suenan:\n"
+                "• 07:00 «el colegio»\n• 08:00 «la basura»\n"
+                "• 09:00 «las plantas»\n• 10:00 «el perro»"),
+        (OTHER, f"🏖 Hoy es feriado ({NAME}), no suenan:\n"
+                "• 08:00 «la basura»\n• 09:00 «las plantas»\n• 10:00 «el perro»"),
+    ]
+
+
+def test_a_chat_without_its_own_gets_nothing(parts):
+    reminders = parts["build"]()
+    cin = parts["people"]["cin"]
+    mine = plan(reminders, at(7), "el colegio", assignee=PERSON, assignee_id=cin.id)
+
+    parts["timer"].fire(str(mine.id))
+
+    assert [chat for chat, _ in parts["told"]] == [OWNER]
+
+
+def test_the_turn_decides_the_chats_as_when_it_rings(parts):
+    reminders = parts["build"]()
+    turn = plan(reminders, at(7), "la basura")
+    reminders.set_rota(turn.id, ["Cin", "Die"], COLUMBUS.date())
+
+    parts["timer"].fire(str(turn.id))
+
+    assert parts["told"] == [
+        (OWNER, f"🏖 Hoy es feriado ({NAME}), no suena:\n• 07:00 «Le toca a Cin: la basura»"),
+    ]
+
+
+def test_one_created_after_the_summary_says_its_own_line(parts):
+    reminders = parts["build"]()
+    first = plan(reminders, at(7), "el colegio")
+    parts["timer"].fire(str(first.id))
+    parts["told"].clear()
+
+    late = reminders.add(
+        OWNER, at(11), "el remedio", repeat=WEEKLY, days=WORKDAYS, kind=REMINDER,
+        skip_holidays=True,
+    )
+    parts["timer"].fire(str(late.id))
+
+    line = "🏖 Hoy es feriado: tampoco suena «el remedio»"
+    assert parts["told"] == [(OWNER, line), (OTHER, line)]
+
+
+def test_one_edited_after_the_summary_says_its_own_line(parts):
+    reminders = parts["build"]()
+    first = plan(reminders, at(7), "el colegio")
+    second = plan(reminders, at(9), "la basura")
+    parts["timer"].fire(str(first.id))
+    parts["told"].clear()
+
+    reminders.update(
+        second.id, at(9), "el reciclaje", repeat=WEEKLY, days=WORKDAYS, kind=REMINDER,
+        skip_holidays=True,
+    )
+    parts["timer"].fire(str(second.id))
+
+    line = "🏖 Hoy es feriado: tampoco suena «el reciclaje»"
+    assert parts["told"] == [(OWNER, line), (OTHER, line)]
+
+
+def test_the_summary_keeps_the_history_and_the_moving_on(parts):
+    reminders = parts["build"]()
+    first = plan(reminders, at(7), "el colegio")
+    second = plan(reminders, at(9), "la basura")
+
+    parts["timer"].fire(str(first.id))
+    parts["timer"].fire(str(second.id))
+
+    entries = HistoryStore(parts["path"]).between(*DAY)
+    assert sorted(entry.job_id for entry in entries) == [first.id, second.id]
+    assert {entry.closed for entry in entries} == {HOLIDAY}
+    assert reminders.store.get(first.id).when == at(7) + timedelta(days=1)
+    assert reminders.store.get(second.id).when == at(9) + timedelta(days=1)
+
+
+class SlowMarks(Marks):
+    """Marcas reales que tardan en leer, para que dos disparos se crucen."""
+
+    def get(self, key):
+        value = super().get(key)
+        time.sleep(0.05)
+        return value
+
+
+def test_two_firing_at_once_send_one_summary(parts):
+    reminders = parts["build"](marks=SlowMarks(parts["path"]))
+    jobs = [plan(reminders, at(7), "el colegio"), plan(reminders, at(7), "la basura")]
+    start = threading.Barrier(len(jobs))
+
+    def fire(job):
+        start.wait()
+        reminders._fire(job.id)
+
+    threads = [threading.Thread(target=fire, args=(job,)) for job in jobs]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert [chat for chat, _ in parts["told"]] == [OWNER, OTHER]
+
+
+class BrokenMarks:
+    def get(self, key):
+        raise RuntimeError("la base no contesta")
+
+    def set(self, key, moment):
+        raise RuntimeError("la base no contesta")
+
+    def clear(self, key):
+        raise RuntimeError("la base no contesta")
+
+
+def test_broken_marks_fall_back_to_one_line_per_skip(parts):
+    reminders = parts["build"](marks=BrokenMarks())
+    first = plan(reminders, at(7), "el colegio")
+    second = plan(reminders, at(9), "la basura")
+
+    parts["timer"].fire(str(first.id))
+    parts["timer"].fire(str(second.id))
+
+    assert parts["told"] == [
+        (OWNER, f"🏖 Feriado ({NAME}): hoy no suena «el colegio»"),
+        (OTHER, f"🏖 Feriado ({NAME}): hoy no suena «el colegio»"),
+        (OWNER, f"🏖 Feriado ({NAME}): hoy no suena «la basura»"),
+        (OTHER, f"🏖 Feriado ({NAME}): hoy no suena «la basura»"),
+    ]
+
+
+def test_two_missed_on_a_holiday_after_a_restart_are_told_once(parts):
+    reminders = parts["build"]()
+    plan(reminders, at(7), "el colegio")
+    plan(reminders, at(8), "la basura")
+
+    reminders.start(now=at(12))
+
+    expected = (
+        f"🏖 Hoy es feriado ({NAME}), no suenan:\n• 07:00 «el colegio»\n• 08:00 «la basura»"
+    )
+    assert parts["told"] == [(OWNER, expected), (OTHER, expected)]
+
+
+def test_one_skip_in_a_chat_is_singular_and_two_are_plural(parts):
+    reminders = parts["build"]()
+    cin = parts["people"]["cin"]
+    mine = plan(reminders, at(7), "el colegio", assignee=PERSON, assignee_id=cin.id)
+    plan(reminders, at(8), "la basura")
+
+    parts["timer"].fire(str(mine.id))
+
+    assert parts["told"] == [
+        (OWNER, f"🏖 Hoy es feriado ({NAME}), no suenan:\n"
+                "• 07:00 «el colegio»\n• 08:00 «la basura»"),
+        (OTHER, f"🏖 Hoy es feriado ({NAME}), no suena:\n• 08:00 «la basura»"),
+    ]

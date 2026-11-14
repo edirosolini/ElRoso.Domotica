@@ -1025,6 +1025,7 @@ def main() -> None:
         screen=screens,
         resolve=household.get,
         find=household.by_name,
+        marks=Marks(db_path),
     )
     vacation = Vacation(
         hush=hush,
