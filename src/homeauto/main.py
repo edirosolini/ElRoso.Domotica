@@ -42,7 +42,7 @@ from homeauto.economy import EconomyClient
 from homeauto.holidays import HolidayClient, HolidayStore, refresh as refresh_holidays
 from homeauto.news import NewsClient
 from homeauto.claude import ClaudeModel
-from homeauto.config import ANTHROPIC, Config
+from homeauto.config import ANTHROPIC, WEATHER_ALERTS, Config
 from homeauto.correct import as_written
 from homeauto.correct import build as build_correction
 from homeauto.listen import TIMEOUT as LISTEN_TIMEOUT, Transcriber
@@ -96,7 +96,7 @@ from homeauto.watch.seq import SeqClient
 from homeauto.watch.seq_watcher import SeqWatcher
 from homeauto.watch.status import StatusStore
 from homeauto.watch.uplink import Uplink
-from homeauto.weather import RainWatcher, WeatherClient, WeatherWatcher
+from homeauto.weather import SKY_ALERTS, RainWatcher, WeatherClient, WeatherWatcher
 from homeauto.web.apk import AppShelf
 from homeauto.web.app import WebApp
 from homeauto.web.control import ControlService
@@ -1320,32 +1320,40 @@ def main() -> None:
         house.tell_everyone,
     )
 
-    rain = RainWatcher(
-        weather=weather,
-        announce=lambda text: _announce(house, text),
-        marks=Marks(db_path),
-        polish=polish,
-    )
+    alerts = config.weather_alerts
+    turned_off = sorted(set(WEATHER_ALERTS) - alerts)
+    if turned_off:
+        log.info("avisos del clima apagados: %s", ", ".join(turned_off))
 
-    async def check_rain(_context):
-        await asyncio.to_thread(rain.check)
+    if "rain" in alerts:
+        rain = RainWatcher(
+            weather=weather,
+            announce=lambda text: _announce(house, text),
+            marks=Marks(db_path),
+            polish=polish,
+        )
 
-    app.job_queue.run_repeating(check_rain, interval=RAIN_INTERVAL, first=90, name="rain-watch")
+        async def check_rain(_context):
+            await asyncio.to_thread(rain.check)
 
-    # Los otros cuatro avisos del cielo. Su propio job y sus propias marcas: la
-    # lluvia tiene historia en la base desplegada y se deja como está.
-    sky = WeatherWatcher(
-        weather=weather,
-        announce=lambda text: _announce(house, text),
-        marks=Marks(db_path),
-        polish=polish,
-        air=AirClient(config.weather_lat, config.weather_lon),
-    )
+        app.job_queue.run_repeating(check_rain, interval=RAIN_INTERVAL, first=90, name="rain-watch")
 
-    async def check_sky(_context):
-        await asyncio.to_thread(sky.check)
+    # Los otros avisos del cielo, en su propio job y con sus propias marcas.
+    sky_alerts = alerts & set(SKY_ALERTS)
+    if sky_alerts:
+        sky = WeatherWatcher(
+            weather=weather,
+            announce=lambda text: _announce(house, text),
+            marks=Marks(db_path),
+            polish=polish,
+            air=AirClient(config.weather_lat, config.weather_lon) if "air" in sky_alerts else None,
+            alerts=sky_alerts,
+        )
 
-    app.job_queue.run_repeating(check_sky, interval=RAIN_INTERVAL, first=120, name="sky-watch")
+        async def check_sky(_context):
+            await asyncio.to_thread(sky.check)
+
+        app.job_queue.run_repeating(check_sky, interval=RAIN_INTERVAL, first=120, name="sky-watch")
 
     # Una sola ronda: primero internet, después los servicios, que la consultan.
     def watch_round():

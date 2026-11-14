@@ -195,6 +195,18 @@ def _parse_economy(pairs: dict[str, str]) -> bool:
     return pairs.get("ECONOMY", "").strip().lower() not in ("off", "no", "0")
 
 
+# Los avisos del clima que se apagan de a uno con WEATHER_<NOMBRE>=off.
+WEATHER_ALERTS = ("heat", "cold", "uv", "air", "wind", "storm", "rain")
+
+
+def _parse_weather_alerts(pairs: dict[str, str]) -> frozenset[str]:
+    """Los avisos del clima prendidos: todos salvo los que se apaguen."""
+    return frozenset(
+        name for name in WEATHER_ALERTS
+        if pairs.get(f"WEATHER_{name.upper()}", "").strip().lower() not in ("off", "no", "0")
+    )
+
+
 def _parse_verse(pairs: dict[str, str]) -> bool:
     """Encendido salvo que se apague: no necesita clave ni cuenta."""
     return pairs.get("VERSE", "").strip().lower() not in ("off", "no", "0")
@@ -515,6 +527,7 @@ class Config:
     news_count: int = DEFAULT_NEWS_COUNT
     economy: bool = True
     verse: bool = True
+    weather_alerts: frozenset[str] = frozenset(WEATHER_ALERTS)
     screen_device: str = DEFAULT_SCREEN_DEVICE
     screen_devices: tuple[str, ...] = DEFAULT_SCREEN_DEVICES
     # None saca esa comida del menú.
@@ -596,6 +609,7 @@ class Config:
             news_count=_parse_news_count(pairs),
             economy=_parse_economy(pairs),
             verse=_parse_verse(pairs),
+            weather_alerts=_parse_weather_alerts(pairs),
             screen_device=screen_device,
             screen_devices=screen_devices,
             menu_lunch_at=_parse_daily_hour(pairs, "MENU_LUNCH_AT", DEFAULT_MENU_LUNCH_AT),

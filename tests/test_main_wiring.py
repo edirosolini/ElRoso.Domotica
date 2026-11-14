@@ -581,6 +581,83 @@ def test_the_sky_watcher_gets_a_usable_air_client(wired, tmp_path, monkeypatch):
     assert air.worst_today(datetime(2026, 10, 15, 9, 0)) == 130
 
 
+def _built_sky(monkeypatch):
+    """El WeatherWatcher que armó main(), para usarlo como lo real."""
+    built = []
+    original = main.WeatherWatcher.__init__
+
+    def spy(self, *args, **kwargs):
+        built.append(self)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(main.WeatherWatcher, "__init__", spy)
+    return built
+
+
+def _sky_payload():
+    return {
+        "current": {
+            "temperature_2m": 20, "apparent_temperature": 20,
+            "relative_humidity_2m": 50, "weather_code": 0,
+        },
+        "daily": {
+            "temperature_2m_max": [35], "temperature_2m_min": [12],
+            "precipitation_probability_max": [10], "weather_code": [0],
+            "uv_index_max": [12],
+        },
+        "hourly": {
+            "time": [], "precipitation_probability": [],
+            "wind_gusts_10m": [], "weather_code": [],
+        },
+    }
+
+
+def test_a_sky_alert_turned_off_is_not_said_by_the_wired_watcher(wired, tmp_path, monkeypatch):
+    built = _built_sky(monkeypatch)
+    run_main(monkeypatch, config_file(tmp_path, "WEATHER_UV=off\n"))
+
+    sky = built[0]
+    said = []
+    sky.weather.fetch = lambda latitude, longitude: _sky_payload()
+    sky.announce = said.append
+    sky.clock = lambda: datetime(2026, 8, 31, 9, 0)
+    sky.check()
+
+    assert said == ["Ojo con el calor: hoy la máxima es de treinta y cinco grados."]
+
+
+def test_without_the_air_alert_there_is_no_air_client(wired, tmp_path, monkeypatch):
+    seen = _spy_init(monkeypatch, main.WeatherWatcher)
+    run_main(monkeypatch, config_file(tmp_path, "WEATHER_AIR=off\n"))
+
+    assert seen["air"] is None
+    assert "air" not in seen["alerts"]
+
+
+def test_without_rain_the_rain_watcher_is_not_scheduled(wired, tmp_path, monkeypatch):
+    run_main(monkeypatch, config_file(tmp_path, "WEATHER_RAIN=off\n"))
+
+    assert "rain-watch" not in wired.job_queue.repeating
+    assert "sky-watch" in wired.job_queue.repeating
+
+
+def test_with_the_whole_sky_off_the_sky_watcher_is_not_scheduled(wired, tmp_path, monkeypatch):
+    keys = "".join(
+        f"WEATHER_{name}=off\n" for name in ("HEAT", "COLD", "UV", "AIR", "WIND", "STORM")
+    )
+    run_main(monkeypatch, config_file(tmp_path, keys))
+
+    assert "sky-watch" not in wired.job_queue.repeating
+    assert "rain-watch" in wired.job_queue.repeating
+
+
+def test_the_weather_alerts_turned_off_are_logged(wired, tmp_path, monkeypatch, caplog):
+    caplog.set_level("INFO", logger="homeauto")
+    run_main(monkeypatch, config_file(tmp_path, "WEATHER_UV=off\nWEATHER_RAIN=off\n"))
+
+    assert "avisos del clima apagados: rain, uv" in caplog.text
+
+
 def test_without_a_key_nobody_listens_to_an_audio(wired, tmp_path, monkeypatch):
     seen = {}
     original = main.Commands.__init__
