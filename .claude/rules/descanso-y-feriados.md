@@ -110,8 +110,20 @@ guarda en la tabla `holidays`. Lo que repite por días de la semana puede no son
   reagendado y para la pantalla, y un feriado cargado tarde igual se respeta.
 - 🔴 **Un día salteado no anuncia ni deja nada para después**: no escribe en `fired`,
   `awaiting` ni `ringing`, así que no hay posponer, «Hecho» ni repetición. Deja la fila del
-  historial cerrada como `holiday`, avisa a todos «🏖 Feriado (<nombre>): hoy no suena «…»»
-  y reagenda a la próxima ocurrencia.
+  historial cerrada como `holiday` y reagenda a la próxima ocurrencia.
+- 🔴 **Un mensaje por chat y por feriado, no uno por aviso.** El primer salteo del día arma
+  la lista de todo lo que ese día saltea (`_skipped_on()`, cada job como sonaría por
+  `_due()`: con su turno y su asignación) y le escribe a cada chat solo lo suyo según
+  `_chats()`: «🏖 Hoy es feriado (<nombre>), no suena:» o «no suenan:», y un «• HH:MM «…»»
+  por aviso, por hora. Los salteos siguientes de lo listado no escriben nada.
+- **Lo creado o editado después del resumen escribe su línea** a los chats del aviso:
+  «🏖 Hoy es feriado: tampoco suena «…»». Editar borra su marca (`_forget_told()`).
+- **Las marcas viven en `watch.Marks`**, inyectada en `Reminders`: `holiday-told` con el día
+  contado y `holiday-told:<id>` con la hora de cada aviso listado, que se borra cuando ese
+  aviso se saltea. Leerlas y escribirlas va bajo un lock: dos salteos a la misma hora no
+  arman dos resúmenes.
+- 🔴 **Si las marcas fallan, sale la línea de antes por aviso**: «🏖 Feriado (<nombre>): hoy
+  no suena «…»». Un error de la base no puede dejar a la casa sin saber qué no suena.
 - 🔴 **Si la caché no se puede leer, suena** (`Reminders._holiday()` loguea y sigue).
 - **El nombre escrito va como lo publica la API**, sin el paréntesis con la fecha
   (`clean_name()`). Lo hablado pasa por `spoken_name()`: `Gral.`, `Dr.`, `Sta.` y `Sto.` se

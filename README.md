@@ -180,7 +180,7 @@ entiendo". Combinado con una alarma diaria da el parte de la mañana:
 seis horas hay al menos 60 % de probabilidad de lluvia, lo dice: *"Ojo, va a llover a eso de
 las tres de la tarde"*. Avisa **una vez por día** — la idea es que entres la ropa, no que te
 narre el cielo. Se ajusta en `weather.py` (`RAIN_WINDOW_HOURS`, `RAIN_ALERT_CHANCE`), no hay
-clave de configuración.
+clave de configuración; `WEATHER_RAIN=off` lo apaga.
 
 **Apagar.** El protocolo Cast **no tiene apagado**. `/apagar` cierra la app que esté
 corriendo y deja el equipo en reposo; de ahí en más, un televisor configurado para dormirse
@@ -275,10 +275,18 @@ obligatoria: `/alarma lun-vie 10m` no tiene sentido y se rechaza.
 
 **Feriados.** `hábiles` (o `habiles`) es de lunes a viernes **y además no suena en
 feriados**: `/alarma hábiles 6:30 arriba`, `/recordar hábiles 7:00 salida al colegio`.
-`lun-vie` y `semana` suenan igual en un feriado. Ese día el bot no dice nada y escribe a
-todos «🏖 Feriado (<nombre>): hoy no suena «arriba»»; al día siguiente vuelve a
-su horario. Cuentan los feriados nacionales inamovibles y trasladables; un día puente
-suena. Salen de argentinadatos, sin cuenta ni API key: se
+`lun-vie` y `semana` suenan igual en un feriado. Ese día el bot no dice nada y, con la
+primera que no suena, escribe un solo mensaje a cada chat con lo suyo del día:
+
+```
+🏖 Hoy es feriado (Día de la Soberanía Nacional), no suenan:
+• 06:30 «arriba»
+• 07:00 «salida al colegio»
+```
+
+Lo que se crea o se edita después para ese día llega aparte: «🏖 Hoy es feriado: tampoco
+suena «…»». Al día siguiente todo vuelve a su horario. Cuentan los feriados nacionales
+inamovibles y trasladables; un día puente suena. Salen de argentinadatos, sin cuenta ni API key: se
 bajan al arrancar y todos los días a las 4 de la mañana, y desde noviembre también los del
 año siguiente. Si no se pueden bajar se usan los últimos que se bajaron, y si nunca se
 bajaron, todo suena. Solo aplica a lo que repite por días de la semana; las alarmas y
@@ -522,7 +530,9 @@ quedara un número, dice solo «Hoy es feriado.». Un día puente es «Hoy es d�
 ## Avisos del cielo
 
 Además del resumen, la casa avisa sola cuando algo del pronóstico lo amerita. Cada aviso sale
-**una vez por día** y ninguno le come el turno a otro:
+**una vez por día** y ninguno le come el turno a otro. Lo que coincide en la misma vuelta
+sale en **un solo anuncio**: «Ojo con el clima de hoy.» y una frase por aviso. La lluvia
+va aparte.
 
 | aviso | cuándo |
 | --- | --- |
@@ -537,6 +547,25 @@ Además del resumen, la casa avisa sola cuando algo del pronóstico lo amerita. 
 El calor, el frío, el sol y el aire se avisan **entre las 7 y las 11**: son sobre el día
 entero y a las cuatro de la mañana no le sirven a nadie. Los umbrales son constantes del
 código, no configuración. Ninguno de estos avisos entra en el resumen de la mañana.
+
+Lo que se dice en voz alta **no se repite en el chat**. Se escribe a todos solo si no se
+dijo: en descanso, en silencio o en vacaciones, con el motivo; y si ningún parlante pudo decirlo,
+«🔔 … No pude decirlo en voz alta.». El aviso antes de un evento de la agenda sale igual.
+
+Cada aviso se apaga solo, con su clave en `off`:
+
+| aviso | clave |
+| --- | --- |
+| lluvia | `WEATHER_RAIN` |
+| tormenta | `WEATHER_STORM` |
+| viento | `WEATHER_WIND` |
+| calor | `WEATHER_HEAT` |
+| frío | `WEATHER_COLD` |
+| sol | `WEATHER_UV` |
+| aire | `WEATHER_AIR` |
+
+Sin la clave, el aviso está prendido. Lo apagado no se dice ni se le pide a Open-Meteo, y al
+arrancar el log nombra los que están apagados.
 
 La calidad del aire sale de la API de calidad del aire de Open-Meteo, también gratis y sin
 clave. Es un modelo global (CAMS) de unos 40 km de resolución, no un sensor del barrio: sirve
@@ -1025,6 +1054,13 @@ CAST_DEFAULT=parlante    # cuál se usa si no se dice otro
 WEATHER_LAT=-34.6037     # opcional; por defecto, Buenos Aires
 WEATHER_LON=-58.3816
 WEATHER_PLACE=casa       # opcional, solo para que suene mejor
+WEATHER_RAIN=on          # avisos del cielo, uno por clave; "off" lo apaga
+WEATHER_STORM=on
+WEATHER_WIND=on
+WEATHER_HEAT=on
+WEATHER_COLD=on
+WEATHER_UV=on
+WEATHER_AIR=on
 QUIET_FROM=23:00         # horario de descanso: solo avisa por Telegram
 QUIET_TO=07:00           # las dos iguales lo desactivan
 API_TOKEN=               # sin token, la API no arranca

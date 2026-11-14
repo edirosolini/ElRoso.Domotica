@@ -47,13 +47,14 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
 | alarma apagada o «Hecho» | los demás chats del aviso: «🔕 <nombre> apagó la alarma» / «✅ <nombre> marcó hecho» |
 | re-aviso de un recordatorio o timer sin «Hecho» | los chats del aviso, solo con «Hecho»; el último, a todos si era de una persona. Además se dice en los equipos del aviso, salvo en descanso, silencio o vacaciones |
 | remedio que se acaba | todos, solo escrito: «💊 Quedan N de X, comprar.» |
-| algo programado que un feriado saltea | los chats del aviso, solo escrito: «🏖 Feriado (<nombre>): hoy no suena «…»» |
+| algo programado que un feriado saltea | los chats del aviso, solo escrito y uno por chat, con la primera que saltea el día: «🏖 Hoy es feriado (<nombre>), no suena:» (o «no suenan:») y «• HH:MM «…»» por cada aviso de ese chat; lo creado o editado después, «🏖 Hoy es feriado: tampoco suena «…»» |
 | corte de internet | solo el parlante, sin chat; al volver, el parlante lo dice y a alertas se escribe «🌐 Internet se cortó de … a …» |
 | aviso antes de cada comida (`MENU_LUNCH_AT`, `MENU_DINNER_AT`) | todos, solo escrito, con «🛒 Pasar a compras» y «🔄 Otra idea»; en vacaciones, nada |
 | plato del menú cambiado con `/menu otra` | los demás chats, solo escrito: «🍽 <nombre> cambió la cena del miércoles 21/10: …» |
 | vacaciones activadas o cortadas | los demás chats: «🧳 <nombre> activó vacaciones hasta el …» / «… cortó las vacaciones» |
 | fin de las vacaciones | todos: «🧳 Terminó el modo vacaciones, vuelvo a hablar.» |
-| agenda, clima, lluvia, API | todos |
+| aviso de un evento, lluvia y los otros avisos del cielo | el parlante; a todos los chats solo si no se dijo: en descanso, silencio o vacaciones con el motivo, y sin ningún parlante que lo dijera, «🔔 … No pude decirlo en voz alta.» |
+| `/say` de la API | todos |
 | alta, cambio o baja desde la pantalla | todos, sin número; el alta y el cambio, con «🗑 Borrar este aviso» |
 | borrado con ese «🗑 Borrar este aviso» | los demás chats: «🗑 <nombre> borró «<mensaje>»» |
 | lo hecho desde `/control` | lo mismo que el botón o el comando en Telegram: los demás chats, con «<nombre> (pantalla)» |
@@ -68,6 +69,10 @@ vigilancia van a `ALERT_CHAT_IDS`. Decisión del dueño.
   vuelta de internet solo escriben.
 - 🔴 **Un ID de alertas fuera de `ALLOWED_CHAT_IDS` hace fallar el arranque.** El aviso le
   llegaría con botones que el bot le rechaza.
+- 🔴 **Lo que se dijo no se repite en el chat** para el aviso de un evento, la lluvia y los
+  otros avisos del cielo: van por `main._say_aloud()`, que escribe solo si `announce()` no
+  habló ni escribió. El resumen y el cierre siguen por `main._announce()`, que deja la copia
+  escrita también cuando sonó: llevan más de lo que se dice.
 - **`HouseVoice.tell(text, others)`** es la única puerta: `text` va a los chats de alertas y
   `others` al resto. `SAME` repite el texto, `None` o vacío no escribe nada.
   `tell_everyone()` es `tell(text, SAME)`.
